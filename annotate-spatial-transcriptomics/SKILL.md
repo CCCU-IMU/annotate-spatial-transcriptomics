@@ -1,17 +1,25 @@
 ---
 name: annotate-spatial-transcriptomics
-description: Independently annotate spatial transcriptomics or single-cell RNA-seq projects from Seurat RDS, AnnData/H5AD, SingleCellExperiment, BANKSY, Scanpy/Leiden, Seurat or external cluster tables. Use for input discovery, adaptive clustering selection, broad and subtype annotation, DEG/marker/spatial evidence review, unresolved-pool routing, atlas mapping or RCTD assistance, immutable state tracking, and audited HTML report generation. Do not copy parameters or labels from example projects.
+description: Independently annotate spatial transcriptomics or single-cell RNA-seq projects with a Seurat/R-first default when a full-feature RDS is available, while supporting AnnData/H5AD, SingleCellExperiment, BANKSY, Scanpy/Leiden and external cluster tables. Use for input discovery, adaptive clustering, broad and optional subtype annotation, full-gene marker/spatial review, iterative unresolved-pool routing, calibrated atlas/RCTD assistance, immutable state tracking, baseline quality comparison and audited HTML reports. Do not copy parameters or labels from example projects.
 ---
 
 # Annotate Spatial Transcriptomics
 
 Apply an evidence-first, stateful annotation workflow. Treat example projects as strategy demonstrations only. Derive parameters, clusters, thresholds and labels from the current data.
 
+When a readable full-feature Seurat RDS exists, or the user requests an R-centered analysis, read `references/r-first-workflow.md` and use it as the primary execution path. Use SCTransform/Seurat graphs and R pool reclustering as the default computational backbone; borrow the completed Scanpy workflow's iterative decision strategy, not its parameters or labels. Treat BANKSY as an optional spatial clustering adapter or corroborating view, not the default controller. Reuse existing Seurat clustering or pool-reclustering artifacts only after validating object/cell hashes, feature scope, parameters and output completeness; reusing computation never authorizes reusing biological labels.
+
 Read `references/context-and-biology.md` first. Require a biological-context JSON containing species, tissue, stage/condition, platform, observation unit, primary questions and priority lineages. Validate it with `scripts/validate_biological_context.py`. Load a matching tissue profile when available, but never treat it as a label map.
 
 Read `references/iterative-controller.md` before analysis. The workflow is a fail-closed multi-round state machine, not cluster-name assignment. A first pass, a high annotation rate or a rendered report is never completion.
 
 Read `references/quality-standard.md` before freezing labels. For spatial cellbins/spots, accurate broad classes are the primary endpoint; fine subtypes are optional and must never be forced merely to make the tree deeper. Comparable quality across clustering methods means independently supported biological decisions and complete route exhaustion, not matching a previous pipeline's labels.
+
+Read `references/taxonomy-and-pool-design.md` before creating biological pools or release labels. Keep the published candidate-lineage checklist, overinclusive analysis pools and final biological broad classes as three separate layers. A literature class is not a required output, an analysis-pool name is never a release label, and interface/QC states are reported outside the biological broad-class census.
+
+Default to a shallow annotation tree. A graph subcluster is not a biological subtype, and several stable subclusters may merge into one broad or literature-supported functional label. Treat ECM-rich, contractile, stress, cell-cycle, low-RNA, ambient, cortical and follicle-adjacent patterns as state/spatial tags unless an independent lineage or functional program passes the fine-label gate. For sheep ovary, use the limited subtype vocabulary supported by recent sheep studies and the current section; never create one named subtype per Seurat cluster.
+
+Subtype restraint is a release criterion, not a cosmetic preference. The default maximum depth is broad class plus one functional subtype level, and zero subtypes is valid. Before keeping any fine label, explicitly state what biological conclusion would be lost by merging it into the parent; if the answer is only cluster identity, marker intensity, ECM amount, state or location, merge it and retain those properties as tags.
 
 When the user requests end-to-end or minimally supervised execution, read `references/autonomous-operation.md` and keep working through its continuous control loop. Run `scripts/autopilot_status.py PROJECT_ROOT` at startup and after every writeback or release step. Do not pause for routine resolution, pool, label or job-repair approvals. One deliberate pause is mandatory: after the annotation/completion gates pass, present the frozen census and uncertainty summary for explicit user confirmation before spending compute on final DEG, dotplot, spatial and HTML release assets.
 
@@ -23,7 +31,7 @@ Read `references/multi-route-controller.md` before creating unresolved pools. It
 2. Read `references/input-adapters.md` and identify the expression object, every clustering candidate, coordinates, reductions and existing progress/state files.
 3. Run `scripts/check_runtime.py` and `scripts/check_r_runtime.R` in candidate environments before heavy work; select an existing compatible environment and record it rather than silently installing packages.
 4. Run `scripts/init_annotation_project.py --sample SAMPLE --input-root INPUT_ROOT --project-root PROJECT_ROOT --modality spatial|single-cell`.
-5. Freeze an input snapshot before analysis. Never silently replace an object or clustering table.
+5. Freeze every active expression object and reused clustering table with `scripts/register_input_snapshot.py` before analysis. Never silently replace an object or clustering table.
 6. If existing state exists, validate and resume it. Do not restart completed pools.
 7. Distinguish clustering features from validation features. Run `scripts/audit_feature_scope.R` on the expression object used for final marker evidence. HVG/BANKSY features may drive clustering, but final positive/negative marker and rare-cell validation must use a full-feature object when the profile requires it.
 8. Separate `full_object`, `analysis_set`, `excluded_initial_qc` and `postcluster_holdout`. Never mix initial QC exclusion with an unresolved biological pool.
@@ -31,7 +39,7 @@ Read `references/multi-route-controller.md` before creating unresolved pools. It
 
 ## Select clustering adaptively
 
-Read `references/clustering-selection.md`. For a BANKSY grid, run `scripts/rank_banksy_grid.py GRID_SUMMARY --out PROJECT_ROOT/selection`.
+Read `references/clustering-selection.md`. For an R-first project, inspect or generate a Seurat resolution grid, rank it with the same marker/stability/spatial criteria, and freeze the lowest-complexity resolution that preserves defensible broad lineages. For a BANKSY input, run `scripts/rank_banksy_grid.py GRID_SUMMARY --out PROJECT_ROOT/selection` only as the BANKSY-specific adapter.
 
 Use quantitative ranking only to shortlist candidates. Inspect marker interpretability, cluster-size distribution, adjacent-parameter stability, UMAP structure and spatial morphology before freezing the selected run. Never select by filename, a fixed resolution, or an example's choice.
 
@@ -51,7 +59,11 @@ Read `references/evidence-routing.md`.
 
 Build anchors from coherent marker groups, not only total marker hits. Use `scripts/profile_anchor_programs.R` to inspect feature coverage and threshold sensitivity, then `scripts/build_program_anchor_membership.R` with required lineage-backbone/support groups, anti-programs, depth limits and minimum anchor counts. After reclustering, use `scripts/summarize_cluster_programs.R` to compare cell-level program and anti-program coherence across every candidate resolution. A missing or tiny anchor class blocks or narrows the next route; it is not permission to lower specificity blindly.
 
-Use canonical biological parent pools rather than graph-cluster names. Preserve `source_key`, original parent/cluster, generation, candidate lineages, `state_tags`, `spatial_tags` and `qc_tags`. ECM-rich, contractile, cortical, ambient or low-RNA are state tags, not pool identities.
+For ovary or another mesenchymal-rich tissue, run a mandatory broad-lineage decomposition audit before closing the stromal background. Test generic stromal/fibroblast, mesenchymal-progenitor-like, smooth-muscle, pericyte/mural, endothelial and steroidogenic-theca programs separately. `ACTA2`/`TAGLN` alone cannot define Smooth muscle; `DCN`/`PDGFRA` alone cannot prove a distinct Mesenchymal class. Use mature contractile backbones, vascular adjacency, steroidogenic anti-programs, stable R pool reclustering and morphology. If an independent class is unsupported, record the negative audit and retain it under the biologically honest parent rather than inventing a missing literature category.
+
+Use axis-covering biological review pools rather than graph-cluster names or a one-pool-per-literature-label design. Preserve `source_key`, original parent/cluster, generation, competing candidate lineages, `state_tags`, `spatial_tags` and `qc_tags`. Pool names must signal routing (`*_review`, `*_candidate`, `*_unresolved`, `*_holdout`) and cannot be copied directly into final labels. ECM-rich, contractile, cortical, ambient or low-RNA are state tags, not pool identities.
+
+For sheep ovary, use `Stromal/mesenchymal` as the honest generic stromal parent. Release standalone `Theca`, `Smooth muscle`, `Pericyte/mural` or `Mesenchymal progenitor-like` only when their independent gates pass. Never publish `Theca/follicular wall` as a broad label: steroidogenic theca must be separated from structural stroma, mature smooth muscle, mural cells and follicular interfaces. A documented negative audit for a literature category is a valid outcome.
 
 Missing genes in an HVG/reduced adapter are unassayed, not negative. Never downgrade a lineage for an absent backbone until the full-feature audit passes.
 
@@ -80,7 +92,7 @@ An original graph cluster may be split at observation level. Context-gated ident
 
 ## Annotate subtypes
 
-Recluster only biologically coherent broad pools. Use Seurat, Scanpy or `scripts/run_sce_pool_recluster.R` according to the frozen expression object. Select resolution again from that pool's evidence; do not inherit parent resolution. Use `scripts/rank_pool_resolutions.py` only as a shortlist, then inspect marker/anti-marker completeness, adjacent-resolution migration and space before freezing. Preserve the complete lineage:
+Recluster only biologically coherent broad pools. In an R-first project use `scripts/run_seurat_pool_recluster.R`; use Scanpy or `scripts/run_sce_pool_recluster.R` only when the frozen expression object requires it. Select resolution again from that pool's evidence; do not inherit parent resolution. Use `scripts/rank_pool_resolutions.py` only as a shortlist, then inspect marker/anti-marker completeness, adjacent-resolution migration and space before freezing. Preserve the complete lineage:
 
 `input snapshot -> clustering run -> parent pool -> subcluster -> route -> decision -> final label`.
 
@@ -91,6 +103,10 @@ After every writeback run `scripts/plan_next_iteration.py`. Continue submitting 
 Do not trust an old PASS after changing a ledger or registry. Re-run state validation, the iteration planner and completion gate after the final job status/writeback; `autopilot_status.py` treats stale gates and release artifacts as unfinished work.
 
 Before final assets, construct three mutually exclusive views: `strict` for conservative biological definitions and anchor/marker discovery, `inclusive` for calibrated broad-only rescues, and `display` for the reviewed report layer. Preserve all three in the cell ledger. Broad rescue cannot enter strict fine-marker discovery.
+
+Run `scripts/audit_release_taxonomy.py` on the current `state/cell_ledger.tsv.gz` with `--broad-column strict_broad_label --status-column strict_state --pool-column target_pool --out provenance/release_taxonomy_audit.json` and the active tissue profile before the completion gate and final confirmation. Its biological broad census and retained-state census must be separate and the audit must pass. A pool-name copy, forbidden catch-all label or technical/anatomical state in the biological evidence cohort reopens annotation.
+
+If a prior annotation is supplied as a quality baseline, keep it blinded during fitting and writeback. After freezing the new biological decisions, run the full-feature broad-lineage audit for both versions and compare marker enrichment, anti-program leakage, rare-lineage safety, spatial morphology, unresolved accounting and rescue provenance. Do not call the new run better merely because it labels more observations, has more subtypes or agrees with the baseline. A requested improvement is achieved only when the predeclared class-specific acceptance table passes and no priority lineage materially regresses.
 
 After the completion gate passes, run `scripts/request_final_annotation_confirmation.py PROJECT_ROOT` and present its broad census, strict unresolved/QC/interface counts, rare/context-gated calls and Atlas/RCTD returns to the user. Do not generate or refresh final DEG, marker dotplots, spatial release maps or the final HTML until the user explicitly approves that frozen snapshot. Only then run `scripts/record_final_annotation_confirmation.py` with the user's actual confirmation message. Any subsequent ledger or completion-gate change invalidates the confirmation and requires a new review.
 
@@ -109,6 +125,7 @@ Read `references/report-contract.md`. The final release must include all of the 
 - Marker-gene spatial maps grouped by the cell type they support.
 - Chinese or requested-language HTML report with expandable annotation tree, workflow, decisions, downloads and audit evidence.
 - Separate strict/inclusive/display census and overview assets; route input/threshold/outcome tables; a Chinese phase-by-phase timeline reconstructed from workflow events; and an expandable raw state record at the bottom.
+- Separate the biological broad-class census/tree/DEG/dotplots from retained anatomical-interface, QC, technical and pending-state censuses; never make technical states look like cell types.
 - Cell-level ledger, cluster decision ledger, pool/run registries, session information, manifests and checksums.
 
 After user confirmation, the report and session information are final, run `scripts/build_release_manifest.py RELEASE_ROOT`, then use `scripts/audit_release.py RELEASE_ROOT` as a fail-closed gate. The manifest deliberately excludes its own files and the audit output to avoid circular hashes. Do not call a project complete unless the audit passes.
