@@ -15,7 +15,7 @@ usage() {
     "" \
     "Examples:" \
     "  bash install.sh" \
-    "  bash install.sh --ref v1.2.0" \
+    "  bash install.sh --ref v1.3.0" \
     "  bash install.sh --dest /path/to/.codex/skills"
 }
 

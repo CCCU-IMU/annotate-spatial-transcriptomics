@@ -25,6 +25,12 @@ Use `scripts/rank_pool_resolutions.py` to shortlist pool resolutions from cluste
 
 Neighborhood size changes spatial smoothing and cannot be treated as another resolution value. Compare resolution within each k, then compare plausible candidates across k. High k may merge small anatomical structures; low k may fragment continuous tissue.
 
+## Seurat/R-first
+
+When a full-feature Seurat RDS exists, make Seurat the default whole-tissue and pool-reclustering backbone. Use SCTransform for graph construction when appropriate, retain the full RNA/Spatial counts for marker validation, and compare a coarse broad-pass resolution grid rather than inheriting a BANKSY or Scanpy resolution. Existing Seurat grids may be reused after membership/hash and artifact validation, but historical biological labels remain blinded.
+
+For mesenchymal-rich tissues, candidate selection must demonstrate whether generic stroma, mesenchymal-progenitor-like, mature smooth muscle, pericyte/mural and endothelial programs are separable. Do not prefer a resolution merely because it creates all named literature classes; require stable multi-gene and spatial evidence.
+
 ## Subset reclustering
 
 Repeat selection inside every broad pool. Do not copy whole-tissue resolution, BANKSY k, number of PCs or neighbor settings into a subset without re-evaluation.

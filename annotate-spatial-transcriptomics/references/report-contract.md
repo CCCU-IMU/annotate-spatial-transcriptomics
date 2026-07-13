@@ -1,4 +1,4 @@
-# Final report contract
+­r‡^Ñf¥–Ø¦{¾lyÊ'vÃ®¶›­# Final report contract
 
 ## Required sections
 
@@ -18,6 +18,7 @@
 14. Multi-route dashboard: each Route Aâ€“E input, applicability, anchors/reference, selected parameters, calibrated thresholds, outcome counts, retained rejects and no-repeat status.
 15. A detailed Chinese workflow at the bottom reconstructed from `workflow_event_registry.tsv`, starting from raw-object loading and including every pool generation, scheduler failure/repair, biological review and atomic writeback. Link to it from the top navigation.
 16. Source ancestry/control board: `source_key â†’ parent decision â†’ pool snapshot â†’ run/resolution/subcluster â†’ route/action â†’ strict/inclusive/display`.
+17. Two separately labeled top-level censuses: biological broad classes and retained anatomical-interface/QC/technical/pending states. Only the former enters the broad biological tree, DEG and marker dotplots.
 
 The annotation tree must provide expand/collapse/search controls and a direct link from every broad/subtype node to its spatial highlight. Put the reviewed annotated spatial overview immediately above the tree. Keep the detailed Chinese raw-input-to-release workflow at the bottom, with a top navigation entry to it.
 
@@ -33,9 +34,11 @@ Each source TSV must include `gene`, `label`, `avg_expression`, `pct_expressed_a
 
 Point size uses within-gene normalized detection from 0 to 100. Color uses within-gene scaled average expression with a documented clip. Absolute detection and average expression remain in the source table and report legend.
 
-Render the label dendrogram on the left. Put marker genes on the x axis and facet/group them by the current cell type or program they support. Every strict DEG label, including validated rare labels above the project display minimum, must occur as both a dotplot label and a marker group in canonical and data-specific panels.
+Render the label dendrogram on the left. Put marker genes on the x axis and facet/group them by the current cell type or program they support. Every released inclusive broad label and every strict validated fine label, including rare labels above the project display minimum, must occur as both a dotplot label and a marker group in canonical and data-specific panels.
 
-Canonical and data-specific marker discovery defaults to the strict, non-QC, non-interface, fine-anchor-eligible cohort. Display/inclusive plots may be supplemental but cannot replace strict evidence plots. DEG must distinguish strict biological evidence from descriptive display-level aggregates.
+The primary broad-class DEG, canonical dotplot and data-specific dotplot use the inclusive, non-QC, non-interface biological cohort: every cellbin formally returned to a broad class participates in that class's final aggregate. The report also provides strict broad DEG/dotplots as sensitivity evidence. Subtype DEG and dotplots use only strict cells with a real fine label; broad-only rescues are excluded from subtype discovery and cannot be assigned a synthetic subtype. Display-only technical/anatomical states never enter biological DEG. Every source table must name its view and evidence cohort explicitly.
+
+An analysis-pool identifier is provenance, not a cell type. Show it in ancestry/route tables, never as a biological tree node unless an independently gated biological label happens to use different, approved wording.
 
 ## Asset formats
 

@@ -1,8 +1,10 @@
-# Validation and forward testing
+≠rá^—f•ñÿ¶{ÆÏy 'v√Æ∂õ≠# Validation and forward testing
 
 ## Static validation
 
 Run the Skill validator, compile Python scripts, parse R scripts, validate templates and run synthetic unit tests.
+
+Run `scripts/audit_release_taxonomy.py` on one passing and one deliberately failing fixture. The failing fixture must include a copied pool name, a forbidden catch-all broad label or a retained state presented as a biological class.
 
 ## End-to-end test
 
@@ -25,6 +27,15 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 - The full release audit must run on every runtime declared compatible by `check_runtime.py`, including Python 3.8; do not rely on newer-only `pathlib` helpers for checksum path containment.
 - A fresh agent can explain why it selected a clustering and which alternatives it rejected.
 - A deliberately overbroad rare-cell label is rejected until positive, negative, spatial-object and reclustering evidence pass.
+- In an R-first test, a readable full-feature Seurat RDS is selected as the primary backbone, existing Seurat clustering may be reused only after hash/membership validation, and historical labels remain hidden until the new ledger is frozen.
+- An ovarian test cannot close a generic `Stromal/perivascular` super-class until generic stroma, mesenchymal-progenitor-like, mature smooth muscle, pericyte/mural, endothelial and steroidogenic-theca alternatives have machine-readable positive/anti-program and morphology audits. The test must not manufacture a standalone Mesenchymal or Smooth muscle class when their gates fail.
+- A requested improvement over a baseline release must use a predeclared, baseline-blinded acceptance table and full-feature evidence comparison. Higher annotation rate, subtype count or baseline agreement alone cannot pass; no priority lineage may materially regress.
+- A sheep-ovary R-first forward test must fail one-cluster-one-name output. Every fine label needs a reproducible functional/lineage program beyond its parent; unsupported historical subtypes are merged, and ECM/contractile/stress/low-RNA/anatomical differences remain state tags in the ledger and report.
+- A sheep-ovary test must keep three machine-readable layers separate: literature candidate-lineage checklist, analysis parent pools and release labels. Copying a `_review`, `_candidate`, `_unresolved` or `_holdout` pool name into a biological label fails. Missing a literature class after a documented negative audit passes; lowering its gate to complete a published taxonomy fails.
+- A regression fixture containing steroidogenic, mature-contractile, generic-ECM, granulosa and endothelial programs must reject `Theca/follicular wall` as a broad catch-all, recover only coherent steroidogenic observations as `Theca`, and route mature-contractile observations through the Smooth-muscle gate.
+- A standalone `Mesenchymal progenitor-like` call must fail when support is generic `DCN/LUM/COL1A1/PDGFRA` without stable S100A4/progenitor-like separation; a standalone `Pericyte/mural` call must fail without its backbone and vascular adjacency. Both negative audits are acceptable terminal evidence.
+- An ambiguous blood/lymphatic split must roll back to `Vascular/endothelial`; an ambiguous immune split must roll back to `Immune`. The test must prefer the least specific honest release name.
+- Biological broad classes and anatomical-interface/QC/technical/pending states must have separate censuses. Retained states in broad biological DEG, canonical/data-specific dotplots or the biological annotation tree fail the release audit.
 - A first-pass mapping with broad-only, interface, QC or open priority-lineage pools creates a nonempty next-action queue and a blocked completion gate.
 - A route named `anchor_assisted` without explicit query/anchor roles and query-only graph evidence is rejected.
 - A large post-clustering QC pool that has atlas mapping but no full QC-pool anchor-recluster remains blocked.

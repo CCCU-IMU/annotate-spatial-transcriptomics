@@ -40,6 +40,7 @@ Allowed states:
 - `workflow_event_registry.tsv`: chronological Chinese-ready input, job, failure, repair, review and writeback events.
 - `annotation_view_registry.tsv`: strict/inclusive/display census and policy artifacts.
 - `provenance/analysis_scope_policy.json`: immutable full-object versus analysis-set boundary and membership hash.
+- `provenance/release_taxonomy_audit.json`: profile-bound audit of final biological names versus source pools and retained states, including separate biological and retained-state censuses plus cell-ledger/profile hashes.
 - `cell_ledger.tsv.gz`: final cell/bin-level provenance and labels.
 
 ## Invariants
@@ -51,3 +52,5 @@ Every closed biological or interface decision requires `closure_rationale` and a
 RCTD is low-priority assistance. Its tier counts must partition the complete query. `rctd_fine_return_n` cannot exceed the extreme tier and requires independent marker/anti-marker, reclustering and spatial evidence. Fine labels produced by the RCTD route itself are not fine-anchor eligible. `rctd_fine_return_n + rctd_broad_return_n` cannot exceed extreme plus high confidence. Fine, broad and rerouted outcomes partition the query; extreme/high observations failing an independent/context gate are rerouted rather than forced. Every medium/low observation is rerouted to the recorded atlas/internal-anchor fallback; the interface branch cannot close until that fallback has a validated outcome.
 
 No-repeat policy is scoped to a frozen branch generation. A cell can enter a later scientific question only through an explicit superseding version; it cannot silently re-enter an unresolved pool in the same annotation version.
+
+Pool identity is provenance, not biology. A pool name cannot be copied directly into a biological label. Literature categories that fail query-specific gates are recorded as negative audits, not inserted into the cell ledger. Biological broad labels and retained anatomical-interface/QC/technical/pending states have separate release censuses and evidence cohorts.

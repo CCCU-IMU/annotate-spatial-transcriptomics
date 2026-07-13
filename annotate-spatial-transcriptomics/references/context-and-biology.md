@@ -2,9 +2,9 @@
 
 Collect species, tissue, stage/condition, platform, observation unit, section anatomy, biological questions and reference datasets before choosing pools or subtype resolutions. Missing age/cycle information must reduce confidence for stage-specific ovarian labels.
 
-A context profile supplies marker programs, contradictory programs, expected parent pools and safety alerts. It is not a mapping table. Derive final labels from the current query.
+A context profile supplies marker programs, contradictory programs, candidate audit axes and safety alerts. It is not a mapping table. Derive final labels from the current query. Follow `taxonomy-and-pool-design.md`: published taxonomies are checklists, analysis pools are routing containers and release classes are independently gated biological conclusions.
 
-For sheep ovary, load the packaged `references/profiles/sheep_ovary.json`. Treat granulosa/theca as a follicular-somatic parent before subtype decisions; keep stromal/perivascular and vascular lineages separable; use immune and epithelial pools; and handle Oocyte through a strict candidate route.
+For sheep ovary, load the packaged `references/profiles/sheep_ovary.json`. Treat granulosa/theca/follicular stroma as a review axis before release decisions; keep generic stroma, mature smooth muscle, pericyte/mural and vascular lineages separable; use immune and epithelial review pools only when needed; and handle Oocyte through a strict candidate route. Do not require all nine classes reported by a multi-stage sheep atlas to occur in one adult spatial section.
 
 ## Oocyte safety gate
 

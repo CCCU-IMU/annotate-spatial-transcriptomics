@@ -1,4 +1,4 @@
 interface:
-  display_name: "Iterative Transcriptomics Annotation"
-  short_description: "Context-aware iterative annotation with audited reports"
-  default_prompt: "Use $annotate-spatial-transcriptomics to autonomously annotate this transcriptomics project from biological context through adaptive clustering, iterative multi-route pool closure, validated final assets and an audited report; continue without routine intermediate approval until the completion contract passes."
+  display_name: "R-first Iterative Transcriptomics Annotation"
+  short_description: "R-first, evidence-gated spatial and single-cell annotation"
+  default_prompt: "Use $annotate-spatial-transcriptomics to run a Seurat/R-first, full-gene, shallow-tree, iterative multi-route annotation through an audited report, adapting clustering and broad classes to the current biological context."
