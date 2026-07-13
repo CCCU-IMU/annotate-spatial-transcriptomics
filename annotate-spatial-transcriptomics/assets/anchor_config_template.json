@@ -1,0 +1,29 @@
+{
+  "balance_to_min": true,
+  "anchors": [
+    {
+      "label": "LINEAGE_A",
+      "candidate_membership": "/path/to/frozen_high_confidence_A.tsv.gz",
+      "source_key": "defined_anchor_snapshot|A",
+      "positive_markers": ["GENE1", "GENE2", "GENE3"],
+      "anti_markers": ["ANTI1", "ANTI2"],
+      "min_positive_detected": 2,
+      "max_anti_detected": 0,
+      "min_total_counts": 100,
+      "max_n": 2000,
+      "state_tags": "high_confidence_anchor"
+    },
+    {
+      "label": "LINEAGE_B",
+      "candidate_membership": "/path/to/frozen_high_confidence_B.tsv.gz",
+      "source_key": "defined_anchor_snapshot|B",
+      "positive_markers": ["GENE4", "GENE5", "GENE6"],
+      "anti_markers": ["ANTI3", "ANTI4"],
+      "min_positive_detected": 2,
+      "max_anti_detected": 0,
+      "min_total_counts": 100,
+      "max_n": 2000,
+      "state_tags": "high_confidence_anchor"
+    }
+  ]
+}

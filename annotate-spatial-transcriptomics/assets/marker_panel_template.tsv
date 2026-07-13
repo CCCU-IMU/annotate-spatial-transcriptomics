@@ -1,0 +1,20 @@
+gene	marker_group	panel
+PTPRC	Immune	canonical
+TYROBP	Immune	canonical
+LST1	Immune	canonical
+PECAM1	Endothelial	canonical
+VWF	Endothelial	canonical
+CDH5	Endothelial	canonical
+COL1A1	Stromal	canonical
+COL1A2	Stromal	canonical
+DCN	Stromal	canonical
+LUM	Stromal	canonical
+EPCAM	Epithelial	canonical
+KRT8	Epithelial	canonical
+KRT18	Epithelial	canonical
+ACTA2	Mural_or_smooth_muscle	canonical
+TAGLN	Mural_or_smooth_muscle	canonical
+RGS5	Perivascular	canonical
+MKI67	Cycling	canonical
+TOP2A	Cycling	canonical
+

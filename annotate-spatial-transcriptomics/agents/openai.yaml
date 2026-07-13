@@ -1,0 +1,4 @@
+interface:
+  display_name: "Iterative Transcriptomics Annotation"
+  short_description: "Context-aware iterative annotation with audited reports"
+  default_prompt: "Use $annotate-spatial-transcriptomics to autonomously annotate this transcriptomics project from biological context through adaptive clustering, iterative multi-route pool closure, validated final assets and an audited report; continue without routine intermediate approval until the completion contract passes."

@@ -1,0 +1,73 @@
+{
+  "id_column": "cell_id",
+  "split_column": "calibration_split",
+  "heldout_value": "heldout",
+  "query_value": "query",
+  "truth_column": "truth_label",
+  "route_column": "route",
+  "calibration_group_columns": [
+    "route"
+  ],
+  "channels": [
+    {
+      "name": "external_atlas",
+      "role": "primary",
+      "label_column": "atlas_label",
+      "accept_column": "atlas_meets_moderate_or_higher",
+      "priority": 1
+    },
+    {
+      "name": "current_query_marker_program",
+      "role": "independent",
+      "label_column": "marker_label",
+      "accept_column": "marker_and_antimarker_pass",
+      "priority": 2
+    },
+    {
+      "name": "internal_anchor",
+      "role": "independent",
+      "label_column": "internal_label",
+      "accept_column": "internal_meets_moderate_or_higher",
+      "priority": 3
+    },
+    {
+      "name": "observed_density_spatial",
+      "role": "independent",
+      "label_column": "spatial_label",
+      "accept_column": "spatial_meets_moderate_or_higher",
+      "priority": 4
+    },
+    {
+      "name": "route_context",
+      "role": "independent",
+      "label_column": "route_candidate_label",
+      "accept_column": "route_gate_pass",
+      "priority": 5
+    }
+  ],
+  "required_channels": [
+    "external_atlas",
+    "current_query_marker_program"
+  ],
+  "any_of_channel_groups": [
+    [
+      "internal_anchor",
+      "observed_density_spatial",
+      "route_context"
+    ]
+  ],
+  "required_boolean_columns": [
+    "route_gate_pass",
+    "anti_marker_gate_pass"
+  ],
+  "required_heldout_boolean_columns": [
+    "query_depth_matched"
+  ],
+  "moderate_target_precision": 0.9,
+  "high_target_precision": 0.95,
+  "moderate_min_support_channels": 2,
+  "high_min_support_channels": 3,
+  "moderate_min_heldout_selected": 20,
+  "high_min_heldout_selected": 20,
+  "reject_state": "qc_holdout"
+}

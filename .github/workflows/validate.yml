@@ -1,0 +1,23 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-skill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate repository
+        run: python scripts/validate_repo.py
+      - name: Verify installable Skill
+        run: python scripts/verify_install.py annotate-spatial-transcriptomics
+      - name: Check installer syntax
+        run: bash -n install.sh

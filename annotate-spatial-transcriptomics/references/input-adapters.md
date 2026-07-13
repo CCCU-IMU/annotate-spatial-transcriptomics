@@ -1,0 +1,35 @@
+# Input adapters
+
+## Required logical fields
+
+Every adapter must expose unique observation IDs, a count matrix, normalized expression or a reproducible normalization route, feature names, clustering candidates, and reductions. Spatial projects must also expose x/y coordinates.
+
+Record whether each object is full-feature, HVG-only or targeted. Run `scripts/audit_feature_scope.R` against the active tissue profile. Reduced features are valid for graph construction but cannot establish final marker absence or pass a context-gated rare-cell decision.
+
+## Seurat
+
+Prefer RNA/Spatial raw counts for DEG and absolute detection. Record active assay, layer names, object dimensions, reductions and metadata columns. Do not assume SCT residuals are suitable for absolute marker detection.
+
+## AnnData/Scanpy
+
+Record `X`, `raw`, layer names, `obs`, `var`, `obsm` and `uns`. Determine whether `X` is counts, log-normalized or scaled. Preserve original observation names as strings.
+
+Some StereoPy H5AD files contain nonstandard/custom encoded groups that a given AnnData version cannot read. Inspect HDF5 structure and try a compatible existing environment; never rewrite the source in place. If a corresponding Seurat/SCE RDS is readable, use `scripts/export_r_object_subset_mtx.R` on a frozen membership and `scripts/pack_mtx_h5ad.py` to create a standard, versioned adapter H5AD. Record source/output hashes, dimensions and excluded zero-count observations.
+
+## SingleCellExperiment/BANKSY
+
+Record assay names, `colData`, `reducedDims`, `spatialCoords`, BANKSY parameters and every clustering column. Prefer exported cluster tables when they provide explicit cell IDs and parameters; verify them against the expression object.
+
+## External cluster tables
+
+Require a unique cell ID and cluster column. Accept optional x/y, UMAP, method, resolution and neighborhood fields. Fail if IDs duplicate or if overlap with the expression object is incomplete without an explicit exclusion ledger.
+
+## Existing progress
+
+Search for state ledgers, completion sentinels, manifests, logs and previous reports. Classify them as current, superseded or historical. Never infer that a `DONE` file means annotation is complete; it may only mean clustering finished.
+
+## Reusable pool runners
+
+Use `scripts/run_seurat_pool_recluster.R` for configurable Seurat SCT or log-normalized pool reclustering, `scripts/run_sce_pool_recluster.R` for SCE/BANKSY-backed pools and `scripts/run_scanpy_pool_recluster.py` for Scanpy. All accept memberships and multiple candidate resolutions; they route zero-count observations to a QC artifact and do not decide the final resolution. BANKSY results can enter through exported cluster tables, while new BANKSY subset analysis should be configured from the current SCE/spatial object rather than copied from a whole-tissue run.
+
+For an existing SingleCellExperiment/BANKSY clustering, use `scripts/run_sce_initial_cluster_evidence.R`. The shared dotplot, annotation-map and spatial-gene scripts accept both Seurat and SCE/SummarizedExperiment objects; for SCE specify assay names when `counts` plus `normcounts`/`logcounts` are not present.
