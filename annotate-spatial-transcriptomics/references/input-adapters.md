@@ -8,7 +8,7 @@ Record whether each object is full-feature, HVG-only or targeted. Run `scripts/a
 
 ## Seurat
 
-Prefer RNA/Spatial raw counts for DEG and absolute detection. Record active assay, layer names, object dimensions, reductions and metadata columns. Do not assume SCT residuals are suitable for absolute marker detection.
+When a readable full-feature Seurat RDS is available, prefer it as the primary computational object unless the user chooses another backbone or the object fails validation. Prefer RNA/Spatial raw counts for DEG and absolute detection. Record active assay, layer names, object dimensions, reductions and metadata columns. Do not assume SCT residuals are suitable for absolute marker detection. Read `r-first-workflow.md` before using existing Seurat clustering or pool artifacts.
 
 ## AnnData/Scanpy
 
