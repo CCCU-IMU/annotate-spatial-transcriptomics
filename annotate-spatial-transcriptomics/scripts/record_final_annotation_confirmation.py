@@ -35,6 +35,7 @@ def main() -> int:
         ("cell_ledger", "cell_ledger_sha256"),
         ("cluster_ledger", "cluster_ledger_sha256"),
         ("completion_gate", "completion_gate_sha256"),
+        ("release_taxonomy_audit", "release_taxonomy_audit_sha256"),
     ):
         path = root / request[key]
         if not path.is_file() or sha256(path) != request[hash_key]:
@@ -54,6 +55,8 @@ def main() -> int:
         "cluster_ledger_sha256": request["cluster_ledger_sha256"],
         "completion_gate": request["completion_gate"],
         "completion_gate_sha256": request["completion_gate_sha256"],
+        "release_taxonomy_audit": request["release_taxonomy_audit"],
+        "release_taxonomy_audit_sha256": request["release_taxonomy_audit_sha256"],
         "release_scope": "Final assets and HTML may now be generated for exactly this frozen annotation snapshot.",
     }
     out = root / "state/final_annotation_confirmation.json"
