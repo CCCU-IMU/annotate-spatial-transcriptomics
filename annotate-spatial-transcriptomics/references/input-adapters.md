@@ -10,6 +10,8 @@ Record whether each object is full-feature, HVG-only or targeted. Run `scripts/a
 
 Prefer RNA/Spatial raw counts for DEG and absolute detection. Record active assay, layer names, object dimensions, reductions and metadata columns. Do not assume SCT residuals are suitable for absolute marker detection.
 
+For a StereoPy `cellbin_PPed` batch-converted RDS, read `seurat-cellbin-preprocessing.md`. The converter may preserve StereoPy reductions but does not thereby create an SCT-processed Seurat object. Use the `Spatial` count layer and generate a fresh SCT/PCA/neighbour/UMAP result with `scripts/run_seurat_sct_preprocess.R`; require its manifest before calling preprocessing comparable across the batch.
+
 ## AnnData/Scanpy
 
 Record `X`, `raw`, layer names, `obs`, `var`, `obsm` and `uns`. Determine whether `X` is counts, log-normalized or scaled. Preserve original observation names as strings.

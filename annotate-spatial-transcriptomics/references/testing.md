@@ -16,6 +16,9 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 
 - No hard-coded sample paths in reusable scripts.
 - No example-specific labels or thresholds in execution defaults.
+- The same-batch Seurat cellbin test writes the frozen SCT profile to its manifest: entry QC `nCount>=100 AND nFeature>=75`, SCT v2/`glmGamPoi`, 3,000 variable features, at most 50,000 fitting observations, 50 computed/30 used PCs, k=30 cosine Annoy with 50 trees, and the candidate grid `0.1,0.2,0.3,0.4,0.6`.
+- The Seurat cellbin runner never reuses imported StereoPy PCA/UMAP, never silently falls back from `glmGamPoi`, never auto-selects a final resolution and never auto-reassigns a small cluster.
+- Pool SCT tests require joint query/anchor SCT/PCA with query-only graph/Leiden/UMAP/DEG, explicit SCT v2 provenance, adaptive k/PC/resolution controls and a fail-closed `glmGamPoi` dependency.
 - Broad and subtype dotplots both exist with PNG, PDF and valid source TSV.
 - Every cell/observation is accounted for exactly once.
 - State validator and release audit pass.
