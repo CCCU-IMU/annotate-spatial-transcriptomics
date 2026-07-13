@@ -60,7 +60,8 @@ if [[ -z "$SOURCE_DIR" ]]; then
   else
     curl --fail --location --silent --show-error "$BRANCH_URL" -o "$TMP_DIR/source.tar.gz"
   fi
-  if tar --help 2>&1 | grep -q -- '--warning'; then
+  TAR_HELP="$(tar --help 2>&1 || true)"
+  if [[ "$TAR_HELP" == *"--warning=KEYWORD"* ]]; then
     tar --warning=no-timestamp -xzf "$TMP_DIR/source.tar.gz" -C "$TMP_DIR"
   else
     tar -xzf "$TMP_DIR/source.tar.gz" -C "$TMP_DIR"
