@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-"""Build a current-label canonical and data-specific marker panel from strict DEG tables."""
+­r‡^Ñf¥–Ø¦{¾,yÊ'vÃ®¶›­#!/usr/bin/env python3
+"""Build a marker panel from inclusive broad and strict subtype DEG tables."""
 from __future__ import annotations
 
 import argparse
@@ -33,6 +33,8 @@ def main() -> int:
     parser.add_argument("--top-per-label", type=int, default=4)
     parser.add_argument("--min-pct", type=float, default=0.05)
     parser.add_argument("--max-padj", type=float, default=0.05)
+    parser.add_argument("--broad-view", default="inclusive")
+    parser.add_argument("--subtype-view", default="strict")
     parser.add_argument(
         "--exclude-regex", default=r"^(LOC|ENSOARG|MT-|RPS|RPL|HBA|HBB|EEF1|GAPDH$|ACTB$|MALAT1$|GNAS$)",
     )
@@ -45,8 +47,9 @@ def main() -> int:
         required = {"label", "gene", "analysis_view"}
         if not required.issubset(rows[0]):
             raise SystemExit(f"{level} DEG lacks columns: {sorted(required-set(rows[0]))}")
-        if any(row.get("analysis_view") != "strict" for row in rows):
-            raise SystemExit(f"{level} DEG is not entirely strict evidence")
+        expected_view = args.broad_view if level == "broad" else args.subtype_view
+        if any(row.get("analysis_view") != expected_view for row in rows):
+            raise SystemExit(f"{level} DEG is not entirely {expected_view} evidence")
 
     label_sets = {
         level: {row.get("label", "") for row in rows if row.get("label", "")}

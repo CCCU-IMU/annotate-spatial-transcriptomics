@@ -1,4 +1,4 @@
-#!/usr/bin/env Rscript
+≠rá^—f•ñÿ¶{Ωly 'v√Æ∂õ≠#!/usr/bin/env Rscript
 
 suppressPackageStartupMessages({
   library(Seurat); library(SeuratObject); library(Matrix); library(data.table)
@@ -9,11 +9,14 @@ parse_args <- function(x) { out <- list(); i <- 1L; while (i <= length(x)) { k <
 a <- parse_args(commandArgs(trailingOnly = TRUE))
 need <- c("rds","membership","out","cell-id-col","resolutions"); miss <- need[!need %in% names(a)]; if (length(miss)) stop("Missing: ", paste(miss, collapse=", "))
 dir.create(a$out, recursive=TRUE, showWarnings=FALSE); dir.create(file.path(a$out,"tables"),showWarnings=FALSE); dir.create(file.path(a$out,"figures"),showWarnings=FALSE)
-seed <- as.integer(ifelse(is.null(a$seed),20260713,a$seed)); set.seed(seed)
+seed <- as.integer(ifelse(is.null(a$seed),20260710,a$seed)); set.seed(seed)
 future_globals_max_gb <- as.numeric(ifelse(is.null(a$`future-globals-max-gb`),100,a$`future-globals-max-gb`))
 options(future.globals.maxSize=future_globals_max_gb*1024^3)
 if(requireNamespace("future",quietly=TRUE))future::plan("sequential")
 dims_n <- as.integer(ifelse(is.null(a$dims),30,a$dims)); nfeatures <- as.integer(ifelse(is.null(a$nfeatures),3000,a$nfeatures))
+pca_npcs <- as.integer(ifelse(is.null(a$`pca-npcs`),max(dims_n,30),a$`pca-npcs`))
+sct_ncells_cap <- as.integer(ifelse(is.null(a$`sct-ncells`),50000,a$`sct-ncells`))
+umap_min_dist <- as.numeric(ifelse(is.null(a$`umap-min-dist`),0.3,a$`umap-min-dist`))
 resolutions <- as.numeric(strsplit(a$resolutions, ",", fixed=TRUE)[[1]])
 method <- ifelse(is.null(a$normalization),"SCT",toupper(a$normalization))
 role_col <- ifelse(is.null(a$`role-col`),"query_or_anchor",a$`role-col`); anchor_col <- ifelse(is.null(a$`anchor-label-col`),"anchor_label",a$`anchor-label-col`)
@@ -40,24 +43,31 @@ fwrite(data.table(cell_id=zero_query,route="qc_holdout",reason="zero_count_query
 if(length(zero_anchor))warning(length(zero_anchor)," zero-count anchors were excluded")
 query_ids<-setdiff(query_ids,zero_ids);anchor_ids<-setdiff(anchor_ids,zero_ids);all_ids<-c(query_ids,anchor_ids);if(!length(query_ids))stop("All query observations have zero counts");if(anchor_mode&&!length(anchor_ids))stop("All anchors have zero counts")
 joint<-subset(joint,cells=all_ids);mem<-mem[match(colnames(joint),get(cc))]
+if(length(query_ids)<3L)stop("At least three nonzero query observations are required")
+k_param <- if(is.null(a$k)) min(30L,max(5L,floor(sqrt(length(query_ids))))) else as.integer(a$k)
+k_param <- min(k_param,length(query_ids)-1L)
 
 if (method=="SCT") {
   sct_method <- ifelse(is.null(a$`sct-method`),"glmGamPoi",a$`sct-method`)
-  if(sct_method=="glmGamPoi"&&!requireNamespace("glmGamPoi",quietly=TRUE))sct_method<-NULL
-  joint <- SCTransform(joint,assay=assay,new.assay.name="SCT",variable.features.n=nfeatures,verbose=FALSE,return.only.var.genes=FALSE,method=sct_method)
+  if(sct_method=="glmGamPoi"&&!requireNamespace("glmGamPoi",quietly=TRUE))stop("glmGamPoi is required by the frozen SCT profile; refusing a silent method fallback")
+  joint <- NormalizeData(joint,assay=assay,normalization.method="LogNormalize",scale.factor=10000,verbose=FALSE)
+  joint <- SCTransform(joint,assay=assay,new.assay.name="SCT",vst.flavor="v2",variable.features.n=nfeatures,ncells=min(sct_ncells_cap,ncol(joint)),conserve.memory=TRUE,verbose=FALSE,return.only.var.genes=TRUE,method=sct_method,seed.use=seed)
   DefaultAssay(joint)<-"SCT"
 } else {
   joint <- NormalizeData(joint,assay=assay,verbose=FALSE); joint <- FindVariableFeatures(joint,assay=assay,nfeatures=nfeatures,verbose=FALSE); joint <- ScaleData(joint,assay=assay,verbose=FALSE)
 }
-joint <- RunPCA(joint,npcs=max(dims_n,30),verbose=FALSE)
+pca_npcs_use <- min(pca_npcs,ncol(joint)-2L,length(VariableFeatures(joint))-1L)
+if(pca_npcs_use<2L)stop("Too few PCs are available for pool reclustering")
+dims_use_n <- min(dims_n,pca_npcs_use)
+joint <- RunPCA(joint,npcs=pca_npcs_use,features=VariableFeatures(joint),seed.use=seed,verbose=FALSE)
 pca_joint <- Embeddings(joint,"pca")
 if(anchor_mode){
-  anchor_meta <- mem[match(anchor_ids,get(cc))]; labels <- as.character(anchor_meta[[anchor_col]]); centroids <- rowsum(pca_joint[anchor_ids,seq_len(dims_n),drop=FALSE],labels)/as.numeric(table(labels)[rownames(rowsum(pca_joint[anchor_ids,seq_len(dims_n),drop=FALSE],labels))])
-  qemb <- pca_joint[query_ids,seq_len(dims_n),drop=FALSE]; dmat <- sapply(seq_len(nrow(centroids)),function(i)rowSums((qemb-matrix(centroids[i,],nrow=nrow(qemb),ncol=ncol(qemb),byrow=TRUE))^2)); if(is.null(dim(dmat)))dmat<-matrix(dmat,ncol=1)
+  anchor_meta <- mem[match(anchor_ids,get(cc))]; labels <- as.character(anchor_meta[[anchor_col]]); centroids <- rowsum(pca_joint[anchor_ids,seq_len(dims_use_n),drop=FALSE],labels)/as.numeric(table(labels)[rownames(rowsum(pca_joint[anchor_ids,seq_len(dims_use_n),drop=FALSE],labels))])
+  qemb <- pca_joint[query_ids,seq_len(dims_use_n),drop=FALSE]; dmat <- sapply(seq_len(nrow(centroids)),function(i)rowSums((qemb-matrix(centroids[i,],nrow=nrow(qemb),ncol=ncol(qemb),byrow=TRUE))^2)); if(is.null(dim(dmat)))dmat<-matrix(dmat,ncol=1)
   colnames(dmat)<-rownames(centroids);ord<-t(apply(dmat,1,order));top1<-colnames(dmat)[ord[,1]];top1d<-dmat[cbind(seq_len(nrow(dmat)),ord[,1])];top2d<-if(ncol(dmat)>1)dmat[cbind(seq_len(nrow(dmat)),ord[,2])]else rep(NA_real_,nrow(dmat))
   anchor_evidence<-data.table(cell_id=query_ids,nearest_anchor_label=top1,nearest_anchor_distance=top1d,anchor_distance_margin=top2d-top1d);fwrite(anchor_evidence,file.path(a$out,"tables","query_anchor_distance_evidence.tsv"),sep="\t")
 }else anchor_evidence<-data.table(cell_id=query_ids)
-q <- subset(joint,cells=query_ids); q <- FindNeighbors(q,reduction="pca",dims=seq_len(dims_n),verbose=FALSE); q <- RunUMAP(q,reduction="pca",dims=seq_len(dims_n),seed.use=seed,verbose=FALSE)
+q <- subset(joint,cells=query_ids); q <- FindNeighbors(q,reduction="pca",dims=seq_len(dims_use_n),k.param=k_param,nn.method="annoy",n.trees=50,annoy.metric="cosine",verbose=FALSE); q <- RunUMAP(q,reduction="pca",dims=seq_len(dims_use_n),n.neighbors=k_param,min.dist=umap_min_dist,metric="cosine",seed.use=seed,verbose=FALSE)
 qmem<-mem[match(query_ids,get(cc))];stopifnot(all(qmem[[cc]]==query_ids))
 for(nm in setdiff(names(qmem),cc))q[[nm]]<-qmem[[nm]]
 metadata_names <- colnames(q[[]])
@@ -84,7 +94,7 @@ for (res in resolutions) {
   cn <- paste0("framework_res",tag(res)); q <- FindClusters(q,resolution=res,cluster.name=cn,random.seed=seed,verbose=FALSE)
   lab <- factor(as.character(q[[cn,drop=TRUE]]),levels=sort(unique(as.character(q[[cn,drop=TRUE]]))))
   dt <- data.table(cell_id=colnames(q),cluster=lab,resolution=res); fwrite(dt,file.path(a$out,"tables",paste0(cn,"_clusters.tsv")),sep="\t")
-  Idents(q)<-lab; deg <- if(length(unique(lab))>1)as.data.table(FindAllMarkers(q,assay=DefaultAssay(q),slot="data",only.pos=TRUE,test.use="wilcox",min.pct=0.05,logfc.threshold=0.1,return.thresh=1,max.cells.per.ident=2000,random.seed=seed,densify=FALSE,verbose=FALSE))else data.table(p_val=numeric(),avg_log2FC=numeric(),pct.1=numeric(),pct.2=numeric(),p_val_adj=numeric(),cluster=character(),gene=character())
+  Idents(q)<-lab; deg <- if(length(unique(lab))>1)as.data.table(FindAllMarkers(q,assay=assay,slot="data",only.pos=TRUE,test.use="wilcox",min.pct=0.05,logfc.threshold=0.1,return.thresh=1,max.cells.per.ident=2000,random.seed=seed,densify=FALSE,verbose=FALSE))else data.table(p_val=numeric(),avg_log2FC=numeric(),pct.1=numeric(),pct.2=numeric(),p_val_adj=numeric(),cluster=character(),gene=character())
   if(!ncol(deg))deg<-data.table(p_val=numeric(),avg_log2FC=numeric(),pct.1=numeric(),pct.2=numeric(),p_val_adj=numeric(),cluster=character(),gene=character())
   fwrite(deg,file.path(a$out,"tables",paste0(cn,"_DEG_all.tsv")),sep="\t"); lfc_col<-intersect(c("avg_log2FC","avg_logFC"),names(deg))[1];top<-deg[0]
   if(nrow(deg)&&length(lfc_col)&&all(c("p_val_adj","cluster")%in%names(deg))){sig<-deg[p_val_adj<0.05 & get(lfc_col)>0];top<-sig[order(cluster,p_val_adj,-get(lfc_col)),head(.SD,100),by=cluster]};fwrite(top,file.path(a$out,"tables",paste0(cn,"_DEG_top100.tsv")),sep="\t")
@@ -101,7 +111,7 @@ if(length(anchor_all))fwrite(rbindlist(anchor_all,fill=TRUE),file.path(a$out,"ta
 fwrite(mem, file.path(a$out,"tables","analyzed_membership.tsv.gz"), sep="\t")
 saveRDS(q,file.path(a$out,"pool_reclustered_query_seurat.rds"),compress=FALSE)
 if(anchor_mode)saveRDS(joint,file.path(a$out,"joint_query_anchor_pca_seurat.rds"),compress=FALSE)
-fwrite(data.table(parameter=c("normalization","dims","nfeatures","resolutions","seed","future_globals_max_gb","future_plan","anchor_assisted","query_only_graph_umap_deg","spatial_x_col","spatial_y_col","n_query_input","n_query_analyzed","n_anchors_analyzed","n_zero_query_qc","n_zero_anchor_excluded"),value=c(method,dims_n,nfeatures,paste(resolutions,collapse=","),seed,future_globals_max_gb,"sequential",anchor_mode,TRUE,if(length(spatial_pair))spatial_pair[[1]]else"",if(length(spatial_pair))spatial_pair[[2]]else"",length(query_ids)+length(zero_query),ncol(q),length(anchor_ids),length(zero_query),length(zero_anchor))),file.path(a$out,"run_manifest.tsv"),sep="\t")
+fwrite(data.table(parameter=c("normalization","full_feature_deg_assay","full_feature_normalization","sct_vst_flavor","sct_method","sct_ncells","sct_conserve_memory","sct_return_only_var_genes","pca_npcs_requested","pca_npcs_used","dims_requested","dims_used","neighbor_k","neighbor_method","neighbor_trees","neighbor_metric","umap_min_dist","umap_metric","nfeatures","resolutions","resolution_selection","seed","future_globals_max_gb","future_plan","anchor_assisted","query_only_graph_umap_deg","spatial_x_col","spatial_y_col","n_query_input","n_query_analyzed","n_anchors_analyzed","n_zero_query_qc","n_zero_anchor_excluded"),value=c(method,assay,"LogNormalize_scale_factor_10000",if(method=="SCT")"v2"else"not_applicable",if(method=="SCT")sct_method else "not_applicable",if(method=="SCT")min(sct_ncells_cap,ncol(joint))else"not_applicable",if(method=="SCT")TRUE else "not_applicable",if(method=="SCT")TRUE else "not_applicable",pca_npcs,pca_npcs_use,dims_n,dims_use_n,k_param,"annoy",50,"cosine",umap_min_dist,"cosine",nfeatures,paste(resolutions,collapse=","),"adaptive_pool_review_required",seed,future_globals_max_gb,"sequential",anchor_mode,TRUE,if(length(spatial_pair))spatial_pair[[1]]else"",if(length(spatial_pair))spatial_pair[[2]]else"",length(query_ids)+length(zero_query),ncol(q),length(anchor_ids),length(zero_query),length(zero_anchor))),file.path(a$out,"run_manifest.tsv"),sep="\t")
 capture.output(sessionInfo(), file=file.path(a$out,"sessionInfo.txt"))
 writeLines(c("status\tPASS",paste0("completed_at\t",format(Sys.time(),tz="UTC",usetz=TRUE))),file.path(a$out,"RUN_COMPLETE.tsv"))
 quit(save="no",status=0,runLast=FALSE)
