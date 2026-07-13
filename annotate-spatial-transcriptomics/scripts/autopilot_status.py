@@ -69,6 +69,7 @@ def confirmation_valid(path: Path, root: Path) -> bool:
         ("cell_ledger", "cell_ledger_sha256"),
         ("cluster_ledger", "cluster_ledger_sha256"),
         ("completion_gate", "completion_gate_sha256"),
+        ("release_taxonomy_audit", "release_taxonomy_audit_sha256"),
     ):
         target = root / str(record.get(key, ""))
         if not target.is_file() or sha256(target) != record.get(hash_key):
@@ -132,6 +133,7 @@ def main() -> int:
     iteration_plan = root / "provenance/iteration_plan.json"
     queue = root / "state/next_action_queue.tsv"
     completion = root / "provenance/completion_gate.json"
+    taxonomy_audit = root / "provenance/release_taxonomy_audit.json"
     confirmation_request = root / "provenance/final_annotation_confirmation_request.json"
     confirmation = root / "state/final_annotation_confirmation.json"
     report = root / "report/index.html"
@@ -191,14 +193,24 @@ def main() -> int:
     if queued:
         add("iterative_annotation", "execute every row in state/next_action_queue.tsv and re-plan after each atomic writeback", f"{len(queued)} route action(s) remain")
 
-    completion_dependencies = planning_dependencies + [iteration_plan, queue]
+    taxonomy_record = read_confirmation(taxonomy_audit)
+    if cell_ledger.exists() and (
+        stale(taxonomy_audit, [cell_ledger]) or taxonomy_record.get("pass") is not True
+    ):
+        add(
+            "release_taxonomy_audit",
+            "audit_release_taxonomy.py state/cell_ledger.tsv.gz --profile ACTIVE_PROFILE --broad-column strict_broad_label --status-column strict_state --pool-column target_pool --out provenance/release_taxonomy_audit.json",
+            "biological broad classes and retained anatomical/QC/technical states have not passed the current taxonomy/pool audit",
+        )
+
+    completion_dependencies = planning_dependencies + [iteration_plan, queue, taxonomy_audit]
     if not user_confirmed or unexpected_post_confirmation:
         completion_dependencies.append(run_registry)
     if cluster_ledger.exists() and not queued and (stale(completion, completion_dependencies) or json_status(completion) != "PASS"):
         add("completion_gate", "check_completion_gate.py", "biological completion gate is missing, blocked or stale")
 
     if json_status(completion) == "PASS" and not user_confirmed:
-        if stale(confirmation_request, [completion, cluster_ledger, cell_ledger]):
+        if stale(confirmation_request, [completion, cluster_ledger, cell_ledger, taxonomy_audit]):
             add(
                 "user_confirmation",
                 "request_final_annotation_confirmation.py",
