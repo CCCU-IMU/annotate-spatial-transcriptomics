@@ -6,7 +6,12 @@
   "reference_scope": {
     "GSE233801": "adult estrus sheep somatic anchors; does not sufficiently define Oocyte, Theca or Epithelial and preserves unknown clusters",
     "iScience_2025_sheep_ovarian_development": "developmental sheep reference with Oocyte, Theca and Epithelial programs; stage and sampling dependent",
-    "cross_species": "supporting evidence only"
+    "MBE_2024_tibetan_sheep_ovary": "111548-cell whole-ovary atlas with seven broad types including perivascular but without mandatory standalone Theca, Mesenchymal or Smooth muscle; high-weight adult sheep taxonomy evidence",
+    "Advanced_Science_2026_sheep_human_reproductive_atlas": "large cross-tissue conservation reference for sheep-human reproductive lineages; not a one-section label quota",
+    "JASB_2026_cross_species_ovary": "nine-species ovarian integration supporting conserved granulosa/stromal boundaries; sheep data reuse GSE233801 and therefore are not an independent sheep discovery cohort",
+    "FASEB_2026_sheep_macrophage_granulosa": "whole-ovary breed comparison and macrophage-granulosa mechanistic evidence; refines immune/granulosa modules without requiring immune subtypes",
+    "targeted_oocyte_cumulus_studies": "lineage-state and anti-contamination evidence only; purified or superstimulated cells cannot define a whole-ovary taxonomy",
+    "cross_species": "supporting evidence for stromal, mesenchymal, smooth-muscle, pericyte, endothelial and rare-lineage boundaries; never a label map"
   },
   "lineages": {
     "granulosa": {
@@ -33,13 +38,30 @@
     },
     "stromal": {
       "program": ["DCN", "LUM", "COL1A1", "COL1A2", "COL3A1", "COL6A1", "PDGFRA", "TCF21", "NR2F2", "OGN", "SPARC", "MGP", "CXCL14"],
+      "anti_programs": ["MYH11", "CNN1", "ACTG2", "PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
       "spatial_expectation": "broad ECM background; cortical dense and medullary more vascular",
       "safety": "ECM, stress or ribosomal splits are states unless independent lineage evidence exists"
     },
-    "mural_perivascular": {
-      "pericyte": ["RGS5", "MCAM", "PDGFRB", "CSPG4", "DES", "NOTCH3", "RERGL"],
-      "smooth_muscle": ["MYH11", "TAGLN", "ACTA2", "MYL9", "MYL6", "FHL1"],
-      "spatial_expectation": "adjacent to or wrapping endothelial branches"
+    "mesenchymal_progenitor_like": {
+      "core": ["S100A4", "PDGFRA", "TCF21", "NR2F2", "CD34", "PI16", "COL14A1", "DPT", "CFD", "APOD", "COL15A1"],
+      "support": ["DCN", "LUM", "COL1A1", "COL1A2", "COL3A1", "OGN"],
+      "anti_programs": ["MYH11", "CNN1", "ACTG2", "RGS5", "PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
+      "spatial_expectation": "stable cortical or interstitial fibroblast/progenitor-like domain rather than a vessel-only or follicular steroidogenic ring",
+      "safety": "the 2025 sheep atlas called a very small S100A4-positive population Mesenchymal, whereas ovarian stromal cells are themselves mesenchymal; never add this class merely to match the paper—require a stable S100A4-supported program and morphology that separate it from generic stroma"
+    },
+    "pericyte_mural": {
+      "core": ["RGS5", "MCAM", "PDGFRB", "CSPG4", "NOTCH3", "RERGL"],
+      "support": ["DES", "ACTA2", "TAGLN", "MYL9"],
+      "anti_programs": ["PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
+      "spatial_expectation": "adjacent to or wrapping endothelial branches",
+      "safety": "ACTA2/TAGLN or vascular proximity without a pericyte backbone is insufficient"
+    },
+    "smooth_muscle": {
+      "mature_contractile_core": ["MYH11", "CNN1", "ACTG2"],
+      "contractile_support": ["TAGLN", "ACTA2", "MYL9", "MYL6", "DES", "TPM2", "FHL1"],
+      "anti_programs": ["PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
+      "spatial_expectation": "coherent vessel-wall, hilar or structural follicular-wall tracks rather than diffuse ECM background",
+      "safety": "ACTA2/TAGLN-only ECM-rich cells remain myofibroblast or structural stroma; require a mature contractile-core gene, additional contractile support, stable reclustering and morphology"
     },
     "blood_endothelial": {
       "program": ["PECAM1", "CDH5", "VWF", "CLDN5", "KDR", "FLT1", "EMCN", "KLF2", "CD34", "CYYR1", "FLI1"],
@@ -104,18 +126,71 @@
     }
   },
   "pool_policy": {
-    "recommended_parent_pools": ["follicular_somatic_granulosa_theca", "stromal_perivascular", "vascular_endothelial", "immune", "epithelial_mesothelial", "oocyte_strict_candidate", "follicular_interface_review", "qc_holdout"],
+    "three_layer_rule": "keep literature_reference_taxonomy, analysis_parent_pools and release_broad_classes separate; none is copied automatically into another",
+    "literature_taxonomy_role": "candidate-lineage checklist and boundary evidence only; absence after a negative audit is valid and no published class is a required output",
+    "analysis_pool_design": "use the smallest number of overinclusive axis-covering review containers needed by the current uncertainty; a pool may contain multiple competing biological classes and is never a release label",
+    "pool_name_suffixes": ["_review", "_candidate", "_unresolved", "_holdout"],
+    "canonical_axis_pools": {
+      "follicular_somatic_review": ["granulosa", "steroidogenic_theca", "follicular_stroma", "stage_supported_luteal"],
+      "stromal_mesenchymal_mural_review": ["generic_stroma", "mesenchymal_progenitor_like", "smooth_muscle", "pericyte_mural", "structural_follicular_wall"],
+      "vascular_endothelial_mural_review": ["blood_endothelial", "lymphatic_endothelial", "pericyte_mural", "smooth_muscle", "vascular_adjacent_stroma"],
+      "immune_review": ["myeloid", "lymphoid", "plasma", "granulocyte"],
+      "epithelial_mesothelial_review": ["ovarian_surface_epithelial_mesothelial", "stromal_boundary_alternative"],
+      "strict_oocyte_candidate": ["non_zp_oocyte_core", "maternal_ooplasm", "zona", "granulosa_stromal_anti_programs"],
+      "anatomical_interface_review": ["two_or_more_local_resident_programs"],
+      "postcluster_qc_holdout": ["balanced_broad_anchors", "calibrated_atlas_internal_anchor_rescue", "technical_reject"]
+    },
+    "creation_rule": "create only pools needed by an explicit unresolved membership and competing-hypothesis set; do not instantiate every canonical pool by default",
+    "release_copy_forbidden": "a pool identifier or pool display name cannot be copied directly into broad_label or fine_label",
     "granulosa": "include high-confidence granulosa anchors plus granulosa-interface queries; isolate strict Oocyte candidates",
-    "theca_stroma": "joint review allowed only with androgenic-theca, generic-stroma and mural/perivascular anchors plus outer-ring morphology",
+    "theca_stroma": "joint review allowed only with androgenic-theca, generic-stroma, mesenchymal-progenitor-like, smooth-muscle and pericyte anchors plus outer-ring morphology",
+    "stromal_lineage_decomposition": "before closing Stromal/perivascular, explicitly test generic stroma, standalone mesenchymal-progenitor-like, mature smooth muscle, pericyte/mural and endothelial alternatives; record a negative audit when a literature category is unsupported",
     "qc_holdout": "large post-clustering holdouts first undergo full broad-anchor query-only reclustering; remaining rejects receive depth-matched atlas/internal-anchor/marker/observed-density-spatial review; rescued observations are never fine anchors",
     "rollback": "if a split has only UMAP separation or only ECM/stress/cell-cycle/ribosomal differences, return to the parent label"
   },
+  "release_taxonomy": {
+    "principle": "publish the least specific biologically honest label supported by the current full-feature query; this vocabulary is an allowlist with evidence gates, not a quota",
+    "default_biological_broad_classes": ["Granulosa", "Stromal/mesenchymal", "Vascular/endothelial", "Immune", "Epithelial/mesothelial", "Oocyte"],
+    "context_gated_default": {
+      "Oocyte": "strict multi-module positive, anti-program, spatial-object and candidate-reclustering gate"
+    },
+    "evidence_dependent_standalone_classes": {
+      "Theca": "coherent steroidogenic/androgenic theca program plus follicular outer-ring morphology",
+      "Smooth muscle": "mature contractile backbone, stable separation and coherent vessel-wall, hilar or structural tracks",
+      "Pericyte/mural": "pericyte backbone, vascular adjacency and separation from endothelial, smooth muscle and generic stroma",
+      "Mesenchymal progenitor-like": "stable S100A4/progenitor-like program and reproducible morphology distinct from generic ovarian stroma",
+      "Luteal steroidogenic": "stage support plus coherent luteal program and corpus-luteum-like morphology",
+      "Neural/Schwann": "coherent glial program plus nerve-track morphology"
+    },
+    "forbidden_release_broad_labels": ["Theca/follicular wall", "Stromal/perivascular", "follicular_somatic_granulosa_theca", "anatomical_interface_review", "postcluster_qc_holdout"],
+    "fallback_names": {
+      "generic_ovarian_stroma": "Stromal/mesenchymal",
+      "ambiguous_blood_lymphatic_endothelium": "Vascular/endothelial",
+      "shallow_immune_signal": "Immune",
+      "ambiguous_surface_epithelium_mesothelium": "Epithelial/mesothelial"
+    },
+    "non_biological_retained_states": ["Anatomical interface", "Low-information/QC holdout", "Technical state", "Pending review"],
+    "report_rule": "biological broad classes and retained anatomical/QC/technical/pending states require separate censuses, trees and evidence cohorts; retained states are excluded from biological broad DEG and marker dotplots"
+  },
   "resolution_policy": {
     "principle": "choose the lowest resolution preserving stable functional compartments",
-    "required_evidence": ["adjacent-resolution ARI or migration", "marker module completeness", "anti-marker rate", "spatial morphology", "cluster size and complexity", "new lineage versus state split"]
+    "required_evidence": ["adjacent-resolution ARI or migration", "marker module completeness", "anti-marker rate", "spatial morphology", "cluster size and complexity", "new lineage versus state split"],
+    "subtype_policy": "default to a shallow tree; graph clusters do not equal subtypes; merge splits driven by ECM amount, contractility without lineage backbone, stress, cell cycle, LOC/ribosomal/mitochondrial load, low RNA, ambient signal or anatomy alone",
+    "adult_sheep_candidate_functional_vocabulary_not_required_output": {
+      "granulosa": ["early_or_undifferentiated", "mural_or_estrogenic", "cumulus_or_oocyte_adjacent", "luteinizing_or_steroidogenic_if_stage_supported"],
+      "theca_follicular_wall": ["androgenic_steroidogenic_theca", "structural_or_follicular_wall_stroma"],
+      "vascular_mural": ["blood_endothelial", "lymphatic_endothelial", "pericyte", "mature_smooth_muscle"],
+      "immune": ["myeloid", "lymphoid", "plasma_if_supported"],
+      "stromal_mesenchymal": "prefer state/spatial tags unless a stable lineage-level separation passes"
+    },
+    "maximum_default_depth": "broad class plus one independently supported functional subtype level; zero subtypes is valid",
+    "merge_default": "when adjacent computational clusters differ mainly by expression intensity, ECM load, hypoxia, stress, cycle, spatial neighborhood or low RNA, merge their biological label and preserve the difference only as a state tag"
   },
   "evidence_gates": {
     "broad_defined": "at least two independent positive marker families, low major anti-program, spatial plausibility when available, adjacent-resolution stability; atlas alone cannot pass",
+    "mesenchymal_defined": "stable progenitor/fibroblast-like core plus support, low mature-contractile/endothelial/steroidogenic/immune/epithelial/granulosa programs and reproducible morphology; DCN/PDGFRA alone cannot pass",
+    "smooth_muscle_defined": "at least one mature-contractile-core gene plus multiple contractile-support genes, low endothelial/steroidogenic/immune/epithelial/granulosa programs, stable pool reclustering and coherent vessel-wall/hilar/structural morphology",
+    "pericyte_defined": "RGS5/PDGFRB/CSPG4/NOTCH3/MCAM backbone plus vascular adjacency and separation from endothelial and generic contractile stroma",
     "fine_defined": "broad locked first; subtype program, morphology and resolution stability require at least two supporting channels without strong contradiction",
     "broad_only": "broad supported but subtype evidence insufficient; fine_anchor_eligible=false",
     "interface_review": "real mixed programs cannot be reliably separated after targeted review; retain rather than force",
@@ -131,7 +206,7 @@
     "large_pool_min_fraction": 0.005,
     "large_qc_min_observations": 1000,
     "priority_lineages_require_anchor_recluster": ["granulosa", "theca", "follicular", "stromal", "vascular", "perivascular", "oocyte"],
-    "canonical_parent_pools": ["granulosa_unresolved", "theca_follicular_wall_unresolved", "stromal_perivascular_unresolved", "vascular_perivascular_unresolved", "immune_unresolved", "epithelial_mesothelial_unresolved", "follicular_interface", "oocyte_strict_candidate", "postcluster_qc_holdout"],
+    "canonical_parent_pools": ["follicular_somatic_review", "stromal_mesenchymal_mural_review", "vascular_endothelial_mural_review", "immune_review", "epithelial_mesothelial_review", "anatomical_interface_review", "strict_oocyte_candidate", "postcluster_qc_holdout"],
     "interface_rctd_applicability_required": true,
     "rctd_evidence_priority": "low_priority_assistance",
     "rctd_tier_policy": "extreme_plus_independent_evidence_may_support_fine; high_supports_broad_only; medium_low_requires_atlas_internal_anchor_fallback",
