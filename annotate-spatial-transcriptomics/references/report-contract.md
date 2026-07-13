@@ -18,6 +18,7 @@
 14. Multi-route dashboard: each Route A–E input, applicability, anchors/reference, selected parameters, calibrated thresholds, outcome counts, retained rejects and no-repeat status.
 15. A detailed Chinese workflow at the bottom reconstructed from `workflow_event_registry.tsv`, starting from raw-object loading and including every pool generation, scheduler failure/repair, biological review and atomic writeback. Link to it from the top navigation.
 16. Source ancestry/control board: `source_key → parent decision → pool snapshot → run/resolution/subcluster → route/action → strict/inclusive/display`.
+17. Two separately labeled top-level censuses: biological broad classes and retained anatomical-interface/QC/technical/pending states. Only the former enters the broad biological tree, DEG and marker dotplots.
 
 The annotation tree must provide expand/collapse/search controls and a direct link from every broad/subtype node to its spatial highlight. Put the reviewed annotated spatial overview immediately above the tree. Keep the detailed Chinese raw-input-to-release workflow at the bottom, with a top navigation entry to it.
 
@@ -36,6 +37,8 @@ Point size uses within-gene normalized detection from 0 to 100. Color uses withi
 Render the label dendrogram on the left. Put marker genes on the x axis and facet/group them by the current cell type or program they support. Every strict DEG label, including validated rare labels above the project display minimum, must occur as both a dotplot label and a marker group in canonical and data-specific panels.
 
 Canonical and data-specific marker discovery defaults to the strict, non-QC, non-interface, fine-anchor-eligible cohort. Display/inclusive plots may be supplemental but cannot replace strict evidence plots. DEG must distinguish strict biological evidence from descriptive display-level aggregates.
+
+An analysis-pool identifier is provenance, not a cell type. Show it in ancestry/route tables, never as a biological tree node unless an independently gated biological label happens to use different, approved wording.
 
 ## Asset formats
 
