@@ -30,11 +30,15 @@ def main() -> int:
     cell_ledger = root / "state/cell_ledger.tsv.gz"
     cluster_ledger = root / "state/cluster_decision_ledger.tsv"
     completion_gate = root / "provenance/completion_gate.json"
-    if not all(path.is_file() for path in (cell_ledger, cluster_ledger, completion_gate)):
-        raise SystemExit("cell ledger, cluster ledger and completion gate are required")
+    taxonomy_audit = root / "provenance/release_taxonomy_audit.json"
+    if not all(path.is_file() for path in (cell_ledger, cluster_ledger, completion_gate, taxonomy_audit)):
+        raise SystemExit("cell ledger, cluster ledger, release taxonomy audit and completion gate are required")
     completion = json.loads(completion_gate.read_text(encoding="utf-8"))
     if completion.get("status") != "PASS":
         raise SystemExit("completion gate must pass before requesting final user confirmation")
+    taxonomy = json.loads(taxonomy_audit.read_text(encoding="utf-8"))
+    if taxonomy.get("pass") is not True or taxonomy.get("metadata_sha256") != sha256(cell_ledger):
+        raise SystemExit("release taxonomy audit must pass on the current cell ledger")
 
     state_counts: Counter[str] = Counter()
     strict_counts: Counter[str] = Counter()
@@ -78,6 +82,10 @@ def main() -> int:
         "cluster_ledger_sha256": sha256(cluster_ledger),
         "completion_gate": "provenance/completion_gate.json",
         "completion_gate_sha256": sha256(completion_gate),
+        "release_taxonomy_audit": "provenance/release_taxonomy_audit.json",
+        "release_taxonomy_audit_sha256": sha256(taxonomy_audit),
+        "biological_broad_census": taxonomy.get("biological_broad_census", {}),
+        "retained_state_census": taxonomy.get("retained_state_census", {}),
         "full_object_n": analysis_n + excluded_n,
         "analysis_set_n": analysis_n,
         "excluded_initial_qc_n": excluded_n,
@@ -94,6 +102,7 @@ def main() -> int:
             "rare-cell and context-sensitive calls",
             "atlas/RCTD broad-only returns and retained rejects",
             "strict versus inclusive/display interpretation",
+            "separate biological broad-class and retained anatomical/QC/technical-state censuses",
         ],
         "release_rule": "Do not compute final DEG/dotplot/spatial/report assets and do not write a confirmation artifact until the user explicitly confirms this frozen annotation snapshot.",
     }
