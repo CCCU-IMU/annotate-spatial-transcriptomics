@@ -76,6 +76,17 @@ def main():
             pth=r/rel
             if not pth.exists() or sha256(pth)!=expected:errors.append(f"state validation is stale for {rel}")
     if a.profile:
+        taxonomy_path=r/"provenance/release_taxonomy_audit.json"
+        cell_ledger=r/"state/cell_ledger.tsv.gz"
+        if not taxonomy_path.exists():errors.append("missing provenance/release_taxonomy_audit.json")
+        else:
+            taxonomy=json.loads(taxonomy_path.read_text())
+            if taxonomy.get("pass") is not True:errors.append("release taxonomy audit did not pass")
+            try:taxonomy_metadata=Path(taxonomy.get("metadata","")).resolve()
+            except Exception:taxonomy_metadata=Path()
+            if taxonomy_metadata!=cell_ledger.resolve():errors.append("release taxonomy audit was not run on the current cell ledger")
+            if not cell_ledger.exists() or taxonomy.get("metadata_sha256")!=sha256(cell_ledger):errors.append("release taxonomy audit is stale for state/cell_ledger.tsv.gz")
+            if taxonomy.get("profile_sha256")!=sha256(a.profile):errors.append("release taxonomy audit is stale for the active profile")
         (r/"provenance/multiroute_audit.json").write_text(json.dumps(multi,ensure_ascii=False,indent=2)+"\n")
         if multi.get("status")!="PASS":errors.append(f"multi-route completion is blocked: {len(multi.get('gaps',[]))} route gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
     result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"pools":len(pools),"runs":len(runs),"multiroute_status":multi.get("status"),"context":context};(r/"provenance/completion_gate.json").parent.mkdir(parents=True,exist_ok=True);(r/"provenance/completion_gate.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n");print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not errors else 2
