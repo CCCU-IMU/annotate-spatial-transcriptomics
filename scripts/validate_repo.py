@@ -31,7 +31,10 @@ def main() -> int:
         ROOT / "LICENSE",
         SKILL / "SKILL.md",
         SKILL / "references" / "multi-route-controller.md",
+        SKILL / "references" / "r-first-workflow.md",
+        SKILL / "references" / "taxonomy-and-pool-design.md",
         SKILL / "references" / "report-contract.md",
+        SKILL / "scripts" / "audit_release_taxonomy.py",
     ]
     for path in required:
         if not path.is_file():
