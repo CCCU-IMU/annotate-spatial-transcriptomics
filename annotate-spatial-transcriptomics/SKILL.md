@@ -29,6 +29,8 @@ Read `references/multi-route-controller.md` before creating unresolved pools. It
 8. Separate `full_object`, `analysis_set`, `excluded_initial_qc` and `postcluster_holdout`. Never mix initial QC exclusion with an unresolved biological pool.
 9. Freeze the analysis-set membership and SHA256 in `provenance/analysis_scope_policy.json`. Before release, require the cell ledger's scope assignments and all three annotation views to match that exact membership.
 
+When a Seurat RDS was batch-converted from StereoPy `cellbin_PPed`, read `references/seurat-cellbin-preprocessing.md` before clustering. Treat the converted RDS as a raw-count input container, not an SCT object. For samples from the same production batch, use `scripts/run_seurat_sct_preprocess.R` and its frozen whole-tissue SCT/PCA/neighbour profile so preprocessing is comparable; keep resolution selection and biological annotation adaptive. Never reuse imported StereoPy PCA/UMAP as the R graph, and never infer a valid SCT run without a matching preprocessing manifest.
+
 ## Select clustering adaptively
 
 Read `references/clustering-selection.md`. For a BANKSY grid, run `scripts/rank_banksy_grid.py GRID_SUMMARY --out PROJECT_ROOT/selection`.
@@ -80,7 +82,7 @@ An original graph cluster may be split at observation level. Context-gated ident
 
 ## Annotate subtypes
 
-Recluster only biologically coherent broad pools. Use Seurat, Scanpy or `scripts/run_sce_pool_recluster.R` according to the frozen expression object. Select resolution again from that pool's evidence; do not inherit parent resolution. Use `scripts/rank_pool_resolutions.py` only as a shortlist, then inspect marker/anti-marker completeness, adjacent-resolution migration and space before freezing. Preserve the complete lineage:
+Recluster only biologically coherent broad pools. Use `scripts/run_seurat_pool_recluster.R`, Scanpy or `scripts/run_sce_pool_recluster.R` according to the frozen expression object. For same-batch Seurat cellbin inputs, keep the pool SCT model consistent with `references/seurat-cellbin-preprocessing.md`, while adapting PCs, k and the resolution grid to pool size and biology. Select resolution again from that pool's evidence; do not inherit parent resolution. Use `scripts/rank_pool_resolutions.py` only as a shortlist, then inspect marker/anti-marker completeness, adjacent-resolution migration and space before freezing. Preserve the complete lineage:
 
 `input snapshot -> clustering run -> parent pool -> subcluster -> route -> decision -> final label`.
 
