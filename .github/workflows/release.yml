@@ -1,0 +1,47 @@
+name: Release v1.2.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: startsWith(github.event.head_commit.message, 'Release v1.2.0') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      VERSION: v1.2.0
+      PACKAGE: annotate-spatial-transcriptomics-v1.2.0
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate source
+        run: |
+          python scripts/validate_repo.py
+          python scripts/verify_install.py annotate-spatial-transcriptomics
+          bash -n install.sh
+      - name: Build portable archives
+        run: |
+          mkdir -p "release/${PACKAGE}"
+          cp -a annotate-spatial-transcriptomics "release/${PACKAGE}/"
+          cp README.md install.sh LICENSE VERSION CHANGELOG.md "release/${PACKAGE}/"
+          tar -C release -czf "${PACKAGE}.tar.gz" "${PACKAGE}"
+          (cd release && zip -qr "../${PACKAGE}.zip" "${PACKAGE}")
+          sha256sum "${PACKAGE}.tar.gz" "${PACKAGE}.zip" > CHECKSUMS.sha256
+      - name: Create or update GitHub Release
+        run: |
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            gh release upload "${VERSION}" "${PACKAGE}.tar.gz" "${PACKAGE}.zip" CHECKSUMS.sha256 --clobber
+          else
+            gh release create "${VERSION}" \
+              "${PACKAGE}.tar.gz" "${PACKAGE}.zip" CHECKSUMS.sha256 \
+              --target "${GITHUB_SHA}" \
+              --title "Annotate Spatial Transcriptomics Skill ${VERSION}" \
+              --notes-file .github/RELEASE_NOTES_v1.2.0.md
+          fi

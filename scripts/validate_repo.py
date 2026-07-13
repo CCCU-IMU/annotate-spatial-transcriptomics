@@ -38,7 +38,12 @@ def main() -> int:
             problems.append(f"missing required file: {path.relative_to(ROOT)}")
 
     for path in sorted(ROOT.rglob("*")):
-        if not path.is_file() or ".git" in path.parts or ".release_extract" in path.parts:
+        if (
+            not path.is_file()
+            or ".git" in path.parts
+            or ".release_extract" in path.parts
+            or "dist" in path.parts
+        ):
             continue
         if "__pycache__" in path.parts or path.suffix == ".pyc":
             problems.append(f"generated cache file present: {path.relative_to(ROOT)}")

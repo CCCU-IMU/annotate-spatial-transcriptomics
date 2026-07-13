@@ -49,13 +49,22 @@ if [[ -z "$SOURCE_DIR" ]]; then
     command -v "$cmd" >/dev/null 2>&1 || { printf 'Required command not found: %s\n' "$cmd" >&2; exit 1; }
   done
   TMP_DIR="$(mktemp -d)"
-  ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/${REF}.tar.gz"
+  BRANCH_URL="https://github.com/${REPO}/archive/refs/heads/${REF}.tar.gz"
   if [[ "$REF" == v* ]]; then
-    ARCHIVE_URL="https://github.com/${REPO}/archive/refs/tags/${REF}.tar.gz"
+    TAG_URL="https://github.com/${REPO}/archive/refs/tags/${REF}.tar.gz"
   fi
   printf 'Downloading %s@%s ...\n' "$REPO" "$REF"
-  curl --fail --location --silent --show-error "$ARCHIVE_URL" -o "$TMP_DIR/source.tar.gz"
-  tar -xzf "$TMP_DIR/source.tar.gz" -C "$TMP_DIR"
+  if [[ -n "${TAG_URL:-}" ]]; then
+    curl --fail --location --silent "$TAG_URL" -o "$TMP_DIR/source.tar.gz" \
+      || curl --fail --location --silent --show-error "$BRANCH_URL" -o "$TMP_DIR/source.tar.gz"
+  else
+    curl --fail --location --silent --show-error "$BRANCH_URL" -o "$TMP_DIR/source.tar.gz"
+  fi
+  if tar --help 2>&1 | grep -q -- '--warning'; then
+    tar --warning=no-timestamp -xzf "$TMP_DIR/source.tar.gz" -C "$TMP_DIR"
+  else
+    tar -xzf "$TMP_DIR/source.tar.gz" -C "$TMP_DIR"
+  fi
   SOURCE_DIR="$(find "$TMP_DIR" -mindepth 2 -maxdepth 2 -type d -name "$SKILL_NAME" -print -quit)"
 fi
 
