@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcrip
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcriptomics/main/install.sh \
-  | bash -s -- --ref v1.3.0
+  | bash -s -- --ref v1.4.0
 ```
 
 克隆后本地安装（适合内网或需要审查源码的环境）：
@@ -58,6 +58,7 @@ rm -rf "${CODEX_HOME:-$HOME/.codex}/skills/annotate-spatial-transcriptomics"
 - 主要生物学问题、需要重点审查的稀有谱系；
 - 可用 R/Python 环境、调度系统和计算资源；
 - 参考 atlas 的优先级（如已有），但不要把参考标签当作真值。
+- 与空间样本对应的单细胞对象、原始注释列、每类细胞数、DEG/marker dotplot 及样本/阶段关系（如已有）。
 
 推荐提示词：
 
@@ -94,6 +95,18 @@ runtime=可用的 R/Python 环境与调度资源
 最终大类分辨率、池子分辨率及生物学标签仍应针对当前样本自适应判断。
 ```
 
+当 `species` 为 sheep/Ovis/ovine/羊、`tissue` 为 ovary/ovarian/卵巢且发现全特征 Seurat RDS 时，Skill 会自动选择 R-first。只有进一步确认 `Spatial` 原始计数层和 StereoPy `cellbin_PPed` 转换来源后，才会自动启用下方固定前处理合同；其他羊卵巢平台仍采用 R-first 策略，但不会盲目套用该技术参数。
+
+多个样本建议在首次消息里直接给出样本表和并行数：
+
+```text
+请由主 Agent 维护所有样本进度、与我沟通关键决策并做跨样本审计；
+每个样本只分配一个完整流程子 Agent，不能把子 Agent 简化成 cluster 重命名或只做审计。
+最多并行 N 个样本，资源不足时分 wave 执行；每个样本必须独立通过完成门和发布审计。
+```
+
+主 Agent 是唯一用户入口；子 Agent 每个负责一个样本的输入发现、重聚类、多路线、状态和报告全流程。并行只缩短等待时间，不降低证据门或交付内容。
+
 ### 2. 允许 Agent 运行完整迭代，不要把任务简化成 cluster 重命名
 
 标准流程是：
@@ -122,6 +135,10 @@ runtime=可用的 R/Python 环境与调度资源
 - ECM-rich、contractile、cortical、ambient、low-RNA 等是状态标签，不应替代生物学大类。
 - 已关闭池有不可变 membership 和来源链，不能在后续上下文中被重复聚类或重复注释。
 
+若有同项目或生物学匹配的单细胞数据，应先建立“来源标签 -> 空间候选大类”的可审计 crosswalk，而不是要求两种数据产生完全相同的分类。证据优先级为：当前空间数据全基因锚点与形态 > 同项目/同阶段单细胞参考 > 同物种同组织公共 atlas > 发育期、跨组织或跨物种参考。配对单细胞是优先外部参考，但不能推翻当前空间数据的 marker/anti-marker 和组织学矛盾。
+
+只有点图时，可用于完善 marker 组合、anti-marker 和候选命名，不能声称完成细胞级映射。具备 count-level 单细胞对象时，才可执行深度匹配、held-out 校准和多通道 broad-only 救回。默认 transfer ceiling 为大类；参考支持的亚群仍必须在空间 query 内通过全基因证据、池内稳定性和形态门。最终空间大类 DEG 和点图必须纳入所有正式回归该大类的空间观测，不能只画直接锚点，也不能混入单细胞参考细胞。
+
 ### 2.1 不要混淆论文分类、分析池和最终细胞类型
 
 这是获得稳定自动注释结果的关键：
@@ -136,8 +153,9 @@ runtime=可用的 R/Python 环境与调度资源
 
 | 证据层 | 近年研究与用途 | 对自动注释的约束 |
 |---|---|---|
-| 羊整卵巢主参考 | [成年发情湖羊/GSE233801（J Anim Sci Biotechnol, 2023）](https://pubmed.ncbi.nlm.nih.gov/37964337/)、[西藏羊整卵巢图谱（Mol Biol Evol, 2024）](https://pmc.ncbi.nlm.nih.gov/articles/PMC10980521/)、[五个发育时间点羊卵巢图谱（iScience, 2025）](https://pubmed.ncbi.nlm.nih.gov/40641558/) | 决定大类候选骨架；不同文章的 5、7、9 类结果只用于候选审查与 negative audit，不规定当前样本必须有相同数量。 |
-| 跨物种/多组织验证 | [九物种卵巢图谱（J Anim Sci Biotechnol, 2026）](https://pubmed.ncbi.nlm.nih.gov/41975518/)、[羊–人 15 组织生殖与中枢图谱（Advanced Science, 2026）](https://pubmed.ncbi.nlm.nih.gov/41566606/) | 用于检查跨物种保守程序和羊基因符号，不直接把参考标签写回 query。 |
+| 羊整卵巢主参考 | [成年发情湖羊/GSE233801（J Anim Sci Biotechnol, 2023）](https://pubmed.ncbi.nlm.nih.gov/37964337/)、[西藏羊整卵巢图谱（Mol Biol Evol, 2024）](https://pmc.ncbi.nlm.nih.gov/articles/PMC10980521/)、[五个发育时间点羊卵巢图谱（iScience, 2025）](https://pubmed.ncbi.nlm.nih.gov/40641558/) | 无可用配对 count-level 参考时，GSE233801 是成年羊体细胞 atlas 救回的主参考，主要覆盖颗粒、基质、血管/壁细胞候选和免疫；不同文章的 5、7、9 类结果只用于候选审查与 negative audit。 |
+| 跨物种/多组织验证 | [九物种卵巢图谱（J Anim Sci Biotechnol, 2026）](https://pubmed.ncbi.nlm.nih.gov/41975518/)、羊–人 15 组织生殖与中枢图谱（Advanced Science, 2026, DOI 10.1002/advs.202517633）、人鼠卵巢衰老比较（Science, 2025, DOI 10.1126/science.adx0659） | 用于检查跨物种保守的大类边界、羊基因符号及 glia/平滑肌/壁细胞等候选；theca、pericyte、epithelial 细分具有物种差异，不能直接把参考标签写回 query。 |
+| 成人卵巢方法学边界 | 成人卵巢单细胞专家综述（AJOG, 2025, DOI 10.1016/j.ajog.2024.05.046） | 强调取样/过滤造成的谱系缺失、表面上皮难捕获、单 marker 不可靠和“无限亚型”风险，支持以可靠浅层大类为终点。 |
 | 谱系专项证据 | [羊巨噬细胞–颗粒细胞互作（FASEB J, 2026）](https://pubmed.ncbi.nlm.nih.gov/41801067/)、[人卵泡 theca–stroma 连续轨迹](https://pubmed.ncbi.nlm.nih.gov/36599970/)、[人卵巢空间图谱](https://pubmed.ncbi.nlm.nih.gov/38578993/) | 用于解决 macrophage、theca/stroma、血管/壁细胞和空间界面等竞争假设；专项论文不能越过当前样本的 marker、anti-marker 与空间门。 |
 
 发布命名遵循“最浅且足够”的原则：`Stromal/mesenchymal` 是允许的诚实大类；只有形成完整 `STAR/CYP11A1/CYP17A1/HSD3B/NR5A1/LHCGR` 甾体生成或雄激素程序时才单列 `Theca`，仅有 `ALPL/PTCH1`、胶原或收缩信号的卵泡壁细胞退回基质/壁细胞竞争池；`Smooth muscle` 需要 `MYH11/MYL9/TAGLN/ACTA2/CNN1` 成熟收缩骨架；`Pericyte/mural` 需要稳定的壁细胞骨架而非单个 `RGS5`；`Oocyte` 必须通过多基因、anti-program、局灶空间形态和 cellbin 数量解释四重门。颗粒细胞仅在 AMH/IHH 等完整、稳定且有文献支持的功能程序通过时使用“早期/未充分分化”等浅层亚型，否则保留 `Granulosa` 大类。血管细胞默认发布为 `Vascular/endothelial`，只有如 `CCL21/LYVE1/PROX1/FLT4` 这样完整且空间相符的程序才发布淋巴内皮亚型。
@@ -145,6 +163,8 @@ runtime=可用的 R/Python 环境与调度资源
 推荐把 `Granulosa`、`Stromal/mesenchymal`、`Vascular/endothelial`、`Immune`、`Epithelial/mesothelial` 和严格门控的 `Oocyte` 作为候选审查骨架；强制审查但只在证据通过后单列 `Theca`、`Smooth muscle`、`Pericyte/mural`。`Mesenchymal progenitor-like`、`Luteal steroidogenic` 和 `Neural/Schwann` 属于情境依赖类。不要使用 `Theca/follicular wall` 或 `Stromal/perivascular` 作为方便的最终兜底大类。
 
 推荐的卵巢分析池按竞争轴设计，例如 `follicular_somatic_review`、`stromal_mesenchymal_mural_review`、`vascular_endothelial_mural_review`、`immune_review`、`epithelial_mesothelial_review`、`strict_oocyte_candidate`、`anatomical_interface_review` 与 `postcluster_qc_holdout`。只创建当前不确定性实际需要的池，不必机械生成全部池。
+
+Skill 内置一份[脱敏羊卵巢 R-first forward-test 参考](annotate-spatial-transcriptomics/references/profiles/sheep_ovary_rfirst_case_reference.md)，完整记录从原始转换 RDS、池子、多路线、稀有细胞门到最终 inclusive DEG/报告的策略，但不包含样本 ID、私有路径、观测 ID、cluster 答案或历史映射。它是回归测试，不是 label map。
 
 ### 3. 把多路线待定义细胞处理当作流程核心
 
@@ -161,6 +181,8 @@ moderate_or_higher_n = high_n + moderate_only_n
 ```
 
 经过独立证据复核的 high 和 moderate-only 均可回归**大类**；低于 moderate 的保留为 reject/review。Atlas 救回的 broad-only 细胞必须设置 `fine_anchor_eligible=false`，不能反向参与精细 marker 或亚群锚点发现。
+
+这里的 held-out anchors 必须来自当前 query 的独立高置信锚点，并与待救回 membership 不重叠。把同一个外部 atlas 随机拆成 train/held-out 只是在测 atlas 自分类，不能校准 query 救回；旧版合并 `medium_high` 阈值只允许做诊断，不能写回。无配对 count-level 羊单细胞对象时，羊卵巢默认以 GSE233801 为公共 atlas 主通道；只有配对 marker dotplot 时仍不能执行细胞级转移。
 
 ### 4. 对稀有、易污染谱系使用更严格的上下文门
 
@@ -262,7 +284,7 @@ membership 至少需要唯一 `cell_id`。锚点模式还需要 `query_or_anchor
 - `<100` observations 只触发小簇审查，不能自动并入最近 PCA 簇；
 - 大类、亚群、合并关系和置信度不能从示例样本复制。
 
-如果 `glmGamPoi` 不可用，SCT 路线会直接失败并要求修复环境，不会静默切换模型。只有 preprocessing manifest 与当前输入/分析集哈希匹配时，已有 SCT 计算才允许复用。
+如果 `glmGamPoi` 或 SHA256 依赖不可用，SCT 路线会直接失败并要求修复环境，不会静默切换模型或写出不可验证 manifest。固定技术参数的任何覆盖都必须显式传入 batch exception 和理由。只有 preprocessing manifest 与当前输入/分析集哈希匹配时，已有 SCT 计算才允许复用。
 
 ## 仓库结构
 

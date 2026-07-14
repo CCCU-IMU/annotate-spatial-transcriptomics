@@ -1,4 +1,4 @@
 interface:
   display_name: "R-first Iterative Transcriptomics Annotation"
-  short_description: "R-first, evidence-gated spatial and single-cell annotation"
-  default_prompt: "Use $annotate-spatial-transcriptomics to run a Seurat/R-first, full-gene, shallow-tree, iterative multi-route annotation through an audited report, adapting clustering and broad classes to the current biological context."
+  short_description: "R-first iterative annotation with per-sample workers"
+  default_prompt: "Use $annotate-spatial-transcriptomics to resolve the biological/platform profile, run a full-gene R-first iterative multi-route annotation with shallow evidence-gated labels, and produce an audited report. For multiple samples, act as the user-facing master and assign one complete worker per sample."

@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+
+def hash_ids(values: pd.Series) -> str:
+    payload = "\n".join(sorted(values.astype(str).tolist())) + "\n"
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def select_threshold(
@@ -76,6 +82,7 @@ def main() -> None:
     parser.add_argument("--predictions", required=True, type=Path)
     parser.add_argument("--truth", required=True, type=Path)
     parser.add_argument("--query-predictions", required=True, type=Path)
+    parser.add_argument("--calibration-origin-manifest", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--cell-id-col", default="cell_id")
     parser.add_argument("--truth-col", default="true_label")
@@ -88,6 +95,16 @@ def main() -> None:
     if args.moderate_target_precision > args.high_target_precision:
         raise SystemExit("moderate target precision cannot exceed high target precision")
 
+    origin = json.loads(args.calibration_origin_manifest.read_text(encoding="utf-8"))
+    if origin.get("status") != "PASS":
+        raise SystemExit("calibration origin manifest is not PASS")
+    if origin.get("heldout_origin") != "query_like_heldout_current_query_anchors":
+        raise SystemExit("final rescue calibration requires query-like held-out current-query anchors")
+    if origin.get("reference_self_classification") is not False:
+        raise SystemExit("reference self-classification cannot calibrate query rescue")
+    if int(origin.get("anchor_target_overlap", -1)) != 0:
+        raise SystemExit("held-out anchors overlap the target query")
+
     predictions = pd.read_csv(
         args.predictions, sep="\t", dtype={args.cell_id_col: str}
     )
@@ -95,6 +112,10 @@ def main() -> None:
     query = pd.read_csv(
         args.query_predictions, sep="\t", dtype={args.cell_id_col: str}
     )
+    if int(origin.get("n_anchors", -1)) != len(predictions) or hash_ids(predictions[args.cell_id_col]) != origin.get("anchor_ids_sha256"):
+        raise SystemExit("held-out prediction membership differs from the origin manifest")
+    if int(origin.get("n_target", -1)) != len(query) or hash_ids(query[args.cell_id_col]) != origin.get("target_ids_sha256"):
+        raise SystemExit("query prediction membership differs from the origin manifest")
     required_prediction = {
         args.cell_id_col,
         "predicted_label",
@@ -300,6 +321,8 @@ def main() -> None:
         "query_low_reject": int(counts.get("low_reject", 0)),
         "query_n": int(len(query)),
         "fine_anchor_eligible": False,
+        "heldout_origin": origin["heldout_origin"],
+        "calibration_origin_manifest": str(args.calibration_origin_manifest.resolve()),
         "calibration_semantics": "Nested cumulative thresholds: high is a subset of moderate-or-higher; mapping_tier is mutually exclusive and moderate means moderate-only.",
         "warning": "High and moderate-only are mutually exclusive output tiers, but every high row also meets the cumulative moderate-or-higher gate. Neither tier authorizes writeback without independent marker/anti-marker and spatial or internal-anchor support.",
     }

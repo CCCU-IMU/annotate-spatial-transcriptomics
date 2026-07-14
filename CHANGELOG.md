@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.0 — 2026-07-14
+
+- 羊/绵羊/Ovis + 卵巢上下文现在由机器可读 resolver 自动选择 Seurat R-first；确认 StereoPy `cellbin_PPed` 转换后自动执行固定 SCT/PCA/邻接参数合同。
+- 修复单 assay Seurat 检查被 `jsonlite` 自动解包为字符串时未触发固定参数合同的问题，并加入真实单 assay 检查格式回归测试。
+- 固定 cellbin runner 现在拒绝未记录的参数漂移并要求可验证 SHA256，不再允许无 `digest` 时写出 `NA` 哈希。
+- 将 GSE233801 明确为无配对 count-level 参考时的成年羊体细胞主公共 atlas，并限制其 Oocyte/Theca/Epithelial 自动救回范围。
+- 加入 2025 Science 人鼠卵巢、2026 Advanced Science 羊–人图谱和 2025 AJOG 专家综述的跨物种边界/反过度注释规则。
+- Atlas 最终阈值必须来自与目标不重叠的 query-like 当前 query held-out anchors；外部参考自分类标记为 diagnostic-only，旧 `medium_high` 路线禁止写回。
+- 新增主 Agent 审计/用户沟通 + 每样本一个完整子 Agent 的 cohort 控制板、worker ownership 和状态验证脚本。
+- 新增真实自动化回归测试，覆盖羊卵巢自动路由、固定参数、GSE233801 优先级、dotplot 禁止转移、held-out 来源、legacy bypass 与多样本隔离。
+- 新增配对单细胞参考策略：统一大类语义但不强制空间数据复刻参考标签数量或细分层级。
+- 新增可审计 source-label crosswalk、transfer ceiling、验证脚本和羊卵巢常见参考标签别名表。
+- 明确证据优先级为当前 query 全基因锚点与形态、配对同阶段单细胞、同物种公共 atlas、发育期/跨组织/跨物种参考。
+- 只有 marker dotplot 时仅更新候选 marker/anti-marker 与命名；具备 count-level 对象后才允许深度匹配和校准映射。
+- 配对参考默认只能辅助 broad-only 回归，不能绕过 Oocyte、Theca、Smooth muscle、Pericyte/mural 或其他稀有谱系门，也不能替代最终空间全量 broad DEG/dotplot。
+
 ## 1.3.0 — 2026-07-14
 
 - 将 Seurat/full-feature RDS 设为可用时的默认计算主干，复用 Scanpy 的迭代策略而不是参数或旧标签。

@@ -2,9 +2,15 @@
 
 Collect species, tissue, stage/condition, platform, observation unit, section anatomy, biological questions and reference datasets before choosing pools or subtype resolutions. Missing age/cycle information must reduce confidence for stage-specific ovarian labels.
 
+After input inspection, run `scripts/resolve_workflow_profile.py`. Sheep/Ovis/ovine/羊 plus ovary/ovarian/卵巢 selects the sheep-ovary profile; a readable full-feature Seurat RDS selects R-first, and confirmed StereoPy `cellbin_PPed` provenance plus a full-feature `Spatial` assay activates the fixed batch preprocessing contract. Resolver output is workflow provenance only and cannot assign cell identities.
+
 A context profile supplies marker programs, contradictory programs, candidate audit axes and safety alerts. It is not a mapping table. Derive final labels from the current query. Follow `taxonomy-and-pool-design.md`: published taxonomies are checklists, analysis pools are routing containers and release classes are independently gated biological conclusions.
 
-For sheep ovary, load the packaged `references/profiles/sheep_ovary.json`. Treat granulosa/theca/follicular stroma as a review axis before release decisions; keep generic stroma, mature smooth muscle, pericyte/mural and vascular lineages separable; use immune and epithelial review pools only when needed; and handle Oocyte through a strict candidate route. Do not require all nine classes reported by a multi-stage sheep atlas to occur in one adult spatial section.
+If the project has corresponding single-cell data, read `matched-single-cell-reference.md`. Record whether it is the same animal, cohort, stage or merely the same tissue. A matched reference is the preferred external reference channel, but it never replaces current-query evidence. Preserve the original reference vocabulary and create an auditable crosswalk rather than renaming the reference in place.
+
+For sheep ovary, load the packaged `references/profiles/sheep_ovary.json`, `profiles/sheep_ovary_rfirst_profile.json` and `profiles/sheep_ovary_literature_2025_2026.md`. Treat granulosa/theca/follicular stroma as a review axis before release decisions; keep generic stroma, mature smooth muscle, pericyte/mural and vascular lineages separable; use immune and epithelial review pools only when needed; and handle Oocyte through a strict candidate route. Do not require all classes reported by a multi-stage or cross-species atlas to occur in one adult spatial section.
+
+For a sheep-ovary matched reference, `profiles/sheep_ovary_reference_aliases.tsv` provides candidate aliases and evidence ceilings. It deliberately maps detailed immune and endothelial source labels to shallow spatial parents and flags weak or combined labels for review. Validate a project-specific copy and update it from the actual reference object, DEG and stage metadata.
 
 ## Oocyte safety gate
 

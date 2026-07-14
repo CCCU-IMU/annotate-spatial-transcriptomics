@@ -8,10 +8,22 @@
     "iScience_2025_sheep_ovarian_development": "developmental sheep reference with Oocyte, Theca and Epithelial programs; stage and sampling dependent",
     "MBE_2024_tibetan_sheep_ovary": "111548-cell whole-ovary atlas with seven broad types including perivascular but without mandatory standalone Theca, Mesenchymal or Smooth muscle; high-weight adult sheep taxonomy evidence",
     "Advanced_Science_2026_sheep_human_reproductive_atlas": "large cross-tissue conservation reference for sheep-human reproductive lineages; not a one-section label quota",
+    "Science_2025_human_mouse_ovary_aging": "whole-ovary conserved broad boundaries and rare glial evidence; theca, pericyte and epithelial fine states are species-sensitive",
+    "AJOG_2025_adult_ovary_expert_review": "expected adult ovarian broad classes, sampling limitations, and explicit warning against single-marker or endless-subtype annotation",
     "JASB_2026_cross_species_ovary": "nine-species ovarian integration supporting conserved granulosa/stromal boundaries; sheep data reuse GSE233801 and therefore are not an independent sheep discovery cohort",
     "FASEB_2026_sheep_macrophage_granulosa": "whole-ovary breed comparison and macrophage-granulosa mechanistic evidence; refines immune/granulosa modules without requiring immune subtypes",
     "targeted_oocyte_cumulus_studies": "lineage-state and anti-contamination evidence only; purified or superstimulated cells cannot define a whole-ovary taxonomy",
-    "cross_species": "supporting evidence for stromal, mesenchymal, smooth-muscle, pericyte, endothelial and rare-lineage boundaries; never a label map"
+    "cross_species": "supporting evidence for stromal, mesenchymal, smooth-muscle, pericyte, endothelial and rare-lineage boundaries; never a label map",
+    "project_matched_single_cell": "preferred external reference when species, tissue and stage are matched; preserve source labels, validate a candidate crosswalk and transfer ceiling, and never override contradictory full-feature spatial evidence"
+  },
+  "matched_single_cell_policy": {
+    "reference_priority": ["current_query_full_feature_anchors", "project_matched_stage_matched_single_cell", "same_species_same_tissue_atlas", "developmental_cross_tissue_or_cross_species_reference"],
+    "alias_template": "profiles/sheep_ovary_reference_aliases.tsv",
+    "default_transfer_ceiling": "broad_only_after_calibration",
+    "dotplot_only_role": "marker and anti-marker hypothesis plus label crosswalk; no cell-level transfer or calibrated mapping",
+    "count_object_role": "depth-matched held-out calibration and one external-reference channel in multi-channel broad rescue",
+    "safety": "matched reference labels remain hypotheses; strict Oocyte, steroidogenic Theca, Smooth muscle, Pericyte/mural, Neural/Schwann and other rare/context gates cannot be bypassed",
+    "reporting": "show the original label, harmonized candidate, transfer ceiling, calibration tier, current-query evidence and every rejected candidate"
   },
   "lineages": {
     "granulosa": {
@@ -92,6 +104,12 @@
       "spatial_expectation": "thin nerve-like tracks, often accompanying vessels",
       "safety": "PLP1, MPZ or GFRA3 alone is insufficient; require a coherent glial program and track-like morphology"
     },
+    "neuroendocrine": {
+      "secretory_core": ["CHGA", "CHGB", "SYP", "SCG2", "SCG3", "INSM1"],
+      "neuronal_support": ["RBFOX1", "TENM3", "DLG2"],
+      "spatial_expectation": "rare coherent neurosecretory or nerve-associated focus, not a diffuse stromal domain",
+      "safety": "DLG2, RBFOX1 or TENM3 without the secretory-neuroendocrine core cannot define Neuroendocrine; retain the resident lineage and record a neural-like state tag when appropriate"
+    },
     "epithelial_mesothelial": {
       "program": ["KRT8", "KRT18", "KRT19", "KRT7", "EPCAM", "DSP", "MUC16", "MSLN", "PRG4"],
       "spatial_expectation": "continuous thin ovarian surface boundary",
@@ -160,7 +178,8 @@
       "Pericyte/mural": "pericyte backbone, vascular adjacency and separation from endothelial, smooth muscle and generic stroma",
       "Mesenchymal progenitor-like": "stable S100A4/progenitor-like program and reproducible morphology distinct from generic ovarian stroma",
       "Luteal steroidogenic": "stage support plus coherent luteal program and corpus-luteum-like morphology",
-      "Neural/Schwann": "coherent glial program plus nerve-track morphology"
+      "Neural/Schwann": "coherent glial program plus nerve-track morphology",
+      "Neuroendocrine": "secretory-neuroendocrine backbone plus neuronal support and coherent rare-focus morphology"
     },
     "forbidden_release_broad_labels": ["Theca/follicular wall", "Stromal/perivascular", "follicular_somatic_granulosa_theca", "anatomical_interface_review", "postcluster_qc_holdout"],
     "fallback_names": {

@@ -88,6 +88,27 @@ def main() -> int:
     terminal["_next_action"] = choose(terminal, "next_route", default="none")
     terminal["_evidence"] = choose(terminal, "state_tags", "partition_action", "final_action", default="validated terminal multiroute partition")
     terminal.loc[terminal._state.isin(["interface_review", "qc_holdout", "pending_review"]), "_next_action"] = "none"
+    route_text = terminal["_route_id"].astype(str).str.lower() + " " + terminal["_evidence"].astype(str).str.lower()
+    atlas_rows = route_text.str.contains("atlas|calibrated.*mapping", regex=True) & terminal["_state"].eq("defined_broad_only")
+    if atlas_rows.any():
+        tier_column = "mapping_tier" if "mapping_tier" in terminal else "consensus_tier" if "consensus_tier" in terminal else ""
+        if not tier_column:
+            raise SystemExit("atlas/mapping broad returns lack observation-level tier proof")
+        tier = terminal[tier_column].astype(str)
+        accepted = tier.isin(["high", "moderate", "moderate-only"])
+        moderate_gate = choose(terminal, "meets_moderate_or_higher", "writeback_eligible", default="false").astype(str).str.lower().isin({"true", "1", "yes"})
+        fine_gate = terminal["_fine_anchor"].astype(str).str.lower().isin({"false", "0", "no"})
+        if (atlas_rows & (~accepted | ~moderate_gate | ~fine_gate)).any():
+            raise SystemExit("atlas/mapping broad returns fail tier or broad-only gates")
+    rctd_rows = route_text.str.contains("rctd", regex=False) & terminal["_state"].isin(["defined_fine", "defined_broad_only"])
+    if rctd_rows.any():
+        if "rctd_tier" not in terminal:
+            raise SystemExit("RCTD-assisted returns lack observation-level confidence tier")
+        tier = terminal["rctd_tier"].astype(str).str.lower()
+        bad_fine = terminal["_state"].eq("defined_fine") & (~tier.eq("extreme") | ~choose(terminal, "independent_fine_evidence", default="false").astype(str).str.lower().isin({"true", "1", "yes"}))
+        bad_broad = terminal["_state"].eq("defined_broad_only") & ~tier.isin({"extreme", "high"})
+        if (rctd_rows & (bad_fine | bad_broad)).any():
+            raise SystemExit("RCTD return violates extreme/fine or high/broad-only gate")
     bad = terminal._state.eq("") | ((terminal._state.isin(["defined_fine", "defined_broad_only"])) & terminal._broad.eq(""))
     if bad.any(): raise SystemExit(f"invalid terminal labels for {int(bad.sum())} observations")
 

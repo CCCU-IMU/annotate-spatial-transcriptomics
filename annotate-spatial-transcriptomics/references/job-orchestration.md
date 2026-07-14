@@ -6,9 +6,9 @@ Use local execution only for discovery, schema checks and small summaries. Submi
 
 1. Detect scheduler syntax, queues, environment paths and resource limits. Copy and edit a scheduler template; never assume example paths or queues.
 2. Create a unique `run_id`, frozen parameter file and output directory before submission.
-3. Append the run to `state/run_registry.tsv` with status `submitted`, job ID, environment and logs.
+3. Append the run to `state/run_registry.tsv` with status `submitted`, job ID, environment and logs. Supply a deterministic `work_key`, execution fingerprint, owner assignment and positive attempt. Only one `prepared/submitted/running` run may own a work key.
 4. Monitor to a terminal state. Inspect both stdout and stderr and verify expected artifacts, not just scheduler status.
-5. On failure, diagnose the concrete cause, preserve the failed run, create a superseding run with the fix and resubmit. Never overwrite failed logs.
+5. On failure, diagnose the concrete cause, preserve the failed run, create a superseding run with the fix and resubmit. Never overwrite failed logs. The superseded run must already be terminally preserved. If a worker disappears while its scheduler job is active, transfer ownership and monitor that job; do not submit a duplicate.
 6. On success, validate schemas, dimensions, cell-ID conservation, nonempty figures/tables and session information; then set status `validated_done`.
 7. Only validated outputs may be used for biological writeback.
 

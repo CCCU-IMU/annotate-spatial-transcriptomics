@@ -53,6 +53,11 @@ writes a cell-scope table, preprocessing manifest, all candidate cluster
 memberships and an SCT/PCA/UMAP Seurat object. It deliberately does not choose
 a final resolution or assign biological labels.
 
+The runner enforces these values. Any numerical override requires both
+`--allow-batch-exception` and a substantive `--batch-exception-reason`; the
+manifest records the exception. Missing SHA256 support is fatal rather than
+silently emitting an unverifiable manifest.
+
 ## Parameters that remain adaptive
 
 Batch harmonisation does not mean copying biological decisions. The following

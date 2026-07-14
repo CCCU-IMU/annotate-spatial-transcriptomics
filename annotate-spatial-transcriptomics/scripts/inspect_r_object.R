@@ -10,6 +10,14 @@ if (inherits(obj, "Seurat")) {
   info$type <- "Seurat"; info$n_features <- nrow(obj); info$n_observations <- ncol(obj)
   info$assays <- Assays(obj); info$reductions <- Reductions(obj); info$metadata_columns <- colnames(obj[[]])
   info$default_assay <- DefaultAssay(obj)
+  info$assay_layers <- lapply(Assays(obj), function(assay_name) {
+    assay <- obj[[assay_name]]
+    tryCatch(Layers(assay), error = function(e) character())
+  })
+  names(info$assay_layers) <- Assays(obj)
+  info$full_feature_candidate <- nrow(obj) >= 10000
+  info$has_spatial_assay <- "Spatial" %in% Assays(obj)
+  info$cellbin_pped_path_hint <- grepl("cellbin[_-]?PPed", args[[1]], ignore.case = TRUE)
 } else if (inherits(obj, "SingleCellExperiment") || inherits(obj, "SummarizedExperiment")) {
   suppressPackageStartupMessages({library(SingleCellExperiment); library(SummarizedExperiment)})
   info$type <- "SingleCellExperiment"; info$n_features <- nrow(obj); info$n_observations <- ncol(obj)
@@ -20,4 +28,3 @@ if (inherits(obj, "Seurat")) {
 }
 write_json(info, args[[2]], pretty = TRUE, auto_unbox = TRUE, null = "null")
 cat(args[[2]], "\n")
-

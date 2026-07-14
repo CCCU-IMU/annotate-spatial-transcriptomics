@@ -31,10 +31,23 @@ def main() -> int:
         ROOT / "LICENSE",
         SKILL / "SKILL.md",
         SKILL / "references" / "multi-route-controller.md",
+        SKILL / "references" / "matched-single-cell-reference.md",
+        SKILL / "references" / "multi-sample-agent-orchestration.md",
+        SKILL / "references" / "profiles" / "sheep_ovary_rfirst_profile.json",
+        SKILL / "references" / "profiles" / "sheep_ovary_literature_2025_2026.md",
+        SKILL / "references" / "profiles" / "sheep_ovary_rfirst_case_reference.md",
         SKILL / "references" / "r-first-workflow.md",
         SKILL / "references" / "taxonomy-and-pool-design.md",
         SKILL / "references" / "report-contract.md",
         SKILL / "scripts" / "audit_release_taxonomy.py",
+        SKILL / "scripts" / "validate_matched_reference_crosswalk.py",
+        SKILL / "scripts" / "resolve_workflow_profile.py",
+        SKILL / "scripts" / "init_annotation_cohort.py",
+        SKILL / "scripts" / "validate_cohort_state.py",
+        SKILL / "scripts" / "migrate_project_v1_3_to_v1_4.py",
+        SKILL / "scripts" / "request_cohort_confirmation.py",
+        SKILL / "scripts" / "record_cohort_confirmation.py",
+        SKILL / "assets" / "matched_reference_crosswalk_template.tsv",
     ]
     for path in required:
         if not path.is_file():
@@ -70,6 +83,10 @@ def main() -> int:
                     json.loads(text)
                 except json.JSONDecodeError as exc:
                     problems.append(f"JSON syntax: {path.relative_to(ROOT)}: {exc}")
+
+    regression = ROOT / "tests/test_release_contract.py"
+    if not regression.is_file():
+        problems.append("missing release-contract regression tests")
 
     if problems:
         for problem in problems:

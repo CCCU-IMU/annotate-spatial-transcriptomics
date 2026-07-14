@@ -128,6 +128,12 @@ def valid_attempt(root: Path, row: dict[str, str]) -> tuple[bool, list[str]]:
             errors.append("QC atlas review lacks depth-matched validation")
         if not truth(row.get("observed_density_spatial_prior", "")):
             errors.append("QC atlas review lacks observed-density spatial prior")
+        if row.get("calibration_origin", "") != "query_like_heldout_current_query_anchors":
+            errors.append("QC atlas review was not calibrated on query-like held-out current-query anchors")
+        if not row.get("query_membership_sha256", "").strip():
+            errors.append("QC atlas review lacks frozen query membership SHA256")
+        if not artifact_exists(root, row.get("calibration_manifest", "")):
+            errors.append("QC atlas review lacks calibration origin manifest")
     return not errors, errors
 
 
@@ -232,12 +238,15 @@ def audit_multiroute(root: Path, context: dict, profile: dict) -> dict:
             if fallback and fallback.get("route_class") == "qc_atlas_review":
                 fallback_ok, _ = valid_attempt(root, fallback)
                 fallback_ok = fallback_ok and fallback.get("applicability") == "applicable"
+                expected_hash = interface_attempt.get("fallback_expected_membership_sha256", "").strip()
+                observed_hash = fallback.get("query_membership_sha256", "").strip()
+                fallback_ok = fallback_ok and bool(expected_hash) and expected_hash == observed_hash
             if not fallback_ok:
                 gaps.append({
                     "decision_id": did,
                     "n_observations": n,
                     "required_route": "qc_atlas_review",
-                    "reason": f"RCTD medium/low tier ({medium_low}) lacks a validated linked atlas/internal-anchor fallback from {interface_attempt.get('route_attempt_id','')}",
+                    "reason": f"RCTD medium/low tier ({medium_low}) lacks a validated linked atlas/internal-anchor fallback with the exact frozen membership from {interface_attempt.get('route_attempt_id','')}",
                 })
         interface_fraction = n / max(total, 1)
         if state == "interface_review" and policy.get("large_interface_requires_atlas_fallback", False) and (n >= large_min or interface_fraction > float(policy.get("local_interface_max_fraction", 0.02))) and not has(row, "qc_atlas_review", allow_na=True):
@@ -247,6 +256,14 @@ def audit_multiroute(root: Path, context: dict, profile: dict) -> dict:
                 gaps.append({"decision_id": did, "n_observations": n, "required_route": "qc_anchor_recluster", "reason": "large post-clustering QC holdout must be anchor-reclustered before atlas"})
             if not has(row, "qc_atlas_review", allow_na=True):
                 gaps.append({"decision_id": did, "n_observations": n, "required_route": "qc_atlas_review", "reason": "nonzero QC holdout lacks depth-matched atlas/internal-anchor/observed-density review"})
+            ancestry = attempt_ancestry(row)
+            anchors = [item for item in ancestry if item.get("route_class") == "qc_anchor_recluster" and item.get("applicability") == "applicable"]
+            atlases = [item for item in ancestry if item.get("route_class") == "qc_atlas_review" and item.get("applicability") == "applicable"]
+            if n >= large_qc and anchors and atlases:
+                first_anchor = min(item.get("created_at", "") for item in anchors)
+                first_atlas = min(item.get("created_at", "") for item in atlases)
+                if not first_anchor or not first_atlas or first_atlas <= first_anchor:
+                    gaps.append({"decision_id": did, "n_observations": n, "required_route": "qc_anchor_recluster", "reason": "QC atlas route predates the required full QC-pool anchor recluster"})
         if any(x in text for x in ["oocyte", "germ cell", "germ_cell"]) and not has(row, "strict_rare_cell_review", allow_na=True):
             gaps.append({"decision_id": did, "n_observations": n, "required_route": "strict_rare_cell_review", "reason": "Oocyte/germ identity lacks registered strict rare-cell route"})
 

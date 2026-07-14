@@ -83,6 +83,8 @@ def main() -> int:
         "input_root": str(root), "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "n_files": len(rows), "kind_counts": dict(sorted(counts.items())),
         "banksy_grid_summaries": [r["path"] for r in bank_grid],
+        "r_objects": [{"path": r["path"], "size_bytes": r["size_bytes"], "sha256": r["sha256"]} for r in rows if r["kind"] == "r_object"],
+        "anndata_objects": [{"path": r["path"], "size_bytes": r["size_bytes"], "sha256": r["sha256"]} for r in rows if r["kind"] == "anndata"],
         "cluster_tables": len(cluster_tables),
         "warnings": (["No expression object detected"] if not any(r["kind"] in {"anndata", "r_object", "hdf5"} for r in rows) else []),
     }
@@ -93,4 +95,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -45,6 +45,12 @@ k <- as.integer(ifelse(is.null(a$`spatial-neighbors`), 20, a$`spatial-neighbors`
 seed <- as.integer(ifelse(is.null(a$seed), 20260713, a$seed)); set.seed(seed)
 
 obj <- readRDS(a$rds); mp <- read_any(a$`calibrated-mapping`); cl <- read_any(a$clusters); led <- read_any(a$`cell-ledger`)
+required_mapping_cols <- c("mapping_tier", "meets_moderate_or_higher", "fine_anchor_eligible")
+if (!all(required_mapping_cols %in% names(mp))) {
+  stop("Legacy/combined mapping tiers are forbidden. Use calibrate_tiered_mapping_thresholds.py and provide high/moderate/low tiers.")
+}
+if (any(tolower(as.character(mp$fine_anchor_eligible)) %in% c("true", "1", "yes"))) stop("Atlas mapping cannot create fine anchors")
+if (any(as.character(mp$mapping_tier) %in% c("high", "moderate") & !tolower(as.character(mp$meets_moderate_or_higher)) %in% c("true", "1", "yes"))) stop("accepted tier violates moderate-or-higher invariant")
 mp[[cc]] <- as.character(mp[[cc]]); cl[[cc]] <- as.character(cl[[cc]])
 if (uniqueN(mp[[cc]]) != nrow(mp) || uniqueN(cl[[cc]]) != nrow(cl)) stop("duplicate query IDs")
 if (!all(mp[[cc]] %in% cl[[cc]]) || !all(mp[[cc]] %in% colnames(obj))) stop("query boundary mismatch")
@@ -107,12 +113,12 @@ for (i in seq_len(nrow(mp))) {
   mp$spatial_same_label_fraction[i] <- sum(same) / max(1L, sum(within[i, ]))
 }
 mp[, observed_density_spatial_consistent := spatial_neighbors_within_radius >= 5L & spatial_same_label_n >= 3L & spatial_same_label_fraction >= spatial_fraction]
-mp[, calibrated_call := mapping_status == "calibrated_medium_high_broad_only"]
+mp[, calibrated_call := mapping_tier %in% c("high", "moderate") & tolower(as.character(meets_moderate_or_higher)) %in% c("true", "1", "yes")]
 mp[, validated_broad_return := calibrated_call & fullfeature_program_consistent & cluster_context_consistent & observed_density_spatial_consistent]
 mp[, `:=`(
   final_broad_label = ifelse(validated_broad_return, predicted_label_canonical, NA_character_),
   final_state = ifelse(validated_broad_return, "defined_broad_only", "qc_holdout"),
-  final_confidence = ifelse(validated_broad_return, "medium", "low"),
+  final_confidence = ifelse(validated_broad_return & mapping_tier == "high", "high", ifelse(validated_broad_return, "medium", "low")),
   final_action = ifelse(validated_broad_return, "postrecluster_calibrated_atlas_fullfeature_spatial_rescue", "retain_qc_after_completed_multiroute_review"),
   fine_anchor_eligible = FALSE, x = qxy[cell_id, 1], y = qxy[cell_id, 2]
 )]

@@ -4,6 +4,8 @@
 
 Use coherent marker programs rather than single genes. Retain absolute detection percentages, average expression, DEG effect size, contradictory programs, QC metrics and spatial location.
 
+When matched single-cell data are available, use `matched-single-cell-reference.md`. Query-derived full-feature anchors remain the primary biological evidence; a stage-matched same-project single-cell reference is the preferred external channel, ahead of public same-species and cross-species atlases. Its source labels must pass an explicit crosswalk and transfer ceiling.
+
 ## Decision routes
 
 ### Direct definition
@@ -34,11 +36,13 @@ The default atlas policy is route- and class-specific held-out target precision 
 
 Prefer query-like held-out anchors for final transfer calibration. The completed Scanpy-style route used external Atlas, internal anchors, marker programs and observed-density space as four concordance channels; the completed R-style route calibrated those channels on held-out current-query anchors before high/moderate consensus. An external-reference held-out split measures Atlas self-consistency and is useful diagnostically, but it cannot by itself certify transfer confidence in low-depth query observations.
 
+A biologically matched single-cell reference may replace the generic external-atlas channel, but not the internal-anchor, current-query marker/anti-marker or spatial channels. Use its count-level object for depth matching and held-out calibration. If only a marker dotplot is available, use it to refine positive/negative programs and the crosswalk; do not report cell-level mapping confidence from the dotplot.
+
 Use `scripts/adjudicate_multichannel_broad_rescue.py` after assembling the evidence matrix. Configure each channel with its own label and acceptance column, require a current-query marker/anti-marker channel, and require at least one route/internal-anchor/observed-density spatial channel. The script derives a candidate label from concordant channels, calibrates cumulative support-count thresholds separately for each declared route/label group, and refuses to extrapolate to support counts absent from held-out anchors. Its output is proposal-only and never edits the cell ledger.
 
 The default structural minima are two concordant channels for moderate-or-higher and three for high, but held-out precision calibration may select stricter observed thresholds. High must remain a subset of moderate-or-higher. A group without enough query-like held-out support remains rejected; do not borrow a permissive threshold from an unrelated route merely to increase coverage.
 
-For H5AD references, first use `scripts/downsample_anchors_to_query_depth.py` to create held-out anchors matching the QC pool's count-depth distribution. `scripts/run_anchor_knn_mapping.py` creates auditable atlas/internal-anchor predictions for those anchors and the QC query; calibrate per-label confidence/margin using `scripts/calibrate_mapping_thresholds.py`. Accepted rows remain `defined_broad_only`, `fine_anchor_eligible=false`; rejects remain QC/review. More sophisticated mapping methods may replace kNN but must obey the same depth-matched calibration contract.
+For H5AD references, first use `scripts/downsample_anchors_to_query_depth.py` to create disjoint held-out **current-query anchors** matching the QC pool's count-depth distribution. `scripts/run_anchor_knn_mapping.py` creates auditable atlas/internal-anchor predictions for those anchors and the QC query; calibrate nested high/moderate tiers with `scripts/calibrate_tiered_mapping_thresholds.py` and its required origin manifest. `scripts/build_depth_matched_atlas_bundle.py` splits an external reference and is diagnostic reference-self-classification only; it cannot calibrate query rescue. The legacy `calibrate_mapping_thresholds.py` is diagnostic-only and never writeback eligible. Accepted rows remain `defined_broad_only`, `fine_anchor_eligible=false`; rejects remain QC/review. More sophisticated mapping methods may replace kNN but must obey the same disjoint query-like calibration contract.
 
 ### Retain uncertainty
 

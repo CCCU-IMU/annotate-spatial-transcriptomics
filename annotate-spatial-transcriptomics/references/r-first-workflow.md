@@ -8,6 +8,8 @@ Run `scripts/inspect_r_object.R`, `scripts/check_r_runtime.R` and `scripts/audit
 
 Prefer the full-feature Seurat RDS over a reduced/HVG object. If both exist, freeze both roles explicitly: `clustering_object` and `validation_object`.
 
+If a matched single-cell Seurat/AnnData object is available, freeze it as a separate `matched_reference_object`; never merge its cells into the query ledger. Read `matched-single-cell-reference.md`, validate its label crosswalk, and use it as the preferred external reference channel after current-query anchors.
+
 ## 2. Reuse computation without leaking labels
 
 Existing whole-tissue or pool reclustering may be reused when all conditions pass:
@@ -52,6 +54,8 @@ Apply the mandatory order:
 
 RCTD is low-priority assistance. Atlas moderate-or-higher may rescue broad-only after independent evidence; neither route creates fine anchors.
 
+When a matched single-cell reference exists, use its harmonized broad labels before a generic atlas for the external-reference channel, provided stage, donor composition, raw-count availability and source marker programs pass audit. The matched prediction still has a broad-only default ceiling and cannot bypass strict Oocyte, Theca, mural/smooth-muscle or rare-lineage gates.
+
 ## 6. Ovary stromal-lineage decomposition
 
 Do not close a single `Stromal/perivascular` super-class before testing:
@@ -82,6 +86,10 @@ For adult sheep ovary, permit only a small evidence-supported functional vocabul
 - stromal/mesenchymal: keep most variation as state/spatial tags unless a stable lineage-level separation passes the profile gate.
 
 The sheep GSE233801 study supports a limited number of granulosa functional subtypes, not arbitrary cluster-by-cluster naming. Developmental sheep atlases contain stage-specific populations that must not be imported into an adult sample without query evidence. A shallower tree with stronger parent labels is preferable to a detailed but weak tree.
+
+For sheep ovary, first run `scripts/resolve_workflow_profile.py`. A readable full-feature Seurat RDS makes this R-first workflow the default. A confirmed StereoPy `cellbin_PPed` conversion additionally activates the frozen whole-tissue preprocessing profile in `seurat-cellbin-preprocessing.md`; this specialized profile overrides any more general SCT examples in this document. Resolution and labels remain adaptive.
+
+The 2025 Science human/mouse ovary atlas, 2026 Advanced Science sheep-human reproductive atlas and 2025 AJOG expert review support a stable shallow checklist and stronger negative gates. They do not require every class to appear. In particular, a neural-looking single gene cannot create Neural/Schwann or Neuroendocrine, and graph-derived granulosa states do not automatically become follicle-stage labels. Read `profiles/sheep_ovary_literature_2025_2026.md`.
 
 ## 8. Baseline-independent quality gate
 

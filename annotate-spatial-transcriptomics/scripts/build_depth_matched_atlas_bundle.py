@@ -182,7 +182,7 @@ def main() -> None:
         ).to_csv(route_dir / "heldout_truth.tsv", sep="\t", index=False)
         pd.DataFrame({args.cell_id_col: route_ids}).to_csv(route_dir / "query_membership.tsv", sep="\t", index=False)
         summary = {
-            "status": "PASS",
+            "status": "DIAGNOSTIC_ONLY",
             "route": route,
             "n_query": int(len(route_ids)),
             "n_query_positive_shared_depth": int(len(depths)),
@@ -197,7 +197,9 @@ def main() -> None:
             "heldout_depth_median_after": float(np.median(heldout_after)),
             "fine_anchor_eligible": False,
             "reference_kind": args.reference_kind,
-            "warning": f"{args.reference_kind} train/held-out observations are independent of the query and depth-matched per frozen route; downstream mappings remain broad-only evidence.",
+            "heldout_origin": "reference_self_classification",
+            "eligible_for_query_rescue_calibration": False,
+            "warning": f"{args.reference_kind} train/held-out cells are independent of the query but both originate from the same reference. This validates reference separability only and cannot calibrate query rescue.",
         }
         (route_dir / "depth_matching_manifest.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
         bundle_rows.append(summary)
@@ -214,7 +216,9 @@ def main() -> None:
         "routes": selected_strata,
         "n_routes": len(selected_strata),
         "query_reference_overlap": int(len(query.obs_names.intersection(reference.obs_names))),
-        "warning": f"All outputs are {args.reference_kind} calibration inputs only. No mapping call can become a fine anchor.",
+        "heldout_origin": "reference_self_classification",
+        "eligible_for_query_rescue_calibration": False,
+        "warning": f"All held-out cells originate from the same {args.reference_kind}. Use query-like held-out current-query anchors for any rescue threshold; these files are diagnostic only.",
     }
     if manifest["query_reference_overlap"]:
         raise SystemExit("query/reference observation IDs overlap")

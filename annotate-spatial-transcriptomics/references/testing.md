@@ -6,6 +6,8 @@ Run the Skill validator, compile Python scripts, parse R scripts, validate templ
 
 Run `scripts/audit_release_taxonomy.py` on one passing and one deliberately failing fixture. The failing fixture must include a copied pool name, a forbidden catch-all broad label or a retained state presented as a biological class.
 
+Run `python -m unittest discover -s tests -v`. The release-contract suite must exercise the sheep-ovary resolver, exact StereoPy cellbin profile, GSE233801 priority, dotplot no-transfer rule, query-like held-out origin, legacy combined-tier rejection and one-worker-per-sample cohort isolation.
+
 ## End-to-end test
 
 Use a real input directory without supplying the intended clustering choice or final labels. Require the agent to discover inputs, inventory prior progress, rank candidates, inspect shortlisted outputs, freeze a choice, write state and generate required artifacts.
@@ -20,6 +22,7 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 - No example-specific labels or thresholds in execution defaults.
 - The same-batch Seurat cellbin test writes the frozen SCT profile to its manifest: entry QC `nCount>=100 AND nFeature>=75`, SCT v2/`glmGamPoi`, 3,000 variable features, at most 50,000 fitting observations, 50 computed/30 used PCs, k=30 cosine Annoy with 50 trees, and the candidate grid `0.1,0.2,0.3,0.4,0.6`.
 - The Seurat cellbin runner never reuses imported StereoPy PCA/UMAP, never silently falls back from `glmGamPoi`, never auto-selects a final resolution and never auto-reassigns a small cluster.
+- Sheep/Ovis/ovine/羊 plus ovary/ovarian/卵巢 and a full-feature Seurat RDS automatically resolves to R-first. A confirmed StereoPy cellbin_PPed conversion activates the exact fixed profile; unrecorded numerical drift and missing SHA256 support fail.
 - Pool SCT tests require joint query/anchor SCT/PCA with query-only graph/Leiden/UMAP/DEG, explicit SCT v2 provenance, adaptive k/PC/resolution controls and a fail-closed `glmGamPoi` dependency.
 - Broad and subtype dotplots both exist with PNG, PDF and valid source TSV.
 - Every cell/observation is accounted for exactly once.
@@ -32,6 +35,7 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 - A requested improvement over a baseline release must use a predeclared, baseline-blinded acceptance table and full-feature evidence comparison. Higher annotation rate, subtype count or baseline agreement alone cannot pass; no priority lineage may materially regress.
 - A sheep-ovary R-first forward test must fail one-cluster-one-name output. Every fine label needs a reproducible functional/lineage program beyond its parent; unsupported historical subtypes are merged, and ECM/contractile/stress/low-RNA/anatomical differences remain state tags in the ledger and report.
 - A sheep-ovary test must keep three machine-readable layers separate: literature candidate-lineage checklist, analysis parent pools and release labels. Copying a `_review`, `_candidate`, `_unresolved` or `_holdout` pool name into a biological label fails. Missing a literature class after a documented negative audit passes; lowering its gate to complete a published taxonomy fails.
+- When a matched single-cell reference is supplied, the test must preserve source labels, validate an explicit source-to-candidate crosswalk and enforce its transfer ceiling. Exact taxonomy copying fails; a dotplot-only reference claiming cell-level transfer fails; a matched-reference prediction that bypasses current-query marker/anti-marker, spatial or rare-lineage gates fails.
 - A regression fixture containing steroidogenic, mature-contractile, generic-ECM, granulosa and endothelial programs must reject `Theca/follicular wall` as a broad catch-all, recover only coherent steroidogenic observations as `Theca`, and route mature-contractile observations through the Smooth-muscle gate.
 - A standalone `Mesenchymal progenitor-like` call must fail when support is generic `DCN/LUM/COL1A1/PDGFRA` without stable S100A4/progenitor-like separation; a standalone `Pericyte/mural` call must fail without its backbone and vascular adjacency. Both negative audits are acceptable terminal evidence.
 - An ambiguous blood/lymphatic split must roll back to `Vascular/endothelial`; an ambiguous immune split must roll back to `Immune`. The test must prefer the least specific honest release name.
@@ -40,6 +44,7 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 - A route named `anchor_assisted` without explicit query/anchor roles and query-only graph evidence is rejected.
 - A large post-clustering QC pool that has atlas mapping but no full QC-pool anchor-recluster remains blocked.
 - Atlas tests must verify nested cumulative calibration: every high row meets moderate-or-higher; mutually exclusive output counts distinguish `high`, `moderate-only` and `low-reject`; `moderate_or_higher_n = high_n + moderate_only_n`; and both accepted tiers remain broad-only. The default held-out target-precision targets are 0.90 and 0.95, not per-observation confidence cutoffs.
+- Reference self-classification must fail as a final query-rescue calibration origin. Only disjoint query-like held-out current-query anchors with a PASS origin manifest can calibrate writeback; the legacy combined `medium_high` route remains diagnostic-only.
 - Multi-channel rescue tests must require current-query marker/anti-marker support plus an independent route/internal-anchor/spatial channel, calibrate only at support counts represented by query-like held-out anchors, reject Atlas-only calls, preserve high as a subset of moderate-or-higher, emit proposal-only broad labels and set `fine_anchor_eligible=false`.
 - An interface without a machine-readable RCTD/reference applicability audit remains blocked; `not_applicable` requires a resolvable artifact and failed criteria.
 - Medium/low-confidence RCTD rejects remain queued for calibrated atlas/internal-anchor fallback; only extreme confidence with independent evidence may support fine labels, while high confidence is broad-only.
@@ -56,3 +61,4 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 - The frozen confirmation request must include strict unresolved/QC/interface counts and strict/inclusive/display broad censuses. Recording confirmation must bind the exact cell-ledger, decision-ledger and completion-gate hashes; changing any one invalidates release generation.
 - A post-confirmation `final_*`/`release_*`/`report_*` run must still trigger `run_control` while nonterminal, but must not reopen state validation or the biological completion gate after it becomes terminal. A post-confirmation non-release run must trigger `confirmation_invalidation`.
 - A fresh Agent continues across submitted jobs, failures, child pools, state writebacks and final release without asking for routine intermediate approval.
+- A multi-sample fixture assigns exactly one full-workflow logical worker and one isolated root per sample, respects wave-limited parallelism, blocks active double claims without an audited takeover, and requires every sample to pass its own release audit. Worker mode may not reduce report or evidence gates.

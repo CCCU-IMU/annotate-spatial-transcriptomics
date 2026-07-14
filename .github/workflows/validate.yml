@@ -19,5 +19,7 @@ jobs:
         run: python scripts/validate_repo.py
       - name: Verify installable Skill
         run: python scripts/verify_install.py annotate-spatial-transcriptomics
+      - name: Run release-contract regression tests
+        run: PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v
       - name: Check installer syntax
         run: bash -n install.sh

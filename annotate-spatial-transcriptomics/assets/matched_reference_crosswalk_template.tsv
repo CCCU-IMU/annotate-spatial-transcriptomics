@@ -1,0 +1,2 @@
+source_label	canonical_review_axis	candidate_release_broad	candidate_fine_label	transfer_ceiling	positive_markers_in_reference	required_query_evidence	rationale
+REFERENCE_LABEL	REVIEW_AXIS	CANDIDATE_BROAD		broad_only_after_calibration	GENE1;GENE2;GENE3	current-query multi-gene program;anti-marker pass;stability;spatial plausibility	Replace this example row and preserve the original source label.

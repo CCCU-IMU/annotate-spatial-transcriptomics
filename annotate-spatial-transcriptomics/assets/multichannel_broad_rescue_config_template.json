@@ -4,6 +4,8 @@
   "heldout_value": "heldout",
   "query_value": "query",
   "truth_column": "truth_label",
+  "calibration_origin_column": "calibration_origin",
+  "required_calibration_origin": "query_like_heldout_current_query_anchors",
   "route_column": "route",
   "calibration_group_columns": [
     "route"
@@ -61,7 +63,8 @@
     "anti_marker_gate_pass"
   ],
   "required_heldout_boolean_columns": [
-    "query_depth_matched"
+    "query_depth_matched",
+    "heldout_target_disjoint"
   ],
   "moderate_target_precision": 0.9,
   "high_target_precision": 0.95,

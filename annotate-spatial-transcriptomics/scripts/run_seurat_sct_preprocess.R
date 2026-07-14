@@ -47,8 +47,35 @@ seed <- as_int("seed", 20260706)
 resolutions <- as.numeric(strsplit(value_or("resolutions", "0.1,0.2,0.3,0.4,0.6"), ",", fixed = TRUE)[[1]])
 future_globals_max_gb <- as_num("future-globals-max-gb", 100)
 
+fixed_profile <- list(
+  `min-counts` = 100, `min-features` = 75, nfeatures = 3000,
+  `sct-ncells` = 50000, `pca-npcs` = 50, dims = 30, k = 30,
+  `annoy-trees` = 50, `umap-min-dist` = 0.3,
+  resolutions = "0.1,0.2,0.3,0.4,0.6"
+)
+observed_profile <- list(
+  `min-counts` = min_counts, `min-features` = min_features, nfeatures = nfeatures,
+  `sct-ncells` = sct_ncells_cap, `pca-npcs` = pca_npcs, dims = dims_n, k = k_param,
+  `annoy-trees` = annoy_trees, `umap-min-dist` = umap_min_dist,
+  resolutions = paste(resolutions, collapse = ",")
+)
+different <- names(fixed_profile)[vapply(names(fixed_profile), function(name) {
+  !identical(as.character(fixed_profile[[name]]), as.character(observed_profile[[name]]))
+}, logical(1))]
+exception_allowed <- isTRUE(args$`allow-batch-exception`)
+exception_reason <- as.character(value_or("batch-exception-reason", ""))
+if (length(different) && (!exception_allowed || nchar(trimws(exception_reason)) < 20L)) {
+  stop(
+    "Frozen StereoPy cellbin_PPed batch parameters changed (", paste(different, collapse = ", "),
+    "). Use --allow-batch-exception with --batch-exception-reason of at least 20 characters."
+  )
+}
+
 if (!requireNamespace("glmGamPoi", quietly = TRUE)) {
   stop("glmGamPoi is required by the frozen SCT batch profile; refusing a silent method fallback")
+}
+if (!requireNamespace("digest", quietly = TRUE)) {
+  stop("digest is required for fail-closed input and membership SHA256 provenance")
 }
 if (pca_npcs < dims_n) stop("--pca-npcs must be >= --dims")
 if (any(!is.finite(resolutions)) || !length(resolutions)) stop("Invalid --resolutions")
@@ -192,11 +219,11 @@ if (length(spatial_pair)) {
 }
 
 hash_file <- function(path) {
-  if (requireNamespace("digest", quietly = TRUE)) digest::digest(path, algo = "sha256", file = TRUE) else NA_character_
+  digest::digest(path, algo = "sha256", file = TRUE)
 }
 hash_ids <- function(ids) {
   ids <- sort(as.character(ids))
-  if (requireNamespace("digest", quietly = TRUE)) digest::digest(paste(ids, collapse = "\n"), algo = "sha256") else NA_character_
+  digest::digest(paste(ids, collapse = "\n"), algo = "sha256")
 }
 manifest <- data.table(
   parameter = c(
@@ -207,7 +234,7 @@ manifest <- data.table(
     "pca_npcs", "neighbor_dims", "neighbor_k", "neighbor_method", "neighbor_trees",
     "neighbor_metric", "cluster_algorithm", "resolution_grid", "resolution_selection",
     "umap_neighbors", "umap_min_dist", "umap_metric", "seed", "future_plan",
-    "tiny_cluster_policy", "spatial_x_col", "spatial_y_col"
+    "tiny_cluster_policy", "batch_profile_status", "batch_exception_reason", "spatial_x_col", "spatial_y_col"
   ),
   value = as.character(c(
     sample_id, input_rds, hash_file(input_rds), assay_name, count_layer,
@@ -217,7 +244,8 @@ manifest <- data.table(
     nfeatures, sct_ncells, TRUE, TRUE, pca_npcs, dims_n, k_param, "annoy", annoy_trees,
     "cosine", 4, paste(resolutions, collapse = ","), "not_selected_adaptive_review_required",
     k_param, umap_min_dist, "cosine", seed, "sequential",
-    "flag_below_100_never_auto_reassign", if (length(spatial_pair)) spatial_pair[[1]] else "",
+    "flag_below_100_never_auto_reassign", if (length(different)) "approved_recorded_exception" else "frozen_profile_exact",
+    if (length(different)) exception_reason else "", if (length(spatial_pair)) spatial_pair[[1]] else "",
     if (length(spatial_pair)) spatial_pair[[2]] else ""
   ))
 )

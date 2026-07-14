@@ -81,6 +81,25 @@ def main() -> int:
     required = ["input_snapshot_registry.tsv", "clustering_decision_ledger.tsv", "cluster_decision_ledger.tsv", "pool_registry.tsv", "run_registry.tsv"]
     if multi_required: required += ["pool_snapshot_registry.tsv", "route_attempt_registry.tsv", "branch_control_board.tsv", "workflow_event_registry.tsv", "annotation_view_registry.tsv"]
     for f in required: require((state / f).exists(), f"missing registry: {f}", errors)
+    configured_sample = str(config.get("sample_id", ""))
+    require(bool(configured_sample), "project config sample_id is empty", errors)
+    for filename in required:
+        registry_path = state / filename
+        if not registry_path.exists():
+            continue
+        for line, row in enumerate(rows(registry_path), 2):
+            if "sample_id" in row:
+                require(row.get("sample_id") == configured_sample, f"{filename} line {line}: cross-sample row detected", errors)
+    run_path = state / "run_registry.tsv"
+    if run_path.exists():
+        run_rows = list(rows(run_path))
+        required_run_fields = {"run_id", "work_key", "execution_fingerprint", "owner_assignment_id", "attempt", "supersedes_run_id"}
+        with run_path.open(newline="", encoding="utf-8") as handle:
+            run_fields = set(csv.DictReader(handle, delimiter="\t").fieldnames or [])
+        require(required_run_fields.issubset(run_fields), "run registry is not migrated to v1.4 ownership schema", errors)
+        active_work_keys = [row.get("work_key", "") for row in run_rows if row.get("status") in {"prepared", "submitted", "running"}]
+        require("" not in active_work_keys, "active run has an empty work_key", errors)
+        require(len(active_work_keys) == len(set(active_work_keys)), "duplicate active work_key detected", errors)
     cluster_path = state / "cluster_decision_ledger.tsv"
     active_ids = set()
     if cluster_path.exists():
@@ -110,6 +129,7 @@ def main() -> int:
         import itertools
         for i, row in enumerate(itertools.chain([first] if first else [],it), 2):
             key = (row.get("sample_id"), row.get("cell_id")); n += 1
+            require(row.get("sample_id") == configured_sample, f"cell ledger line {i}: cross-sample row detected", errors)
             require(key not in seen, f"cell ledger duplicate at line {i}: {key}", errors); seen.add(key)
             require(row.get("state") in ALLOWED, f"cell ledger line {i}: invalid state", errors)
             if row.get("state") == "defined_broad_only":

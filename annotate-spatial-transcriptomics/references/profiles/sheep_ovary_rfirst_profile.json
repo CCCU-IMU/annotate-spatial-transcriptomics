@@ -1,0 +1,76 @@
+{
+  "profile_id": "ovis_aries_ovary_rfirst_v2",
+  "species_aliases": ["Ovis aries", "sheep", "ovine", "羊", "绵羊"],
+  "tissue_aliases": ["ovary", "ovarian", "卵巢"],
+  "workflow": {
+    "preferred_backbone": "seurat_r_first",
+    "trigger": "sheep-ovary context plus a readable full-feature Seurat RDS",
+    "banksy_role": "optional spatial clustering adapter or corroborating view",
+    "scanpy_role": "fallback for AnnData-first inputs or an independent corroborating analysis",
+    "resolution_rule": "adaptive; select the lowest-complexity broad resolution supported by current-query full-feature markers, anti-markers, stability and spatial morphology"
+  },
+  "stereopy_cellbin_pped_contract": {
+    "trigger_all": [
+      "R object inspection reports a Seurat object",
+      "Spatial assay is present with at least 10000 features",
+      "input provenance or path identifies a StereoPy cellbin_PPed conversion"
+    ],
+    "entry_qc": {
+      "minimum_counts": 100,
+      "minimum_features": 75,
+      "operator": "AND",
+      "high_count_quantile_review_flag": 0.999,
+      "mitochondrial_hard_filter": false,
+      "doublet_hard_delete_at_entry": false
+    },
+    "sctransform": {
+      "source_assay": "Spatial",
+      "new_assay": "SCT",
+      "vst_flavor": "v2",
+      "method": "glmGamPoi",
+      "variable_features": 3000,
+      "fit_observations_cap": 50000,
+      "conserve_memory": true,
+      "return_only_variable_genes": true
+    },
+    "pca": {"computed_components": 50, "neighbor_components": 30},
+    "neighbors": {"k": 30, "method": "annoy", "trees": 50, "metric": "cosine"},
+    "clustering": {"algorithm": 4, "candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6]},
+    "umap": {"neighbors": 30, "minimum_distance": 0.3, "metric": "cosine"},
+    "exception_policy": "a numerical deviation requires an explicit batch-exception flag and a substantive recorded rationale; biological resolution selection remains adaptive"
+  },
+  "external_reference_policy": {
+    "priority_when_matched_count_object_exists": [
+      "current_query_full_feature_anchors",
+      "project_matched_stage_matched_count_level_single_cell",
+      "GSE233801_adult_sheep_somatic_atlas",
+      "other_sheep_ovary_atlases",
+      "cross_species_support"
+    ],
+    "priority_when_matched_reference_is_dotplot_only": [
+      "current_query_full_feature_anchors",
+      "GSE233801_adult_sheep_somatic_atlas",
+      "other_sheep_ovary_atlases",
+      "matched_dotplot_candidate_markers_only",
+      "cross_species_support"
+    ],
+    "primary_public_atlas": "GSE233801",
+    "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Vascular/endothelial", "Pericyte/mural candidate", "Immune"],
+    "primary_public_atlas_exclusions": ["Oocyte", "Theca", "Epithelial/mesothelial"],
+    "atlas_rescue_ceiling": "broad_only",
+    "accepted_calibrated_tiers": ["high", "moderate"],
+    "moderate_or_higher_target_precision": 0.9,
+    "high_target_precision": 0.95,
+    "required_independent_channels": ["current_query_marker_and_antimarker", "internal_anchor_or_observed_density_spatial"],
+    "calibration_origin": "query_like_heldout_current_query_anchors",
+    "forbidden_calibration_origin": "reference_self_classification"
+  },
+  "release_policy": {
+    "primary_endpoint": "accurate shallow broad classes",
+    "maximum_default_depth": "broad plus one independently supported functional subtype",
+    "all_broad_rescues_enter_final_inclusive_deg_and_dotplots": true,
+    "broad_only_rescues_enter_fine_marker_discovery": false,
+    "oocyte_rule": "require multiple non-ZP oocyte modules, somatic anti-program clearance, spatial object morphology and strict candidate reclustering",
+    "rare_neural_rule": "SOX10/S100B/PLP1/MPZ-like glial backbone or a coherent neuronal program plus track-like morphology; DLG2 or another single neuronal gene is insufficient"
+  }
+}

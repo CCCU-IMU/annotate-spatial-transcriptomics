@@ -33,14 +33,16 @@ Allowed states:
 - `clustering_decision_ledger.tsv`: every candidate and selection/rejection rationale.
 - `cluster_decision_ledger.tsv`: cluster evidence, decision, confidence and next route.
 - `pool_registry.tsv`: membership snapshot, parent, status and closure.
-- `run_registry.tsv`: scripts, parameters, environment, scheduler job and outputs.
+- `run_registry.tsv`: scripts, parameters, environment, scheduler job and outputs plus unique active `work_key`, execution fingerprint, worker owner, attempt and `supersedes_run_id`. Run `scripts/migrate_project_v1_3_to_v1_4.py` before resuming an older registry.
 - `pool_snapshot_registry.tsv`: immutable versioned memberships and SHA256; parent pools are never silently expanded.
-- `route_attempt_registry.tsv`: Route A–E applicability, query/anchor boundary, parameters, validation and outcome counts. Applicable RCTD/reference-assisted routes additionally record `rctd_extreme_n`, `rctd_high_n`, `rctd_medium_low_n`, `rctd_fine_return_n`, `rctd_broad_return_n`, `independent_fine_evidence` and `fallback_route_attempt_id`.
+- `route_attempt_registry.tsv`: Route A–E applicability, query/anchor boundary, frozen query-membership SHA256, parameters, validation and outcome counts. QC Atlas routes also record query-like held-out calibration origin/manifest. Applicable RCTD/reference-assisted routes additionally record `rctd_extreme_n`, `rctd_high_n`, `rctd_medium_low_n`, `rctd_fine_return_n`, `rctd_broad_return_n`, `independent_fine_evidence`, `fallback_route_attempt_id` and the exact expected fallback-membership SHA256.
 - `branch_control_board.tsv`: branch generation, selected resolution, terminal/no-repeat policy and authoritative artifact.
 - `workflow_event_registry.tsv`: chronological Chinese-ready input, job, failure, repair, review and writeback events.
 - `annotation_view_registry.tsv`: strict/inclusive/display census and policy artifacts.
 - `provenance/analysis_scope_policy.json`: immutable full-object versus analysis-set boundary and membership hash.
 - `provenance/release_taxonomy_audit.json`: profile-bound audit of final biological names versus source pools and retained states, including separate biological and retained-state censuses plus cell-ledger/profile hashes.
+- `state/reference_registry.tsv`: immutable matched/public reference records with role, species/tissue/stage match, object/annotation/marker paths and hashes, source-label column, donor/sample composition and usability status.
+- `config/matched_reference_crosswalk.tsv` plus `provenance/matched_reference_crosswalk_validation.json`: source labels, candidate review axes, candidate release names, transfer ceilings, reference markers and required current-query evidence. Source labels are provenance and are never overwritten.
 - `cell_ledger.tsv.gz`: final cell/bin-level provenance and labels.
 
 ## Invariants

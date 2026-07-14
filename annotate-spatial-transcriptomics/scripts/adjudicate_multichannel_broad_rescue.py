@@ -111,6 +111,8 @@ def main() -> int:
     id_column = config.get("id_column", "cell_id")
     split_column = config.get("split_column", "calibration_split")
     truth_column = config.get("truth_column", "truth_label")
+    origin_column = config.get("calibration_origin_column", "calibration_origin")
+    required_origin = config.get("required_calibration_origin", "query_like_heldout_current_query_anchors")
     route_column = config.get("route_column")
     heldout_value = str(config.get("heldout_value", "heldout"))
     query_value = str(config.get("query_value", "query"))
@@ -121,7 +123,7 @@ def main() -> int:
     if any(not name for name in names) or len(names) != len(set(names)):
         raise SystemExit("channel names must be nonempty and unique")
 
-    required = {id_column, split_column, truth_column}
+    required = {id_column, split_column, truth_column, origin_column}
     if route_column:
         required.add(route_column)
     for channel in channels:
@@ -145,6 +147,8 @@ def main() -> int:
         raise SystemExit("both held-out anchors and query observations are required")
     if frame.loc[heldout_mask, truth_column].eq("").any():
         raise SystemExit("held-out anchors require truth labels")
+    if not frame.loc[heldout_mask, origin_column].eq(required_origin).all():
+        raise SystemExit("held-out calibration includes non-query-like or reference-self observations")
     for column in config.get("required_heldout_boolean_columns", []):
         if not frame.loc[heldout_mask, column].map(truth).all():
             raise SystemExit(f"held-out anchors fail required query-like audit column: {column}")
@@ -297,6 +301,7 @@ def main() -> int:
         "n_heldout": int(heldout_mask.sum()),
         "n_query": int(query_mask.sum()),
         "n_channels": len(channels),
+        "heldout_origin": required_origin,
         "channels": names,
         "calibration_group_columns": group_columns,
         "moderate_target_precision": moderate_target,

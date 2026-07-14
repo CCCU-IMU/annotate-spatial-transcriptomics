@@ -61,6 +61,20 @@ def main() -> int:
     if unknown:
         raise SystemExit(f"unmapped adjudication actions: {unknown}")
 
+    legacy_status = d.get("mapping_status", pd.Series("", index=d.index)).astype(str).str.contains("legacy|medium_high", case=False, regex=True)
+    if legacy_status.any():
+        raise SystemExit("legacy or combined mapping-tier adjudication is not writeback eligible")
+    defined = d.get(a.state_col, pd.Series("", index=d.index)).astype(str).eq("defined_broad_only")
+    mapping_like = any(column in d for column in ["mapping_tier", "consensus_tier", "meets_moderate_or_higher"])
+    if mapping_like and defined.any():
+        tier = d.get("mapping_tier", d.get("consensus_tier", pd.Series("", index=d.index))).astype(str)
+        allowed = tier.isin(["high", "moderate", "moderate-only"])
+        moderate = d.get("meets_moderate_or_higher", d.get("writeback_eligible", pd.Series(False, index=d.index))).astype(str).str.lower().isin(["true", "1", "yes"])
+        fine = d.get("fine_anchor_eligible", pd.Series(False, index=d.index)).astype(str).str.lower().isin(["true", "1", "yes"])
+        validated = d.get("validated_broad_return", d.get("writeback_eligible", pd.Series(False, index=d.index))).astype(str).str.lower().isin(["true", "1", "yes"])
+        if (defined & (~allowed | ~moderate | fine | ~validated)).any():
+            raise SystemExit("one or more broad rescue rows fail tier, independent validation, or fine-anchor gates")
+
     keep = [a.cell_id_col, a.action_col]
     for col in [a.state_col, a.broad_label_col, a.fine_label_col, a.confidence_col, "fine_anchor_eligible"]:
         if col in d and col not in keep:
