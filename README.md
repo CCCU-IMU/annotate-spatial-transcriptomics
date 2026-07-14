@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcrip
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcriptomics/main/install.sh \
-  | bash -s -- --ref v1.4.0
+  | bash -s -- --ref v1.4.1
 ```
 
 克隆后本地安装（适合内网或需要审查源码的环境）：
@@ -46,6 +46,10 @@ rm -rf "${CODEX_HOME:-$HOME/.codex}/skills/annotate-spatial-transcriptomics"
 ## 最佳使用方法：怎样获得高质量结果
 
 高质量来自“上下文完整 + 自主迭代 + 多证据闭环 + 状态不可变”，而不是给 Agent 一张 marker 表后让它一次性重命名 cluster。推荐按下面方式启动。
+
+Seurat 用户要特别注意双对象合同：SCT 对象只负责聚类；如果原始转换对象的 `Spatial@data` 与 `counts` 完全相同，Agent 必须在计算节点另建带 manifest 的全基因 LogNormalize 验证对象，供 DEG/marker 使用，不能改写 SCT 对象。候选分辨率比较同时保留全观测 ARI/AMI；`n<100` 只触发小簇复核，并且只从额外的宏观评分中暂时隔离，绝不能据此删除细胞或跳过 DEG、空间和稀有谱系审查。
+
+多样本并行时，每个调度作业必须使用 `样本__P阶段_任务[_池或目标]__A尝试号`，例如 `C05297F1__P10_SCT__A01`、`C05297F1__P40_POOL_stromal__A02`。Skill 内的生成器会限制阶段码和长度，并把名称写入 run registry/报告；禁止继续使用 `sct_preprocess_v0` 这类无法从调度页面判断阶段的名称。
 
 ### 1. 首次消息一次给全背景
 

@@ -8,6 +8,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+from scheduler_job_name import validate as validate_scheduler_job_name
 
 
 ACTIVE = {"WORKER_ASSIGNED", "ANALYSIS_RUNNING", "RELEASE_RUNNING"}
@@ -44,6 +45,13 @@ def main() -> int:
     active_work_keys = [row.get("work_key", "") for row in runs if row.get("status") in {"submitted", "running"}]
     if "" in active_work_keys or len(active_work_keys) != len(set(active_work_keys)):
         errors.append("active cohort work keys are empty or duplicated")
+    for line, row in enumerate(runs, 2):
+        if row.get("status") not in {"submitted", "running"}:
+            continue
+        try:
+            validate_scheduler_job_name(row.get("scheduler_job_name", ""), 48)
+        except ValueError as exc:
+            errors.append(f"cohort run index line {line}: invalid scheduler_job_name: {exc}")
     unknown_run_samples = sorted({row.get("sample_id", "") for row in runs}.difference(sample_ids))
     if unknown_run_samples:
         errors.append(f"run index contains unknown samples: {unknown_run_samples}")

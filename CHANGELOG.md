@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.1 — 2026-07-14
+
+- 修复 Seurat 转换对象中 `Spatial@data` 与原始 `counts` 完全相同却被用于 Wilcoxon DEG 的证据层缺口。
+- 新增独立、全基因、带输入/analysis-set/输出哈希的 LogNormalize 验证对象；SCT 聚类对象保持不变且验证对象明确禁止用于聚类。
+- 初始 cluster DEG 和最终 label DEG 对 `Spatial` assay 强制校验验证 manifest、对象路径、analysis-set 哈希、层身份及 `data != counts`，不满足时 fail closed。
+- 分辨率稳定性同时输出全观测 ARI/AMI 和仅用于宏观排序的 `n>=100` restricted 指标；完整保留微簇迁移表和小簇复核清单。
+- 明确微簇不因大小被删除、重命名或跳过 DEG、空间图与稀有谱系/技术复核。
+- 新增强制调度作业名 `SAMPLE__Pnn_STAGE[_SCOPE]__Ann`、阶段字典、生成/校验器及 registry/report 字段，使多样本并行进度可直接从调度页面识别。
+
 ## 1.4.0 — 2026-07-14
 
 - 羊/绵羊/Ovis + 卵巢上下文现在由机器可读 resolver 自动选择 Seurat R-first；确认 StereoPy `cellbin_PPed` 转换后自动执行固定 SCT/PCA/邻接参数合同。

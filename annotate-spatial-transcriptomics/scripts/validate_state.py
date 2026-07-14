@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from scheduler_job_name import validate as validate_scheduler_job_name
 
 
 ALLOWED = {"defined_fine", "defined_broad_only", "interface_review", "qc_holdout", "technical_state", "pending_review", "excluded_initial_qc", "closed_and_frozen"}
@@ -93,13 +94,20 @@ def main() -> int:
     run_path = state / "run_registry.tsv"
     if run_path.exists():
         run_rows = list(rows(run_path))
-        required_run_fields = {"run_id", "work_key", "execution_fingerprint", "owner_assignment_id", "attempt", "supersedes_run_id"}
+        required_run_fields = {"run_id", "work_key", "execution_fingerprint", "owner_assignment_id", "attempt", "scheduler_job_name", "supersedes_run_id"}
         with run_path.open(newline="", encoding="utf-8") as handle:
             run_fields = set(csv.DictReader(handle, delimiter="\t").fieldnames or [])
         require(required_run_fields.issubset(run_fields), "run registry is not migrated to v1.4 ownership schema", errors)
         active_work_keys = [row.get("work_key", "") for row in run_rows if row.get("status") in {"prepared", "submitted", "running"}]
         require("" not in active_work_keys, "active run has an empty work_key", errors)
         require(len(active_work_keys) == len(set(active_work_keys)), "duplicate active work_key detected", errors)
+        for line, row in enumerate(run_rows, 2):
+            if row.get("status") not in {"submitted", "running"}:
+                continue
+            try:
+                validate_scheduler_job_name(row.get("scheduler_job_name", ""), 48)
+            except ValueError as exc:
+                require(False, f"run registry line {line}: invalid scheduler_job_name: {exc}", errors)
     cluster_path = state / "cluster_decision_ledger.tsv"
     active_ids = set()
     if cluster_path.exists():

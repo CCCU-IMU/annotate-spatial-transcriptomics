@@ -58,6 +58,29 @@ The runner enforces these values. Any numerical override requires both
 manifest records the exception. Missing SHA256 support is fatal rather than
 silently emitting an unverifiable manifest.
 
+## Separate full-feature validation object
+
+The converted `Spatial@data` layer may be missing or may be an exact copy of
+raw counts. Such a layer is not valid input for Wilcoxon DEG, even though the
+SCT graph and clusters remain valid. Do not normalize or otherwise mutate the
+frozen SCT clustering object to repair this.
+
+On a compute node, run `scripts/prepare_seurat_full_feature_validation.R` from
+the immutable raw-count RDS plus the frozen analysis-set membership. It creates
+a separate all-feature `LogNormalize(scale.factor=10000)` object, removes all
+reductions, marks the object as `full_feature_deg_marker_validation_only` and
+writes input, membership, analysis-set and output hashes in a validation
+manifest. The object is explicitly ineligible for clustering.
+
+Pass that object and `--validation-manifest` to
+`scripts/run_initial_cluster_evidence.R` and `scripts/run_final_label_deg.R`.
+For assay `Spatial`, both scripts fail closed when the manifest is absent,
+points to another object, has a mismatched analysis-set hash, or when
+`data == counts`. Detection percentages and marker presence continue to use
+raw counts; Wilcoxon rank evidence uses the verified LogNormalize `data`
+layer. This validation job can be deferred until DEG/marker evidence is
+needed, which is why a running SCT/PCA job may not encounter the issue yet.
+
 ## Parameters that remain adaptive
 
 Batch harmonisation does not mean copying biological decisions. The following

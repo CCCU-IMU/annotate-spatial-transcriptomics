@@ -19,6 +19,14 @@ Choose the lowest-complexity candidate that preserves supported broad lineages a
 
 Automated scores only rank candidates. Freeze a candidate only after marker and spatial review. Record rejected alternatives and reasons.
 
+Always report adjacent-resolution ARI/AMI on the sampled common observations
+with every cluster included. Also report a separate macro-restricted score in
+which an observation contributes only when its cluster has at least 100
+members in both partitions. The restricted score is only a broad-resolution
+ranking aid. Export the full cluster migration table and a
+`small_cluster_review` audit: size alone never deletes, relabels or suppresses
+a cluster from DEG, spatial evidence or rare-lineage/technical adjudication.
+
 Use `scripts/rank_pool_resolutions.py` to shortlist pool resolutions from cluster size, adjacent ARI and profile-program interpretability. For spatial pools, run `scripts/summarize_spatial_cluster_morphology.py` to quantify components, noise and largest-component fraction. Interpret these values against the profile: repeated follicles or a vascular network can legitimately be noncompact, while arbitrary salt-and-pepper splitting is a warning.
 
 ## BANKSY

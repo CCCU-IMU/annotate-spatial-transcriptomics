@@ -20,7 +20,7 @@ REGISTRIES = {
     "branch_control_board.tsv": ["branch_id", "sample_id", "parent_decision_id", "pool_snapshot_id", "generation", "run_id", "selected_resolution", "n_query", "membership_sha256", "current_state", "recluster_policy", "terminal", "next_action", "authoritative_artifact", "updated_at"],
     "workflow_event_registry.tsv": ["event_id", "sample_id", "timestamp", "phase", "branch_id", "action", "input_scope", "parameters", "scheduler_job_id", "status", "decision_summary_zh", "artifact", "supersedes_event_id"],
     "annotation_view_registry.tsv": ["view_id", "sample_id", "view", "membership_path", "membership_sha256", "n_observations", "policy", "marker_deg_eligible", "status", "artifact", "created_at"],
-    "run_registry.tsv": ["run_id", "work_key", "execution_fingerprint", "sample_id", "stage", "script", "parameters_path", "environment", "owner_assignment_id", "attempt", "scheduler_job_id", "status", "output_root", "supersedes_run_id", "started_at", "finished_at"],
+    "run_registry.tsv": ["run_id", "work_key", "execution_fingerprint", "sample_id", "stage", "script", "parameters_path", "environment", "owner_assignment_id", "attempt", "scheduler_job_name", "scheduler_job_id", "status", "output_root", "supersedes_run_id", "started_at", "finished_at"],
 }
 
 
@@ -37,7 +37,7 @@ def main() -> int:
         (root / d).mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     config = {
-        "framework_version": "1.4.0", "sample_id": args.sample,
+        "framework_version": "1.4.1", "sample_id": args.sample,
         "input_root": str(args.input_root.resolve()), "project_root": str(root),
         "modality": args.modality, "observation_unit": args.observation_unit,
         "decision_version": "v001", "status": "initialized", "created_at_utc": now,
@@ -55,7 +55,7 @@ def main() -> int:
     state_md = root / "state/annotation_state.md"
     if not state_md.exists():
         state_md.write_text(
-            f"# {args.sample} annotation state\n\n- framework: 1.4.0\n- modality: {args.modality}\n"
+            f"# {args.sample} annotation state\n\n- framework: 1.4.1\n- modality: {args.modality}\n"
             f"- observation unit: {args.observation_unit}\n- status: initialized\n- created: {now}\n\n"
             "## Current gate\n\nInput discovery and immutable snapshot are pending.\n",
             encoding="utf-8",

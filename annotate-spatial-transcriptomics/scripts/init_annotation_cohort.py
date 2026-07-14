@@ -13,7 +13,7 @@ from pathlib import Path
 FIELDS = {
     "worker_registry.tsv": ["sample_id", "worker_id", "worker_generation", "wave", "status", "sample_root", "assigned_at", "updated_at", "supersedes_worker_id"],
     "sample_gate_registry.tsv": ["sample_id", "status", "packet_path", "packet_sha256", "completion_gate_path", "completion_gate_sha256", "release_audit_path", "release_audit_sha256", "master_decision", "updated_at"],
-    "cohort_run_index.tsv": ["work_key", "sample_id", "stage", "owner_worker_id", "attempt", "scheduler_job_id", "status", "output_root", "supersedes_work_key", "updated_at"],
+    "cohort_run_index.tsv": ["work_key", "sample_id", "stage", "owner_worker_id", "attempt", "scheduler_job_name", "scheduler_job_id", "status", "output_root", "supersedes_work_key", "updated_at"],
     "cohort_event_registry.tsv": ["event_id", "sample_id", "worker_id", "phase", "status", "summary", "artifact", "timestamp"],
 }
 

@@ -6,7 +6,7 @@ Use this path whenever a readable full-feature Seurat RDS is available or the us
 
 Run `scripts/inspect_r_object.R`, `scripts/check_r_runtime.R` and `scripts/audit_feature_scope.R`. Record object hash, Seurat version, assays/layers, raw-count assay, normalized assay, reductions, metadata columns, coordinates, observation IDs and analysis-set membership. Use RNA/Spatial raw counts for absolute detection and anti-marker gates. SCT residuals may drive PCA/clustering but cannot establish marker absence.
 
-Prefer the full-feature Seurat RDS over a reduced/HVG object. If both exist, freeze both roles explicitly: `clustering_object` and `validation_object`.
+Prefer the full-feature Seurat RDS over a reduced/HVG object. If both exist, freeze both roles explicitly: `clustering_object` and `validation_object`. A full feature list does not prove that `Spatial@data` is normalized. Before any Wilcoxon evidence, verify `data != counts`; when it fails, create a separate manifest-bound LogNormalize validation object with `scripts/prepare_seurat_full_feature_validation.R` and leave the SCT clustering object unchanged.
 
 If a matched single-cell Seurat/AnnData object is available, freeze it as a separate `matched_reference_object`; never merge its cells into the query ledger. Read `matched-single-cell-reference.md`, validate its label crosswalk, and use it as the preferred external reference channel after current-query anchors.
 
@@ -17,7 +17,7 @@ Existing whole-tissue or pool reclustering may be reused when all conditions pas
 1. Its source-object hash or exact observation membership is recoverable.
 2. It used the current analysis set or has an explicit exclusion ledger.
 3. Candidate resolutions, cluster memberships, DEG, UMAP and spatial outputs are complete.
-4. Validation can be repeated on the current full-feature object.
+4. Validation can be repeated on a verified full-feature normalized layer; a raw converted `Spatial@data == counts` object must first use the separate validation-object route.
 5. Historical annotation columns are hidden until new decisions are frozen.
 
 Register reused artifacts as `validated_reuse`, preserve their original path/hash and create a new decision ledger. Never copy their labels or confidence fields.

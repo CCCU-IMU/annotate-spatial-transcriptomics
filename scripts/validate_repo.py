@@ -47,6 +47,12 @@ def main() -> int:
         SKILL / "scripts" / "migrate_project_v1_3_to_v1_4.py",
         SKILL / "scripts" / "request_cohort_confirmation.py",
         SKILL / "scripts" / "record_cohort_confirmation.py",
+        SKILL / "scripts" / "prepare_seurat_full_feature_validation.R",
+        SKILL / "scripts" / "seurat_validation_layer.R",
+        SKILL / "scripts" / "run_initial_cluster_evidence.R",
+        SKILL / "scripts" / "run_final_label_deg.R",
+        SKILL / "scripts" / "compare_clusterings.py",
+        SKILL / "scripts" / "scheduler_job_name.py",
         SKILL / "assets" / "matched_reference_crosswalk_template.tsv",
     ]
     for path in required:

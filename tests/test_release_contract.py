@@ -109,8 +109,80 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         self.assertNotIn("D055", case)
         self.assertNotIn("/" + "share" + "/" + "org" + "/", case)
 
+    def test_spatial_deg_requires_separate_verified_lognormalize_object(self) -> None:
+        prepare = (SCRIPTS / "prepare_seurat_full_feature_validation.R").read_text()
+        helper = (SCRIPTS / "seurat_validation_layer.R").read_text()
+        initial = (SCRIPTS / "run_initial_cluster_evidence.R").read_text()
+        final = (SCRIPTS / "run_final_label_deg.R").read_text()
+        for token in [
+            'normalization.method = "LogNormalize"',
+            'scale_factor = scale_factor',
+            'role = "full_feature_deg_marker_validation_only"',
+            "analysis_set_sha256",
+            "reductions_removed = TRUE",
+            "clustering_eligible = FALSE",
+        ]:
+            self.assertIn(token, prepare)
+        self.assertIn("sparse_exact_equal(counts, data)", helper)
+        self.assertIn("hash_observation_ids(colnames(counts))", helper)
+        self.assertIn("Validation manifest points to a different normalized object", helper)
+        for evidence_runner in [initial, final]:
+            self.assertIn("assert_seurat_validation_layer", evidence_runner)
+            self.assertIn("validation-manifest", evidence_runner)
+            self.assertIn("object_path = a$rds", evidence_runner)
+
+    def test_microclusters_are_audited_but_never_removed_from_all_cell_scores(self) -> None:
+        compare = (SCRIPTS / "compare_clusterings.py").read_text()
+        for token in [
+            "ARI_all_observations",
+            "AMI_all_observations",
+            "ARI_macro_restricted",
+            "clustering_microcluster_audit.tsv",
+            "clustering_pairwise_migration.tsv",
+            '"included_in_all_cell_scores": True',
+            "never delete, relabel, or omit from DEG/spatial evidence by size alone",
+        ]:
+            self.assertIn(token, compare)
+        clustering_policy = (SKILL / "references/clustering-selection.md").read_text()
+        self.assertIn("size alone never deletes, relabels or suppresses", clustering_policy)
+
 
 class CohortOrchestrationContract(unittest.TestCase):
+    def test_scheduler_names_expose_sample_stage_scope_and_attempt(self) -> None:
+        generated = subprocess.run(
+            [sys.executable, str(SCRIPTS / "scheduler_job_name.py"), "--sample", "C05297F1", "--stage-code", "40", "--scope", "stromal", "--attempt", "2"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        self.assertEqual(generated, "C05297F1__P40_POOL_stromal__A02")
+        subprocess.run(
+            [sys.executable, str(SCRIPTS / "scheduler_job_name.py"), "--validate", generated],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        invalid = subprocess.run(
+            [sys.executable, str(SCRIPTS / "scheduler_job_name.py"), "--validate", "C05297F1_sct_preprocess_v0"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(invalid.returncode, 0)
+
+    def test_submitted_run_requires_stage_readable_scheduler_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            project = root / "project"
+            subprocess.run([sys.executable, str(SCRIPTS / "init_annotation_project.py"), "--sample", "S1", "--input-root", str(root), "--project-root", str(project), "--modality", "spatial"], check=True, capture_output=True, text=True)
+            command = [sys.executable, str(SCRIPTS / "update_run_registry.py"), str(project), "--run-id", "run1", "--work-key", "whole_sct", "--execution-fingerprint", "fixture-sha", "--stage", "preprocess", "--script", "runner.R", "--environment", "R", "--status", "submitted", "--output-root", str(project / "runs")]
+            missing = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("require --job-name", missing.stderr + missing.stdout)
+            subprocess.run(command + ["--job-name", "S1__P10_SCT__A01", "--job-id", "123"], check=True, capture_output=True, text=True)
+            with (project / "state/run_registry.tsv").open(newline="", encoding="utf-8") as handle:
+                row = next(csv.DictReader(handle, delimiter="\t"))
+            self.assertEqual(row["scheduler_job_name"], "S1__P10_SCT__A01")
+
     def test_one_sample_one_root_wave_assignment_and_validation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

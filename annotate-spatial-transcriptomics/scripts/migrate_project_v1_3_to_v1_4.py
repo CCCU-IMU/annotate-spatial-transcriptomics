@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-NEW_FIELDS = ["run_id","work_key","execution_fingerprint","sample_id","stage","script","parameters_path","environment","owner_assignment_id","attempt","scheduler_job_id","status","output_root","supersedes_run_id","started_at","finished_at"]
+NEW_FIELDS = ["run_id","work_key","execution_fingerprint","sample_id","stage","script","parameters_path","environment","owner_assignment_id","attempt","scheduler_job_name","scheduler_job_id","status","output_root","supersedes_run_id","started_at","finished_at"]
 
 
 def main() -> int:
@@ -32,7 +32,7 @@ def main() -> int:
     migrated = []
     for index, row in enumerate(rows, 1):
         run_id = row.get("run_id", "")
-        migrated.append({**row, "work_key": row.get("work_key") or f"legacy:{row.get('stage','unknown')}:{run_id}", "execution_fingerprint": row.get("execution_fingerprint") or "legacy_unknown", "owner_assignment_id": row.get("owner_assignment_id") or "legacy_main_agent", "attempt": row.get("attempt") or "1", "supersedes_run_id": row.get("supersedes_run_id") or ""})
+        migrated.append({**row, "work_key": row.get("work_key") or f"legacy:{row.get('stage','unknown')}:{run_id}", "execution_fingerprint": row.get("execution_fingerprint") or "legacy_unknown", "owner_assignment_id": row.get("owner_assignment_id") or "legacy_main_agent", "attempt": row.get("attempt") or "1", "scheduler_job_name": row.get("scheduler_job_name") or "", "supersedes_run_id": row.get("supersedes_run_id") or ""})
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=NEW_FIELDS, delimiter="\t", extrasaction="ignore")
         writer.writeheader(); writer.writerows(migrated)

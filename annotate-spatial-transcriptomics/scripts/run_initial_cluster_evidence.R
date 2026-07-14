@@ -10,6 +10,11 @@ suppressPackageStartupMessages({
   library(scattermore)
 })
 
+script_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+if (!length(script_arg)) stop("Cannot resolve script directory")
+source(file.path(dirname(normalizePath(sub("^--file=", "", script_arg[[1]]))),
+                 "seurat_validation_layer.R"))
+
 parse_args <- function(x) {
   out <- list(); i <- 1L
   while (i <= length(x)) {
@@ -42,8 +47,14 @@ if (length(common) != ncol(obj) || length(common) != nrow(cl)) stop("Object/clus
 cl <- cl[match(colnames(obj), get(a$`cell-id-col`))]; stopifnot(all(cl[[a$`cell-id-col`]] == colnames(obj)))
 obj$framework_cluster <- factor(as.character(cl[[a$`cluster-col`]]), levels = sort(unique(as.character(cl[[a$`cluster-col`]]))))
 assay <- if (!is.null(a$assay)) a$assay else DefaultAssay(obj)
+data_layer <- if (!is.null(a$layer)) a$layer else "data"
+count_layer <- if (!is.null(a$`count-layer`)) a$`count-layer` else "counts"
 if (!assay %in% Assays(obj)) stop("Missing assay: ", assay)
 DefaultAssay(obj) <- assay
+assert_seurat_validation_layer(
+  obj, assay = assay, data_layer = data_layer, count_layer = count_layer,
+  manifest_path = a$`validation-manifest`, object_path = a$rds
+)
 Idents(obj) <- "framework_cluster"
 
 counts <- data.table(cluster = levels(obj$framework_cluster), n_observations = as.integer(table(obj$framework_cluster)))
@@ -57,7 +68,7 @@ if (all(file.exists(c(deg_path, sig_path, top_path)))) {
   message("Reusing completed DEG tables")
   deg <- fread(deg_path); sig <- fread(sig_path)
 } else {
-  deg <- as.data.table(FindAllMarkers(obj, assay = assay, slot = "data", only.pos = TRUE, test.use = "wilcox",
+  deg <- as.data.table(FindAllMarkers(obj, assay = assay, slot = data_layer, only.pos = TRUE, test.use = "wilcox",
                                       min.pct = min_pct, logfc.threshold = lfc, return.thresh = 1,
                                       max.cells.per.ident = max_cells, random.seed = seed, densify = FALSE, verbose = TRUE))
   lfc_col <- intersect(c("avg_log2FC", "avg_logFC"), names(deg))[1]
@@ -102,8 +113,11 @@ grid <- wrap_plots(plots, ncol = 4) + plot_annotation(title = "Per-cluster spati
 save_both(grid, file.path(fig, "selected_clustering_highlight_grid"), 13, max(5, ceiling(length(plots) / 4) * 3.1))
 
 manifest <- data.table(
-  parameter = c("n_observations", "n_clusters", "assay", "min_pct", "logfc_threshold", "max_cells_per_ident", "seed"),
-  value = c(ncol(obj), length(levels(obj$framework_cluster)), assay, min_pct, lfc, max_cells, seed)
+  parameter = c("n_observations", "n_clusters", "assay", "count_layer", "data_layer",
+                "validation_manifest", "min_pct", "logfc_threshold", "max_cells_per_ident", "seed"),
+  value = c(ncol(obj), length(levels(obj$framework_cluster)), assay, count_layer, data_layer,
+            ifelse(is.null(a$`validation-manifest`), "", normalizePath(a$`validation-manifest`)),
+            min_pct, lfc, max_cells, seed)
 )
 fwrite(manifest, file.path(a$out, "evidence_run_manifest.tsv"), sep = "\t")
 message("Initial cluster evidence complete")

@@ -42,7 +42,7 @@ Read `references/multi-route-controller.md` before creating unresolved pools. It
 5. Run `scripts/init_annotation_project.py --sample SAMPLE --input-root INPUT_ROOT --project-root PROJECT_ROOT --modality spatial|single-cell`.
 6. Freeze every active expression object and reused clustering table with `scripts/register_input_snapshot.py` before analysis. Never silently replace an object or clustering table.
 7. If existing state exists, validate and resume it. Do not restart completed pools.
-8. Distinguish clustering features from validation features. Run `scripts/audit_feature_scope.R` on the expression object used for final marker evidence. HVG/BANKSY features may drive clustering, but final positive/negative marker and rare-cell validation must use a full-feature object when the profile requires it.
+8. Distinguish clustering features from validation features. Run `scripts/audit_feature_scope.R` on the expression object used for final marker evidence. HVG/BANKSY features may drive clustering, but final positive/negative marker and rare-cell validation must use a full-feature object when the profile requires it. For Seurat `Spatial`, never assume `@data` is normalized: if `data` is absent or exactly equals `counts`, keep the SCT clustering object immutable and build a separate full-feature validation-only object with `scripts/prepare_seurat_full_feature_validation.R`. Any Wilcoxon DEG/marker job on `Spatial` must pass the resulting manifest to the evidence runner; fail closed otherwise.
 9. Separate `full_object`, `analysis_set`, `excluded_initial_qc` and `postcluster_holdout`. Never mix initial QC exclusion with an unresolved biological pool.
 10. Freeze the analysis-set membership and SHA256 in `provenance/analysis_scope_policy.json`. Before release, require the cell ledger's scope assignments and all three annotation views to match that exact membership.
 11. If a matched single-cell reference exists, register its object/annotation/marker artifacts, copy `assets/matched_reference_crosswalk_template.tsv` to `config/matched_reference_crosswalk.tsv`, preserve every source label verbatim and run `scripts/validate_matched_reference_crosswalk.py`. Use a packaged tissue alias table only as a starting hypothesis.
@@ -55,7 +55,7 @@ Read `references/clustering-selection.md`. For an R-first project, inspect or ge
 
 Use quantitative ranking only to shortlist candidates. Inspect marker interpretability, cluster-size distribution, adjacent-parameter stability, UMAP structure and spatial morphology before freezing the selected run. Never select by filename, a fixed resolution, or an example's choice.
 
-For a shortlisted grid, run `scripts/compare_clusterings.py` to quantify ARI/AMI. Treat stability as supporting evidence, not biological truth.
+For a shortlisted grid, run `scripts/compare_clusterings.py` to quantify ARI/AMI. Retain the all-observation ARI/AMI, including every microcluster. A second `n>=100` macro-restricted score may help rank broad resolutions, but it never removes observations or exempts small clusters from DEG, spatial maps and rare-lineage/technical review. Treat stability as supporting evidence, not biological truth.
 
 Record every candidate reviewed and the final rationale in `state/clustering_decision_ledger.tsv`.
 
@@ -161,6 +161,6 @@ Read `references/state-schema.md` before writing labels.
 
 ## Execution and testing
 
-Use local execution for discovery and small audits. For submitted analysis read `references/job-orchestration.md` and follow submit → monitor → log inspection → repair/resubmit → artifact validation → state writeback. Use the site's scheduler for memory-heavy expression operations. Scheduler templates are examples only; detect the current environment and available resources.
+Use local execution for discovery and small audits. For submitted analysis read `references/job-orchestration.md` and follow submit → monitor → log inspection → repair/resubmit → artifact validation → state writeback. Before every scheduler submission generate the visible name with `scripts/scheduler_job_name.py`; ad hoc names are forbidden. Use the site's scheduler for memory-heavy expression operations. Scheduler templates are examples only; detect the current environment and available resources.
 
 Before distributing an updated Skill, run the standard validator and follow `references/testing.md`. Forward-test with a fresh agent that receives raw inputs and the Skill but not the intended clustering choice or annotation answer.

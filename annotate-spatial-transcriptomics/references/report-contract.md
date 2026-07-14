@@ -13,7 +13,7 @@
 9. Complete chronological workflow and state provenance.
 10. Software/session information, audit results and checksums.
 11. Biological context/profile, iteration queue, every pool/run status, rare-cell object audits and completion-gate result.
-12. Full-feature audit plus label-level full-feature marker validation; clearly distinguish clustering/HVG evidence from final validation evidence.
+12. Full-feature audit plus label-level full-feature marker validation; clearly distinguish clustering/HVG evidence from final validation evidence and expose the manifest of the LogNormalize validation-only object when the Seurat raw container had `Spatial@data == counts`.
 13. Strict, inclusive and display census/maps, with an explicit statement of which cohort supplies DEG and marker discovery.
 14. Multi-route dashboard: each Route A–E input, applicability, anchors/reference, selected parameters, calibrated thresholds, outcome counts, retained rejects and no-repeat status.
 15. A detailed Chinese workflow at the bottom reconstructed from `workflow_event_registry.tsv`, starting from raw-object loading and including every pool generation, scheduler failure/repair, biological review and atomic writeback. Link to it from the top navigation.

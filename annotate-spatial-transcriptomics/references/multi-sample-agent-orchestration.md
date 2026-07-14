@@ -15,6 +15,7 @@ Use this contract when a user requests more than one sample, parallel sample ann
 - Requested parallelism controls how many sample workers may be active. When scheduler or Agent slots are fewer than samples, assign deterministic waves; never combine samples to fit a slot limit.
 - A stopped worker with a live scheduler job is resumed by takeover and monitoring. It is not resubmitted until the existing job is proven terminal. Failed jobs and logs remain registered; repairs get a new run ID with `supersedes`.
 - Every sample `run_registry.tsv` uses a unique active `work_key`, execution fingerprint, worker owner, positive attempt number and explicit superseded run. Existing v1.3 projects must run `scripts/migrate_project_v1_3_to_v1_4.py` before worker takeover.
+- Every worker generates scheduler-visible names through `scripts/scheduler_job_name.py`. The master progress board groups active jobs by `Pnn_STAGE`, so users can read each sample's current phase directly from the scheduler UI; sample workers may not invent ad hoc job names.
 
 ## Lifecycle
 

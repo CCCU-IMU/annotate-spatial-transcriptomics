@@ -5,11 +5,12 @@ import argparse,csv
 from datetime import datetime,timezone
 from pathlib import Path
 from registry_io import locked_tsv_update
+from scheduler_job_name import validate as validate_scheduler_job_name
 
-FIELDS=["run_id","work_key","execution_fingerprint","sample_id","stage","script","parameters_path","environment","owner_assignment_id","attempt","scheduler_job_id","status","output_root","supersedes_run_id","started_at","finished_at"]
+FIELDS=["run_id","work_key","execution_fingerprint","sample_id","stage","script","parameters_path","environment","owner_assignment_id","attempt","scheduler_job_name","scheduler_job_id","status","output_root","supersedes_run_id","started_at","finished_at"]
 TERMINAL={"validated_done","failed_preserved","cancelled_preserved"}
 def main():
-    p=argparse.ArgumentParser();p.add_argument("project_root",type=Path);p.add_argument("--run-id",required=True);p.add_argument("--work-key",required=True);p.add_argument("--execution-fingerprint",required=True);p.add_argument("--owner-assignment-id",default="main-agent");p.add_argument("--attempt",type=int,default=1);p.add_argument("--supersedes-run-id",default="");p.add_argument("--stage",required=True);p.add_argument("--script",required=True);p.add_argument("--parameters-path",default="");p.add_argument("--environment",required=True);p.add_argument("--job-id",default="");p.add_argument("--status",required=True,choices=["prepared","submitted","running","failed_preserved","validated_done","cancelled_preserved"]);p.add_argument("--output-root",required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument("project_root",type=Path);p.add_argument("--run-id",required=True);p.add_argument("--work-key",required=True);p.add_argument("--execution-fingerprint",required=True);p.add_argument("--owner-assignment-id",default="main-agent");p.add_argument("--attempt",type=int,default=1);p.add_argument("--supersedes-run-id",default="");p.add_argument("--stage",required=True);p.add_argument("--script",required=True);p.add_argument("--parameters-path",default="");p.add_argument("--environment",required=True);p.add_argument("--job-name",default="");p.add_argument("--job-id",default="");p.add_argument("--status",required=True,choices=["prepared","submitted","running","failed_preserved","validated_done","cancelled_preserved"]);p.add_argument("--output-root",required=True);a=p.parse_args()
     path=a.project_root/"state/run_registry.tsv";cfg=__import__("json").loads((a.project_root/"config/project.json").read_text());now=datetime.now(timezone.utc).isoformat()
     def mutate(rows,fields):
         missing=[field for field in FIELDS if field not in fields]
@@ -17,6 +18,11 @@ def main():
         hit=[i for i,r in enumerate(rows) if r.get("run_id")==a.run_id]
         if len(hit)>1:raise SystemExit("duplicate run_id in registry")
         old=rows[hit[0]] if hit else {}
+        scheduler_job_name=a.job_name or old.get("scheduler_job_name","")
+        if a.status in {"submitted","running"}:
+            if not scheduler_job_name:raise SystemExit("submitted/running runs require --job-name")
+            try:validate_scheduler_job_name(scheduler_job_name,48)
+            except ValueError as exc:raise SystemExit(f"invalid scheduler job name: {exc}")
         if old.get("status") in TERMINAL and old.get("status")!=a.status:raise SystemExit("terminal run is immutable; create a superseding run_id")
         active=[r for r in rows if r.get("work_key")==a.work_key and r.get("run_id")!=a.run_id and r.get("status") in {"prepared","submitted","running"}]
         if active:raise SystemExit("an active run already owns this work_key: "+active[0].get("run_id", ""))
@@ -24,7 +30,7 @@ def main():
             prior=[r for r in rows if r.get("run_id")==a.supersedes_run_id]
             if len(prior)!=1 or prior[0].get("status") not in TERMINAL:raise SystemExit("superseded run must exist and be terminally preserved")
         if a.attempt<1:raise SystemExit("attempt must be positive")
-        row={"run_id":a.run_id,"work_key":a.work_key,"execution_fingerprint":a.execution_fingerprint,"sample_id":cfg["sample_id"],"stage":a.stage,"script":a.script,"parameters_path":a.parameters_path,"environment":a.environment,"owner_assignment_id":a.owner_assignment_id,"attempt":a.attempt,"scheduler_job_id":a.job_id or old.get("scheduler_job_id",""),"status":a.status,"output_root":a.output_root,"supersedes_run_id":a.supersedes_run_id or old.get("supersedes_run_id", ""),"started_at":old.get("started_at") or now,"finished_at":now if a.status in TERMINAL else ""}
+        row={"run_id":a.run_id,"work_key":a.work_key,"execution_fingerprint":a.execution_fingerprint,"sample_id":cfg["sample_id"],"stage":a.stage,"script":a.script,"parameters_path":a.parameters_path,"environment":a.environment,"owner_assignment_id":a.owner_assignment_id,"attempt":a.attempt,"scheduler_job_name":scheduler_job_name,"scheduler_job_id":a.job_id or old.get("scheduler_job_id",""),"status":a.status,"output_root":a.output_root,"supersedes_run_id":a.supersedes_run_id or old.get("supersedes_run_id", ""),"started_at":old.get("started_at") or now,"finished_at":now if a.status in TERMINAL else ""}
         if hit:rows[hit[0]]=row
         else:rows.append(row)
         return rows
