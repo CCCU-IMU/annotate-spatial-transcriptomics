@@ -12,9 +12,9 @@ if(!is.null(a$umap)){um<-read_any(a$umap);um[[cc]]<-as.character(um[[cc]]);um<-u
 sd<-NULL;if(!is.null(a$coordinates)){co<-read_any(a$coordinates);co[[cc]]<-as.character(co[[cc]]);co<-co[match(cells,get(cc))];xx<-intersect(c("sdimx","x","spatial_x"),names(co))[1];yy<-intersect(c("sdimy","y","spatial_y"),names(co))[1];sd<-data.table(cell_id=cells,x=co[[xx]],y=co[[yy]])}else if(all(c("x","y")%in%colnames(obj[[]]))){md<-obj[[]];sd<-data.table(cell_id=cells,x=as.numeric(md[cells,"x"]),y=as.numeric(md[cells,"y"]))}
 plot_one<-function(base,labels,title,stem,spatial=FALSE){d<-copy(base);d[,label:=as.character(labels)];d<-d[!is.na(label)&nzchar(label)];if(!nrow(d))return(FALSE);lev<-sort(unique(d$label));pal<-setNames(hcl.colors(length(lev),"Dynamic"),lev);p<-ggplot(d,aes(x,y,colour=label))+scattermore::geom_scattermore(pointsize=ifelse(spatial,.5,.65),pixels=c(2200,2200))+scale_colour_manual(values=pal)+theme_classic(base_size=8)+labs(title=title,colour=NULL);if(spatial)p<-p+scale_y_reverse()+coord_equal()+theme_void()+labs(title=title);save_both(p,stem);TRUE}
 rows<-list();z<-1L
-for(view in c("strict","inclusive","display")){
-  bcol<-paste0(view,"_broad_label");fcol<-paste0(view,"_fine_label");scol<-paste0(view,"_state");if(!all(c(bcol,fcol,scol)%in%names(meta)))stop("missing ",view," view columns")
+for(view in "final"){
+  bcol<-"final_broad_label";fcol<-"final_fine_label";scol<-"final_state";if(!all(c(bcol,fcol,scol)%in%names(meta)))stop("missing final annotation columns")
   fine<-as.character(meta[[fcol]]);fine[is.na(fine)|!nzchar(fine)]<-as.character(meta[[bcol]])[is.na(fine)|!nzchar(fine)]
   for(level in c("broad","subtype")){labels<-if(level=="broad")meta[[bcol]]else fine;stem<-file.path(a$out,"figures",paste0(view,"_",level,"_UMAP"));plot_one(ud,labels,paste(view,level,"UMAP"),stem,FALSE);if(!is.null(sd)){stem2<-file.path(a$out,"figures",paste0(view,"_",level,"_spatial"));plot_one(sd,labels,paste(view,level,"spatial"),stem2,TRUE)};rows[[z]]<-data.table(view=view,level=level,n_labeled=sum(!is.na(labels)&nzchar(labels)),umap_png=paste0(stem,".png"),umap_pdf=paste0(stem,".pdf"),spatial_png=if(!is.null(sd))paste0(stem2,".png")else "",spatial_pdf=if(!is.null(sd))paste0(stem2,".pdf")else "");z<-z+1L}
 }
-fwrite(rbindlist(rows),file.path(a$out,"tables","annotation_view_overview_asset_index.tsv"),sep="\t")
+fwrite(rbindlist(rows),file.path(a$out,"tables","final_annotation_overview_asset_index.tsv"),sep="\t")

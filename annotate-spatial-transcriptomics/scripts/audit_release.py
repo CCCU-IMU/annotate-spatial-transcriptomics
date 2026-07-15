@@ -47,6 +47,12 @@ class Links(HTMLParser):
 def main() -> int:
     ap = argparse.ArgumentParser(); ap.add_argument("release_root", type=Path); ap.add_argument("--profile", choices=["core", "full"], default="full"); args = ap.parse_args()
     root = args.release_root.resolve(); errors = []
+    config_path = root / "config/project.json"
+    config = json.loads(config_path.read_text()) if config_path.exists() else {}
+    final_census_path = root / "tables/final_annotation_census.tsv"
+    final_census = read_tsv(final_census_path) if final_census_path.exists() else []
+    has_final_fine = any(row.get("fine_label", "") and int(float(row.get("n_observations", 0) or 0)) > 0 for row in final_census)
+    subtype_required = has_final_fine if config.get("multi_route_completion_required") else True
     def req(ok, msg):
         if not ok: errors.append(msg)
     report = root / "report/index.html"
@@ -54,9 +60,11 @@ def main() -> int:
     index = root / "figures/marker_dotplots/marker_dotplot_asset_index.tsv"
     req(index.exists(), "missing dotplot asset index")
     assets = read_tsv(index) if index.exists() else []
-    req({"broad", "subtype"}.issubset({r.get("level") for r in assets}), "both broad and subtype dotplots are mandatory")
+    required_levels = {"broad"} | ({"subtype"} if subtype_required else set())
+    req(required_levels.issubset({r.get("level") for r in assets}), "required broad/high-confidence subtype dotplots are missing")
     combos = {(r.get("level"), r.get("panel")) for r in assets}
-    req({("broad", "canonical"), ("subtype", "canonical")}.issubset(combos), "canonical broad and subtype dotplots are mandatory")
+    required_canonical = {("broad", "canonical")} | ({("subtype", "canonical")} if subtype_required else set())
+    req(required_canonical.issubset(combos), "required canonical broad/high-confidence subtype dotplots are missing")
     for r in assets:
         for key in ["png", "pdf", "source"]:
             p = Path(r.get(key, "")); p = p if p.is_absolute() else root / p
@@ -75,15 +83,14 @@ def main() -> int:
     for name in ["state/annotation_state.md", "state/clustering_decision_ledger.tsv", "state/cluster_decision_ledger.tsv", "provenance/state_validation.json"]:
         req((root / name).exists(), f"missing state artifact: {name}")
     if args.profile == "full":
-        config_path = root / "config/project.json"
         req(config_path.exists(), "missing project config")
-        config = json.loads(config_path.read_text()) if config_path.exists() else {}
         def any_file(pattern, min_bytes=100):
             return any(p.is_file() and p.stat().st_size >= min_bytes for p in root.glob(pattern))
         context_path = root / "config/biological_context.json"
         context_validation = root / "provenance/biological_context_validation.json"
         completion_path = root / "provenance/completion_gate.json"
         confirmation_path = root / "state/final_annotation_confirmation.json"
+        master_approval_path = root / "state/master_quality_approval.json"
         req(context_path.exists(), "missing biological context")
         req(context_validation.exists(), "missing biological-context validation")
         if context_validation.exists():
@@ -92,6 +99,11 @@ def main() -> int:
         if completion_path.exists():
             req(json.loads(completion_path.read_text()).get("status") == "PASS", "completion gate did not pass")
         req(confirmation_path.exists(), "missing explicit final-annotation user confirmation")
+        req(master_approval_path.exists(), "missing post-completion main-Agent annotation-quality approval")
+        if master_approval_path.exists():
+            from master_quality_lib import validate_master_approval
+            master_ok, master_errors, _ = validate_master_approval(root, master_approval_path)
+            req(master_ok, "invalid main-Agent annotation-quality approval: " + "; ".join(master_errors))
         if confirmation_path.exists():
             confirmation = json.loads(confirmation_path.read_text())
             req(confirmation.get("status") == "CONFIRMED", "final annotation was not explicitly confirmed by the user")
@@ -99,24 +111,30 @@ def main() -> int:
                 ("cell_ledger", "cell_ledger_sha256"),
                 ("cluster_ledger", "cluster_ledger_sha256"),
                 ("completion_gate", "completion_gate_sha256"),
+                ("confirmation_review_report", "confirmation_review_report_sha256"),
+                ("confirmation_review_manifest", "confirmation_review_manifest_sha256"),
+                ("annotation_support_registry", "annotation_support_registry_sha256"),
+                ("release_taxonomy_audit", "release_taxonomy_audit_sha256"),
+                ("master_quality_approval", "master_quality_approval_sha256"),
             ):
                 target = root / str(confirmation.get(key, ""))
                 req(target.is_file(), f"confirmed snapshot target is missing: {key}")
                 if target.is_file():
                     req(sha256(target) == confirmation.get(hash_key), f"confirmed snapshot is stale: {key}")
         if config.get("multi_route_completion_required"):
+            req(final_census_path.exists() and bool(final_census), "missing or empty single-final-annotation census")
             multi_path = root / "provenance/multiroute_audit.json"
             req(multi_path.exists(), "missing multi-route audit")
             if multi_path.exists(): req(json.loads(multi_path.read_text()).get("status") == "PASS", "multi-route audit did not pass")
-            for name in ["state/route_attempt_registry.tsv", "state/branch_control_board.tsv", "state/workflow_event_registry.tsv", "state/annotation_view_registry.tsv"]:
+            for name in ["state/route_attempt_registry.tsv", "state/branch_control_board.tsv", "state/workflow_event_registry.tsv", "state/annotation_view_registry.tsv", "state/annotation_support_registry.tsv"]:
                 req((root/name).exists(), f"missing multi-route registry: {name}")
             route_rows = read_tsv(root/"state/route_attempt_registry.tsv") if (root/"state/route_attempt_registry.tsv").exists() else []
             event_rows = read_tsv(root/"state/workflow_event_registry.tsv") if (root/"state/workflow_event_registry.tsv").exists() else []
             view_rows = read_tsv(root/"state/annotation_view_registry.tsv") if (root/"state/annotation_view_registry.tsv").exists() else []
             req(bool(route_rows), "multi-route release has no route attempts")
             req(bool(event_rows), "multi-route release has no workflow events")
-            req({"strict","inclusive","display"}.issubset({x.get("view") for x in view_rows if x.get("status")=="validated"}), "strict/inclusive/display views are not all validated")
-            req(all(x.get("analysis_view")=="strict" for x in assets), "mandatory marker dotplots must use the strict evidence view")
+            req("final" in {x.get("view") for x in view_rows if x.get("status")=="validated"}, "single final annotation is not validated")
+            req(all(x.get("analysis_view")=="final" for x in assets), "mandatory marker dotplots must use the final annotation")
             scope_path = root / "provenance/analysis_scope_policy.json"
             req(scope_path.exists(), "missing frozen analysis-scope policy")
             if scope_path.exists():
@@ -128,31 +146,30 @@ def main() -> int:
                 req(membership.is_file(), "analysis-scope membership artifact is missing")
                 if membership.is_file():
                     req(sha256(membership) == scope.get("membership_sha256"), "analysis-scope membership hash is stale")
-            for view in ["strict","inclusive","display"]:
-                for level in ["broad","subtype"]:
-                    stem=f"{view}_{level}_UMAP";req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(),f"missing annotation-view overview: {stem}")
-                    if config.get("modality")=="spatial":
-                        stem=f"{view}_{level}_spatial";req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(),f"missing annotation-view spatial overview: {stem}")
-            for level in ["broad","subtype"]:
-                named=any_file(f"tables/strict_{level}_DEG_one_vs_rest_all.tsv*")
+            for level in ["broad"] + (["subtype"] if subtype_required else []):
+                stem=f"final_{level}_UMAP";req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(),f"missing final annotation overview: {stem}")
+                if config.get("modality")=="spatial":
+                    stem=f"final_{level}_spatial";req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(),f"missing final annotation spatial overview: {stem}")
+            for level in ["broad"] + (["subtype"] if subtype_required else []):
+                named=any_file(f"tables/final_{level}_DEG_one_vs_rest_all.tsv*")
                 generic=list(root.glob(f"tables/{level}_DEG_one_vs_rest_all.tsv*"))
-                generic_strict=False
+                generic_final=False
                 for candidate in generic:
                     if not candidate.is_file() or candidate.stat().st_size < 100: continue
                     try:
                         rows=read_tsv(candidate)
-                        generic_strict=bool(rows) and all(row.get("analysis_view")=="strict" for row in rows[:min(100,len(rows))])
+                        generic_final=bool(rows) and all(row.get("analysis_view")=="final" for row in rows[:min(100,len(rows))])
                     except (OSError, UnicodeDecodeError):
-                        generic_strict=False
-                    if generic_strict: break
-                req(named or generic_strict,f"missing strict {level} DEG with explicit analysis_view provenance")
+                        generic_final=False
+                    if generic_final: break
+                req(named or generic_final,f"missing final {level} DEG with explicit analysis_view provenance")
             expected_labels = {}
             for level in ["broad", "subtype"]:
-                candidates = [root/f"tables/strict_{level}_DEG_one_vs_rest_all.tsv", root/f"tables/{level}_DEG_one_vs_rest_all.tsv"]
+                candidates = [root/f"tables/final_{level}_DEG_one_vs_rest_all.tsv", root/f"tables/{level}_DEG_one_vs_rest_all.tsv"]
                 deg_path = next((path for path in candidates if path.is_file()), None)
                 if deg_path:
                     deg_rows = read_tsv(deg_path)
-                    expected_labels[level] = {row.get("label", "") for row in deg_rows if row.get("label", "") and row.get("analysis_view") == "strict"}
+                    expected_labels[level] = {row.get("label", "") for row in deg_rows if row.get("label", "") and row.get("analysis_view") == "final"}
             for asset in assets:
                 level = asset.get("level", "")
                 expected = expected_labels.get(level, set())
@@ -162,18 +179,21 @@ def main() -> int:
                 source_rows = read_tsv(source)
                 observed_labels = {row.get("label", "") for row in source_rows if row.get("label", "")}
                 marker_groups = {row.get("marker_group", "") for row in source_rows if row.get("marker_group", "")}
-                req(observed_labels == expected, f"{level}/{asset.get('panel')} dotplot does not cover every strict DEG label")
+                req(observed_labels == expected, f"{level}/{asset.get('panel')} dotplot does not cover every final DEG label")
                 req(expected.issubset(marker_groups), f"{level}/{asset.get('panel')} marker groups do not cover every current label")
                 try:
-                    req(int(asset.get("n_labels", 0)) == len(expected), f"{level}/{asset.get('panel')} n_labels disagrees with strict DEG")
+                    req(int(asset.get("n_labels", 0)) == len(expected), f"{level}/{asset.get('panel')} n_labels disagrees with final DEG")
                 except (TypeError, ValueError):
                     req(False, f"{level}/{asset.get('panel')} n_labels is invalid")
-        req({("broad", "canonical"), ("broad", "data_specific"), ("subtype", "canonical"), ("subtype", "data_specific")}.issubset(combos), "full release requires canonical and data-specific dotplots at broad and subtype levels")
+        required_combos = {("broad", "canonical"), ("broad", "data_specific")}
+        if subtype_required:
+            required_combos.update({("subtype", "canonical"), ("subtype", "data_specific")})
+        req(required_combos.issubset(combos), "full release requires canonical and data-specific dotplots for broad and every released high-confidence subtype level")
         if not config.get("multi_route_completion_required"):
             req(any_file("tables/broad_DEG_one_vs_rest_all.tsv*"), "missing broad one-vs-rest DEG")
             req(any_file("tables/subtype_DEG_one_vs_rest_all.tsv*"), "missing subtype one-vs-rest DEG")
         req(any_file("state/cell_ledger.tsv*", 1000) or any_file("tables/cell_ledger.tsv*", 1000) or any_file("tables/cell_metadata*.tsv*", 1000), "missing cell-level ledger")
-        for name in ["state/pool_registry.tsv","state/run_registry.tsv","state/next_action_queue.tsv","state/final_annotation_confirmation.json","provenance/full_feature_validation.json","provenance/release_manifest.tsv","provenance/checksums.sha256","provenance/release_sessionInfo.txt"]:
+        for name in ["state/pool_registry.tsv","state/run_registry.tsv","state/next_action_queue.tsv","state/master_quality_approval.json","state/final_annotation_confirmation.json","state/annotation_support_registry.tsv","review/confirmation/index.html","provenance/confirmation_review_manifest.json","provenance/full_feature_validation.json","provenance/release_manifest.tsv","provenance/checksums.sha256","provenance/release_sessionInfo.txt"]:
             req((root/name).exists(),f"missing full-release provenance: {name}")
         feature_validation = root / "provenance/full_feature_validation.json"
         if feature_validation.exists():
@@ -203,11 +223,14 @@ def main() -> int:
             checksum_set = set(checksum_rows)
             req("report/index.html" in checksum_set, "checksums do not cover the HTML report")
             req("state/cluster_decision_ledger.tsv" in checksum_set, "checksums do not cover the cluster ledger")
+            req("state/annotation_support_registry.tsv" in checksum_set, "checksums do not cover annotation support reasons")
+            req("review/confirmation/index.html" in checksum_set, "checksums do not cover the pre-confirmation review")
             req(any(x.startswith("state/cell_ledger.tsv") for x in checksum_set), "checksums do not cover the cell ledger")
-            broad_deg_prefixes=["tables/strict_broad_DEG_one_vs_rest_all.tsv","tables/broad_DEG_one_vs_rest_all.tsv"] if config.get("multi_route_completion_required") else ["tables/broad_DEG_one_vs_rest_all.tsv"]
-            subtype_deg_prefixes=["tables/strict_subtype_DEG_one_vs_rest_all.tsv","tables/subtype_DEG_one_vs_rest_all.tsv"] if config.get("multi_route_completion_required") else ["tables/subtype_DEG_one_vs_rest_all.tsv"]
+            broad_deg_prefixes=["tables/final_broad_DEG_one_vs_rest_all.tsv","tables/broad_DEG_one_vs_rest_all.tsv"] if config.get("multi_route_completion_required") else ["tables/broad_DEG_one_vs_rest_all.tsv"]
+            subtype_deg_prefixes=["tables/final_subtype_DEG_one_vs_rest_all.tsv","tables/subtype_DEG_one_vs_rest_all.tsv"] if config.get("multi_route_completion_required") else ["tables/subtype_DEG_one_vs_rest_all.tsv"]
             req(any(any(x.startswith(prefix) for prefix in broad_deg_prefixes) for x in checksum_set), "checksums do not cover broad DEG")
-            req(any(any(x.startswith(prefix) for prefix in subtype_deg_prefixes) for x in checksum_set), "checksums do not cover subtype DEG")
+            if subtype_required:
+                req(any(any(x.startswith(prefix) for prefix in subtype_deg_prefixes) for x in checksum_set), "checksums do not cover subtype DEG")
             req(any(x.endswith("_source.tsv") and "marker_dotplots/" in x for x in checksum_set), "checksums do not cover dotplot source tables")
         manifest = root / "provenance/release_manifest.tsv"
         if manifest.exists() and checksums.exists():
@@ -220,17 +243,17 @@ def main() -> int:
                 if target.is_file():
                     req(str(target.stat().st_size) == str(size), f"release manifest size mismatch: {relative}")
                     req(sha256(target).lower() == value.lower(), f"release manifest SHA256 mismatch: {relative}")
-        for stem in ["final_broad_UMAP", "final_subtype_UMAP"]:
+        for stem in ["final_broad_UMAP"] + (["final_subtype_UMAP"] if subtype_required else []):
             req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(), f"missing overview pair: {stem}")
         if config.get("modality") == "spatial":
-            for stem in ["final_broad_spatial", "final_subtype_spatial"]:
+            for stem in ["final_broad_spatial"] + (["final_subtype_spatial"] if subtype_required else []):
                 req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(), f"missing spatial overview pair: {stem}")
             req((root/"tables/spatial_node_asset_index.tsv").exists(), "missing spatial node index")
             req((root/"tables/spatial_gene_asset_index.tsv").exists(), "missing spatial gene index")
     if report.exists():
         report_text=report.read_text(encoding="utf-8")
         if args.profile=="full" and (root/"config/project.json").exists() and json.loads((root/"config/project.json").read_text()).get("multi_route_completion_required"):
-            for section in ["id='views'","id='routes'","id='workflow'"]:req(section in report_text,f"report lacks required multi-route section {section}")
+            for section in ["id='final'","id='routes'","id='workflow'"]:req(section in report_text,f"report lacks required multi-route section {section}")
         parser = Links(); parser.feed(report.read_text(encoding="utf-8"))
         for value in parser.paths:
             req((report.parent / value).resolve().exists(), f"broken report link: {value}")

@@ -4,7 +4,7 @@
 
 Every adapter must expose unique observation IDs, a count matrix, normalized expression or a reproducible normalization route, feature names, clustering candidates, and reductions. Spatial projects must also expose x/y coordinates.
 
-Record whether each object is full-feature, HVG-only or targeted. Run `scripts/audit_feature_scope.R` against the active tissue profile. Reduced features are valid for graph construction but cannot establish final marker absence or pass a context-gated rare-cell decision.
+Record whether each object is full-feature, HVG-only or targeted. Run `scripts/audit_feature_scope.R` against the active tissue profile. Reduced features are valid for graph construction but cannot establish final marker absence, complete open-world lineage discovery or pass a context-specific identity decision.
 
 ## Seurat
 

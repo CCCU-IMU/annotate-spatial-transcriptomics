@@ -24,7 +24,7 @@ Register reused artifacts as `validated_reuse`, preserve their original path/has
 
 ## 3. Whole-tissue broad pass
 
-If reusable clustering is unavailable, run SCTransform with `return.only.var.genes=FALSE`, PCA and a coarse Seurat resolution grid appropriate to the current observation count and signal. Do not hard-code an example grid. Shortlist the lowest resolutions that preserve granulosa/follicular somatic, steroidogenic theca, stromal/mesenchymal, mural/smooth muscle, endothelial, immune, epithelial and strict rare candidates.
+If reusable clustering is unavailable, run SCTransform, PCA and a coarse Seurat grid. For sheep ovary the formal whole-tissue and pool grid is fixed to `0.1,0.2,0.3,0.4,0.6`; selection within it is adaptive. Never lower below 0.1 to compensate for an invalid graph. For other profiles, use their declared grid policy.
 
 Generate one-vs-rest DEG, canonical and data-specific marker summaries, UMAP, whole-section spatial maps and per-cluster highlights for every shortlisted resolution. Select the lowest-complexity candidate that preserves supported broad lineages without state-only fragmentation.
 
@@ -42,7 +42,7 @@ Every pool has immutable membership and explicit competing hypotheses. Its name 
 
 ## 5. R pool controller
 
-Use `scripts/run_seurat_pool_recluster.R` with frozen query/anchor memberships. Fit normalization/PCA jointly when anchors are used, but construct graph, clusters, UMAP, DEG and outcome counts from query observations only. Test a pool-specific resolution grid and select it independently from the whole-tissue resolution.
+Use `scripts/run_seurat_pool_recluster.R` with frozen query/anchor memberships. Fit normalization/PCA jointly when anchors are used, but construct graph, clusters, UMAP, DEG and outcome counts from query observations only. For sheep ovary validate the standard normal grid before every pool submission; adapt only the selected resolution, PCs and k.
 
 Apply the mandatory order:
 
@@ -54,7 +54,7 @@ Apply the mandatory order:
 
 RCTD is low-priority assistance. Atlas moderate-or-higher may rescue broad-only after independent evidence; neither route creates fine anchors.
 
-When a matched single-cell reference exists, use its harmonized broad labels before a generic atlas for the external-reference channel, provided stage, donor composition, raw-count availability and source marker programs pass audit. The matched prediction still has a broad-only default ceiling and cannot bypass strict Oocyte, Theca, mural/smooth-muscle or rare-lineage gates.
+When a matched single-cell reference exists, use its harmonized broad labels before a generic Atlas for the external-reference channel **only after the complete QC-holdout anchor reclustering has produced a frozen residual-QC child snapshot**, provided stage, donor composition, raw-count availability and source marker programs pass audit. Outside that residual-QC route it is marker/anti-marker evidence, not a routine cell-level classifier. The matched prediction still has a broad-only default ceiling and cannot bypass strict Oocyte, Theca, mural/smooth-muscle or rare-lineage gates.
 
 ## 6. Ovary stromal-lineage decomposition
 

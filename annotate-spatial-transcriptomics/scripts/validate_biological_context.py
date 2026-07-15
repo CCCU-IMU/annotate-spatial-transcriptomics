@@ -37,7 +37,7 @@ def main() -> int:
         profile = json.loads(args.profile.read_text(encoding="utf-8")); profile_id = profile.get("profile_id")
         if norm(profile.get("species")) != norm(ctx.get("species")): errors.append("profile species does not match context")
         if norm(profile.get("tissue")) != norm(ctx.get("tissue")): errors.append("profile tissue does not match context")
-        known = set(profile.get("lineages", {})) | set(profile.get("rare_cell_rules", {}))
+        known = set(profile.get("lineages", {})) | set(profile.get("context_specific_identity_rules", profile.get("rare_cell_rules", {})))
         for lineage in ctx.get("priority_lineages", []):
             key = norm(lineage).replace(" ", "_")
             if key not in known and not any(key in k or k in key for k in known):

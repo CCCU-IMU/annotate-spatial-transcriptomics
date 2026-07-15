@@ -36,6 +36,10 @@ def main() -> int:
         ("cluster_ledger", "cluster_ledger_sha256"),
         ("completion_gate", "completion_gate_sha256"),
         ("release_taxonomy_audit", "release_taxonomy_audit_sha256"),
+        ("master_quality_approval", "master_quality_approval_sha256"),
+        ("confirmation_review_report", "confirmation_review_report_sha256"),
+        ("confirmation_review_manifest", "confirmation_review_manifest_sha256"),
+        ("annotation_support_registry", "annotation_support_registry_sha256"),
     ):
         path = root / request[key]
         if not path.is_file() or sha256(path) != request[hash_key]:
@@ -57,6 +61,14 @@ def main() -> int:
         "completion_gate_sha256": request["completion_gate_sha256"],
         "release_taxonomy_audit": request["release_taxonomy_audit"],
         "release_taxonomy_audit_sha256": request["release_taxonomy_audit_sha256"],
+        "master_quality_approval": request["master_quality_approval"],
+        "master_quality_approval_sha256": request["master_quality_approval_sha256"],
+        "confirmation_review_report": request["confirmation_review_report"],
+        "confirmation_review_report_sha256": request["confirmation_review_report_sha256"],
+        "confirmation_review_manifest": request["confirmation_review_manifest"],
+        "confirmation_review_manifest_sha256": request["confirmation_review_manifest_sha256"],
+        "annotation_support_registry": request["annotation_support_registry"],
+        "annotation_support_registry_sha256": request["annotation_support_registry_sha256"],
         "release_scope": "Final assets and HTML may now be generated for exactly this frozen annotation snapshot.",
     }
     out = root / "state/final_annotation_confirmation.json"

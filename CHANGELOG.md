@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.5.1 — 2026-07-15
+
+- 新增逐样本主 Agent 注释质量审批硬门：仅在池重聚类、适用的 Route A–D、救回写回、单一最终注释及 completion gate 全部完成后触发，禁止在仅完成大类注释时提前审批。
+- 审批职责保持轻量：完成门负责机械闭环，主 Agent 只复核大类合理性、marker/anti-marker 与空间形态、文献候选/易混淆谱系安全性，以及是否达到内置脱敏羊卵巢 R-first 参考流程的证据质量；允许通过并保留 concerns。
+- 主审批、轻量确认页、用户确认及最终发布均使用哈希绑定；任一 ledger、路线、池、完成门或参考版本变化都会使下游审批失效。
+- 多样本状态机增加 `READY_FOR_MASTER_QUALITY_GATE` 与 `MASTER_QUALITY_APPROVED`，每个样本均须独立审批后才可冻结并进入 cohort 用户确认。
+- 新增显式 `sheep_ovary_same_batch_rfirst` 策略预设：复用脱敏成功流程的阶段顺序、池轴、证据门、救回顺序和报告合同，但禁止复制参考样本的分辨率、簇标签、membership、比例或亚群目录。
+- 预设采用开放式谱系发现而非封闭标签表：新增机器可读的 14 项候选边界目录，覆盖卵泡/生殖系、甾体生成、基质–间充质–收缩/壁细胞、血管/淋巴、免疫、上皮/间皮及神经胶质/神经内分泌家族；逐样本阴性结论有效，目录外未解释多基因程序必须创建额外候选记录，标准池列表明确非穷尽。
+- 取消新流程中的通用 rare-cell 路线。样本特异候选使用普通生物学池验证；仅 Oocyte 因 ZP/邻近污染保留按需触发的专门安全路线，旧 `strict_rare_cell_review` 记录只作兼容读取。
+
+## 1.5.0 — 2026-07-15
+
+- 发布结果收敛为一套最终注释：大类至少达到 calibrated moderate-or-higher，亚群仅保留 high-confidence 且可作为 fine anchor 的结果；旧 `strict/inclusive/display` 只保留为历史迁移元数据，不再进入 HTML 或发布资产。
+- 报告元数据明确绑定 `primary_broad_label` / `primary_subtype_label`；修复布尔资格列被 Pandas 自动推断后与字符串比较造成最终标签意外置空的问题，并禁止生成 `Broad only: ...` 伪亚群。
+- 新增确认前轻量证据 HTML 硬门：完成门通过后先展示大类/亚群支持理由、高区分度大类空间投影和 canonical broad marker dotplot；确认请求与最终发布均绑定该报告、support registry 和底层快照哈希，完整 DEG/树图/空间资产仍只在确认后生成。
+- 最终 HTML 采用已验证 Scanpy 报告的信息架构：顶部整体空间注释、可展开大类/亚群树与节点跳转、大类及条件性亚群 canonical/data-specific 树状 dotplot、按细胞类型分组的空间基因图和底部中文详细流程。
+- 羊卵巢 whole-tissue、所有生物学池和 QC 池统一执行 `0.1,0.2,0.3,0.4,0.6` 正常候选网格；`0.01/0.02/0.05` 及不完整网格 fail closed，图异常时先修复邻接图而不是继续降分辨率。
+- 将 Atlas 范围收紧为“完整 QC-holdout 锚点重聚类后仍为 QC 的冻结残余 membership”。RCTD medium/low 先进入 QC holdout，不能直接调用 Atlas；Atlas route 必须链接前序 QC-anchor route、outcome hash 与完全一致的 residual-QC membership hash。
+- GSE233801 继续作为无可用配对 count-level 参考时的成年羊体细胞主公共 Atlas，但只服务 residual-QC broad-only 救回；禁止对全对象、已定义 broad/fine 或普通生物学池常规分类。
+- 大类 DEG、canonical/data-specific dotplot、UMAP 与空间统计纳入所有正式写回该大类的直接与 broad-only 救回观测；fine DEG/图只使用高置信真实 fine labels，避免锚点子集偏倚或伪造亚群。
+- 新增生成作业预检、事故登记/零开放事故门、profile-role 检查、固定分辨率检查、单一最终注释构建及 v1.4→v1.5 迁移工具，并加入相应发布回归测试。
+- 明确主 Agent 负责跨样本统筹、状态展示、质量审计与唯一用户确认；每个样本由一个完整流程子 Agent 独立执行，不能降级为 cluster 重命名或只审计。
+
+## 1.4.4 — 2026-07-15
+
+- 加入羊免疫球蛋白 LOC 常数区别名，避免在空间 cellbin 中因 `PTPRC` 稀疏而系统性漏掉抗体分泌/B-lineage 群。
+- 新增受保护的替代浆细胞门：稳定多免疫球蛋白位点程序还必须同时具备 `JCHAIN`、`POU2AF1`、`TENT5C` 或 `MZB1` 等独立 B/浆细胞调控证据；单个 Ig、JCHAIN、CD74 或 MHC 仍不能定类。
+- 该路线默认只支持 broad `Immune`，plasma/antibody-secreting 仅作状态标签；除非独立 fine-label 完成门通过，否则不发布浆细胞亚型。
+- 修复 pool runner 在 source/state composition 汇总时把循环变量误解析为 data.table closure 的错误；已完成聚类可做后处理修复，无需重复 SCT/Leiden。
+
+## 1.4.3 — 2026-07-15
+
+- 将已完成的羊卵巢 Seurat/R-first 卵母细胞路线脱敏为通用的两层候选策略：完整多模块起始候选池负责召回并进入 query-only 重聚类，严格 marker/anti-program 种子和空间焦点只提供身份支持。
+- 修复严格空间焦点可能被误用为唯一重聚类 membership 的过严风险；孤立但通过起始门的皮质/小卵母细胞候选继续保留在完整候选池中。
+- 候选池重聚类后必须以非 ZP 身份/母源胞质程序、体细胞反程序和空间对象形态共同判定；颗粒或基质主导的邻近群回流相应体细胞池并保留 ambient/adjacent 状态标签。
+- `calibrate_rare_cell_candidates.py` 与 `screen_spatial_foci.py` 现在同时输出完整候选重聚类 membership 和严格种子/焦点证据 membership，并明确 cellbin 数量不等同于生物学卵母细胞数量。
+- 新增发布回归测试，验证完整候选池不会被严格种子缩减，并保持 zona-only、位置-only 和未经过体细胞分流的 Oocyte 判定 fail closed。
+- 修复稳定性比较器把 Seurat/pool runner 的 TSV cluster membership 当作 CSV 读取的问题；CSV/TSV/压缩 TSV 现在按显式后缀选择分隔符，已完成的聚类不再因轻量后处理误报失败。
+
+## 1.4.2 — 2026-07-14
+
+- 修复 Seurat 5.5 候选 Leiden 网格在默认 sequential `future` plan 下逐分辨率串行、却申请大量空闲 CPU 的资源错配。
+- 全组织和 pool runner 新增 `--resolution-workers`/`--resolution-future-plan`，在 Linux 上以多个 `future` worker 并行不同 resolution，并将同一 worker 数传给 `uwot` UMAP；manifest 记录请求/实际 worker、backend 和线程数。
+- 新增强制 CPU–parallelism 合同：单线程 Leiden/直接 `FindAllMarkers` 不得占用多核；可拆为独立 resolution/cluster 作业，并用依赖汇总；完成后审计 CPU time / wall time。
+- 明确皮质、皮质下、外周或切片边缘位置不得作为 Oocyte 的负证据或降权项；小/原始卵母细胞可以位于皮质。位置本身仍不能替代多模块 marker、体细胞 anti-program、空间对象和严格重聚类证据。
+
 ## 1.4.1 — 2026-07-14
 
 - 修复 Seurat 转换对象中 `Spatial@data` 与原始 `counts` 完全相同却被用于 Wilcoxon DEG 的证据层缺口。

@@ -2,7 +2,8 @@
   "profile_id": "ovis_aries_ovary_v1",
   "species": "Ovis aries",
   "tissue": "ovary",
-  "profile_role": "biological priors, anti-marker rules, spatial expectations and safety gates; never a label answer",
+  "profile_role": "biological_evidence",
+  "profile_schema_version": "1.5",
   "reference_scope": {
     "GSE233801": "adult estrus sheep somatic anchors; does not sufficiently define Oocyte, Theca or Epithelial and preserves unknown clusters",
     "iScience_2025_sheep_ovarian_development": "developmental sheep reference with Oocyte, Theca and Epithelial programs; stage and sampling dependent",
@@ -88,9 +89,11 @@
       "backbone": ["PTPRC", "CD53", "LYZ", "TYROBP", "FCER1G"],
       "macrophage": ["C1QA", "C1QB", "C1QC", "CD68", "AIF1", "CTSD", "CTSB", "LGMN", "GPNMB", "STAB1", "MRC1", "APOE"],
       "t_nk": ["CD3D", "CD3E", "CD3G", "TRAC", "IL7R", "CCL5", "NKG7", "GNLY"],
-      "b_plasma": ["CD79A", "MS4A1", "CD74", "CD37", "JCHAIN", "MZB1"],
+      "b_plasma": ["CD79A", "MS4A1", "CD74", "CD37", "JCHAIN", "MZB1", "POU2AF1", "TENT5C"],
+      "sheep_immunoglobulin_aliases": ["LOC101108817", "LOC101108781", "LOC121817142", "LOC114108841"],
+      "antibody_secreting_alternative_gate": "for sparse sheep cellbins, require a coherent cluster with at least two sheep immunoglobulin loci or one immunoglobulin locus plus JCHAIN, together with POU2AF1, TENT5C, MZB1 or another independent B/plasma regulator; low or absent PTPRC does not veto this route",
       "neutrophil": ["S100A8", "S100A9", "LCN2", "FCGR3B", "CSF3R", "PGLYRP1"],
-      "safety": "JCHAIN, CD74 or MHC alone cannot define an immune lineage"
+      "safety": "a single JCHAIN, a single immunoglobulin locus, CD74 or MHC alone cannot define an immune lineage; immunoglobulin-heavy clusters still require an independent B/plasma regulator or a stable multi-locus antibody-secreting program"
     },
     "luteal_steroidogenic": {
       "program": ["STAR", "CYP11A1", "HSD3B1", "FDX1", "NR5A1", "NR5A2", "LHCGR"],
@@ -119,10 +122,10 @@
   "contamination_rules": {
     "oocyte_to_granulosa": "zona transcripts may extend into adjacent granulosa/cellbins; require a non-ZP oocyte core and object-level morphology before Oocyte",
     "stromal_ecm": "abundant collagen/MGP/SPARC RNA can enter neighboring bins; ECM alone cannot replace a coherent resident lineage",
-    "secreted_or_mhc": "secreted ligands, JCHAIN, CD74 or MHC alone cannot define the producing lineage",
+    "secreted_or_mhc": "secreted ligands, one JCHAIN, one immunoglobulin locus, CD74 or MHC alone cannot define the producing lineage; a stable multi-locus sheep immunoglobulin program plus an independent B/plasma regulator is an allowed alternative immune backbone",
     "decision": "when resident and contaminating programs coexist, retain or return the observation to an interface pool and test it with relevant anchors"
   },
-  "rare_cell_rules": {
+  "context_specific_identity_rules": {
     "oocyte": {
       "label_patterns": ["oocyte", "germ cell", "germ_cell"],
       "identity_markers": ["DAZL", "DDX4", "FIGLA", "NOBOX"],
@@ -138,9 +141,15 @@
       "prevalence_alert_fraction": 0.01,
       "require_spatial_foci": true,
       "require_follicular_morphology": true,
+      "spatial_focus_hard_filter_for_candidate_pool": false,
+      "candidate_pool_policy": "all observations passing the multi-module starting gate enter the query-only candidate recluster; do not restrict membership to strict seeds or DBSCAN-supported foci",
+      "strict_seed_role": "high-specificity identity/anti-program and spatial-focus evidence used to identify an enriched recluster cluster; never the final census or the only recluster membership",
+      "isolated_candidate_policy": "retain isolated starting-gate observations in the full candidate recluster pool; lack of a spatial neighbour is not negative evidence",
+      "final_return_policy": "after adaptive full-pool reclustering, return only clusters with coherent non-ZP identity and maternal/ooplasm enrichment, somatic anti-program separation and compatible object morphology; reroute somatic clusters with ambient/adjacent-oocyte state tags",
+      "spatial_location_rule": "cortical, subcortical, peripheral or section-edge location is never negative evidence for Oocyte; small or primordial oocytes may occur in the ovarian cortex. Location alone is not positive evidence and cannot relax the multi-module, anti-program, spatial-object or reclustering gates",
       "forbid_single_marker_definition": true,
       "forbid_cellbin_as_oocyte_count": true,
-      "required_actions": ["cell_level_marker_screen", "negative_program_screen", "spatial_focus_review", "putative_object_grouping", "strict_candidate_recluster"]
+      "required_actions": ["cell_level_marker_screen", "negative_program_screen", "full_starting_pool_query_only_recluster", "strict_seed_and_spatial_focus_support", "cluster_level_program_antiprogram_adjudication", "somatic_reroute_with_ambient_tag", "putative_object_grouping"]
     }
   },
   "pool_policy": {
@@ -170,7 +179,7 @@
     "principle": "publish the least specific biologically honest label supported by the current full-feature query; this vocabulary is an allowlist with evidence gates, not a quota",
     "default_biological_broad_classes": ["Granulosa", "Stromal/mesenchymal", "Vascular/endothelial", "Immune", "Epithelial/mesothelial", "Oocyte"],
     "context_gated_default": {
-      "Oocyte": "strict multi-module positive, anti-program, spatial-object and candidate-reclustering gate"
+      "Oocyte": "full multi-module candidate-pool query-only reclustering followed by strict non-ZP/maternal positive, somatic anti-program and spatial-object adjudication; strict seeds are support, not the census"
     },
     "evidence_dependent_standalone_classes": {
       "Theca": "coherent steroidogenic/androgenic theca program plus follicular outer-ring morphology",
@@ -193,6 +202,9 @@
   },
   "resolution_policy": {
     "principle": "choose the lowest resolution preserving stable functional compartments",
+    "formal_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
+    "minimum_formal_resolution": 0.1,
+    "below_floor_policy": "reject before execution; below-floor artifacts cannot enter ranking, stability, biological interpretation or writeback",
     "required_evidence": ["adjacent-resolution ARI or migration", "marker module completeness", "anti-marker rate", "spatial morphology", "cluster size and complexity", "new lineage versus state split"],
     "subtype_policy": "default to a shallow tree; graph clusters do not equal subtypes; merge splits driven by ECM amount, contractility without lineage backbone, stress, cell cycle, LOC/ribosomal/mitochondrial load, low RNA, ambient signal or anatomy alone",
     "adult_sheep_candidate_functional_vocabulary_not_required_output": {
@@ -213,7 +225,7 @@
     "fine_defined": "broad locked first; subtype program, morphology and resolution stability require at least two supporting channels without strong contradiction",
     "broad_only": "broad supported but subtype evidence insufficient; fine_anchor_eligible=false",
     "interface_review": "real mixed programs cannot be reliably separated after targeted review; retain rather than force",
-    "rare_defined": "multi-module program plus specific spatial object/morphology; single marker or tiny cluster enters rare review"
+    "context_specific_defined": "multi-module program plus lineage-appropriate spatial object/morphology; rarity alone is never a class or a mandatory route"
   },
   "final_validation": {
     "minimum_features_for_full_validation": 10000,
@@ -228,13 +240,19 @@
     "canonical_parent_pools": ["follicular_somatic_review", "stromal_mesenchymal_mural_review", "vascular_endothelial_mural_review", "immune_review", "epithelial_mesothelial_review", "anatomical_interface_review", "strict_oocyte_candidate", "postcluster_qc_holdout"],
     "interface_rctd_applicability_required": true,
     "rctd_evidence_priority": "low_priority_assistance",
-    "rctd_tier_policy": "extreme_plus_independent_evidence_may_support_fine; high_supports_broad_only; medium_low_requires_atlas_internal_anchor_fallback",
-    "large_interface_requires_atlas_fallback": true,
+    "rctd_tier_policy": "extreme_plus_independent_evidence_may_support_fine; high_supports_broad_only; medium_low_enters_qc_holdout_then_only_post_anchor_residual_may_use_atlas",
+    "large_interface_requires_qc_holdout": true,
     "local_interface_max_fraction": 0.02,
     "large_direct_definition_requires_anchor_purity_review": true,
     "qc_anchor_recluster_before_atlas": true,
+    "atlas_rescue_scope": "residual_post_qc_anchor_holdout_only",
+    "atlas_for_defined_broad_or_fine_forbidden": true,
     "observed_density_spatial_prior_required": true,
-    "strict_inclusive_display_required": true,
+    "final_annotation_required": true,
+    "broad_minimum_confidence": "moderate",
+    "fine_minimum_confidence": "high",
+    "incident_registry_required": true,
+    "phase_audit_required": ["whole_tissue_broad", "open_world_lineage_discovery", "route_a_biological_pool", "route_b_interface", "route_c_qc_anchor_then_residual_atlas", "route_d_oocyte_specific_if_candidate", "final_single_annotation"],
     "broad_rescue_fine_anchor_eligible": false,
     "vascular_safety": "a vascular-neighborhood or CCL21-rich stromal population cannot close as endothelial without an endothelial backbone and balanced endothelial/mural/stromal anchor review",
     "follicular_wall_safety": "follicular stromal/theca-associated cannot close as one fine label when steroidogenic theca, collagen/contractile wall and granulosa-interface programs remain jointly plausible"

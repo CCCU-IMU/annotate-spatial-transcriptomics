@@ -46,6 +46,7 @@ batch-level exception is approved:
 | neighbours | graph | `k=30`, Annoy, `n.trees=50`, cosine |
 | clustering | algorithm | Leiden (`algorithm=4`) |
 | broad grid | candidate resolutions | `0.1,0.2,0.3,0.4,0.6` |
+| Leiden execution | parallel unit | one single-threaded Leiden optimization per resolution; run candidate resolutions concurrently with `future` workers |
 | UMAP | geometry | `n.neighbors=30`, `min.dist=0.3`, cosine |
 
 The reference implementation is `scripts/run_seurat_sct_preprocess.R`. It
@@ -57,6 +58,8 @@ The runner enforces these values. Any numerical override requires both
 `--allow-batch-exception` and a substantive `--batch-exception-reason`; the
 manifest records the exception. Missing SHA256 support is fatal rather than
 silently emitting an unverifiable manifest.
+
+Computational parallelism is provenance, not a biological parameter. On Linux compute nodes, set `--resolution-workers` to at most the number of candidate resolutions and request the same number of scheduler CPUs; `--resolution-future-plan auto` selects `multicore` when supported. One Leiden optimization remains single-threaded, but the five candidate resolutions run concurrently. The same worker count is exposed to `uwot` UMAP. Do not request 64 CPUs for a five-resolution grid or for a sequential `FindAllMarkers` call. When whole-grid evidence is produced by a wrapper, prefer one one-CPU job per resolution plus a dependency-gated aggregation job unless the wrapper contains verified cluster-level parallelism.
 
 ## Separate full-feature validation object
 
@@ -123,7 +126,7 @@ Use these defaults:
 - Annoy cosine neighbours with 50 trees and Leiden algorithm 4;
 - UMAP cosine with `min.dist=0.3`; `0.2` may be used for strict small oocyte
   candidates;
-- choose a pool-specific resolution grid from the current pool evidence.
+- for sheep ovary, run the complete formal grid `0.1,0.2,0.3,0.4,0.6` in every pool and choose the final value from current-pool evidence. Pass `--resolution-contract sheep_ovary`; adapt PCs and k, not the formal resolution candidates. A value below 0.1 is a graph-repair trigger, not an analysis candidate.
 
 The portable `scripts/run_seurat_pool_recluster.R` exposes these controls. Its
 default SCT route fails closed if `glmGamPoi` is unavailable; silently changing

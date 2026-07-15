@@ -12,6 +12,12 @@ import pandas as pd
 from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 
 
+def detect_cluster_separator(path: str | Path) -> str:
+    """Use the explicit table suffix; pool runners emit TSV, adapters may emit CSV."""
+    name = str(path).lower()
+    return "\t" if name.endswith((".tsv", ".tsv.gz", ".txt", ".txt.gz")) else ","
+
+
 def safe_scores(left: np.ndarray, right: np.ndarray) -> tuple[float, float]:
     if len(left) < 2:
         return float("nan"), float("nan")
@@ -43,7 +49,8 @@ def main() -> int:
     labels: dict[str, pd.Series] = {}
     common_ids: pd.Index | None = None
     for row in grid.itertuples(index=False):
-        data = pd.read_csv(row.csv_path, usecols=["cell_id", "cluster"],
+        data = pd.read_csv(row.csv_path, sep=detect_cluster_separator(row.csv_path),
+                           usecols=["cell_id", "cluster"],
                            dtype={"cell_id": str, "cluster": str})
         if data.cell_id.duplicated().any():
             raise RuntimeError(f"duplicate IDs in {row.run_id}")

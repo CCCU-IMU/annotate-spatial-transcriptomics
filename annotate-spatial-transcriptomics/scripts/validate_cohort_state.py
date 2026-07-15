@@ -39,6 +39,22 @@ def main() -> int:
         errors.append("worker registry does not contain exactly one row per sample")
     if sorted(row.get("sample_id", "") for row in gates) != sorted(sample_ids):
         errors.append("sample gate registry does not contain exactly one row per sample")
+    frozen_or_later = {"MASTER_QUALITY_APPROVED", "SAMPLE_FROZEN", "CROSS_SAMPLE_AUDIT", "COHORT_CONFIRMATION_PENDING", "RELEASE_RUNNING", "RELEASED"}
+    for row in gates:
+        if row.get("status") not in frozen_or_later:
+            continue
+        if row.get("master_decision") != "APPROVED":
+            errors.append(f"sample {row.get('sample_id')} reached the frozen stage without main-Agent quality approval")
+        for prefix in ["completion_gate", "master_quality_approval", "confirmation_review"]:
+            value = row.get(f"{prefix}_path", "")
+            path = Path(value)
+            if value and not path.is_absolute():
+                path = root / path
+            if not value or not path.is_file():
+                errors.append(f"sample {row.get('sample_id')} lacks {prefix} at the frozen stage")
+                continue
+            if hashlib.sha256(path.read_bytes()).hexdigest() != row.get(f"{prefix}_sha256"):
+                errors.append(f"sample {row.get('sample_id')} has a stale {prefix} hash")
     active_workers = [row.get("worker_id", "") for row in workers if row.get("status") in ACTIVE]
     if "" in active_workers or len(active_workers) != len(set(active_workers)):
         errors.append("active worker IDs are empty or assigned to multiple samples")

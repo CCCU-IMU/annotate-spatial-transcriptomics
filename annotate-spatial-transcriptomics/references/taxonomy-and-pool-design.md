@@ -16,7 +16,7 @@ Targeted high-level sheep studies answer narrower questions. A 2026 *FASEB Journ
 
 Cross-species studies may clarify boundaries but do not override the query. Human theca/stroma work (PMID 36599970) supports a progenitor-to-structural/perifollicular/androgenic continuum. Human morphologically guided spatial work (PMID 38578993) emphasizes oocyte, theca and granulosa programs and cortex/medulla variation while reporting only four major scRNA-seq types. These differences demonstrate why missing literature labels must be audited, not manufactured.
 
-The cross-study adult sheep candidate backbone is therefore `Granulosa`, `Stromal/mesenchymal`, `Vascular/endothelial`, `Immune`, `Epithelial/mesothelial` and strict `Oocyte`, with mandatory audits for steroidogenic `Theca`, mature `Smooth muscle` and `Pericyte/mural`. This is still an audit backbone, not a requirement that every label appear.
+The cross-study adult sheep candidate backbone is therefore `Granulosa`, `Stromal/mesenchymal`, `Vascular/endothelial`, `Immune`, `Epithelial/mesothelial` and strict `Oocyte`. `profiles/sheep_ovary_candidate_lineage_catalog.json` expands the mandatory boundary audit to evidence-, stage- and anatomy-dependent alternatives including steroidogenic Theca/luteal, mature Smooth muscle, Pericyte/mural, Mesenchymal progenitor-like, lymphatic endothelial and neural/glial/neuroendocrine programs. It is non-exhaustive and is still an audit surface, not a requirement that every label appear.
 
 ## 2. Analysis parent pools
 

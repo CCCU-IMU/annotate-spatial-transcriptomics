@@ -12,13 +12,15 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from multiroute_lib import ROUTE_CLASSES, valid_attempt
+from multiroute_lib import ROUTE_CLASSES, valid_attempt, validate_qc_atlas_prerequisite
+from validate_profile_role import load_profile
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("project_root", type=Path)
     parser.add_argument("--record", required=True, type=Path, help="JSON object containing route_attempt_registry fields")
+    parser.add_argument("--biological-profile", type=Path)
     args = parser.parse_args()
     registry = args.project_root / "state/route_attempt_registry.tsv"
     record = json.loads(args.record.read_text())
@@ -31,7 +33,10 @@ def main() -> int:
     record.setdefault("created_at", now)
     if record.get("status") in {"validated", "not_applicable_reviewed"}:
         record.setdefault("closed_at", now)
-        ok, errors = valid_attempt(args.project_root, {k: str(v) for k, v in record.items()})
+        if not args.biological_profile:
+            raise SystemExit("--biological-profile is required for every terminal route attempt")
+        profile = load_profile(args.biological_profile, "biological_evidence")
+        ok, errors = valid_attempt(args.project_root, {k: str(v) for k, v in record.items()}, profile)
         if not ok:
             raise SystemExit("terminal route attempt is invalid: " + "; ".join(errors))
     lock_path = registry.with_suffix(registry.suffix + ".lock")
@@ -48,6 +53,15 @@ def main() -> int:
         if old and old[0].get("status") in {"validated", "not_applicable_reviewed"}:
             raise SystemExit("terminal route_attempt_id is immutable; create a superseding ID")
         rows = [x for x in rows if x.get("route_attempt_id") != record["route_attempt_id"]]
+        if record.get("status") in {"validated", "not_applicable_reviewed"} and record.get("route_class") == "qc_atlas_review" and record.get("applicability") == "applicable":
+            ok, errors = validate_qc_atlas_prerequisite(
+                args.project_root,
+                {k: str(v) for k, v in record.items()},
+                rows,
+                profile,
+            )
+            if not ok:
+                raise SystemExit("QC Atlas route scope is invalid: " + "; ".join(errors))
         rows.append({field: record.get(field, "") for field in fields})
         fd, tmp_name = tempfile.mkstemp(prefix=registry.name + ".", suffix=".tmp", dir=registry.parent)
         try:

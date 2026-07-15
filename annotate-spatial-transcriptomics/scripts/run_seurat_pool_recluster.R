@@ -18,6 +18,30 @@ pca_npcs <- as.integer(ifelse(is.null(a$`pca-npcs`),max(dims_n,30),a$`pca-npcs`)
 sct_ncells_cap <- as.integer(ifelse(is.null(a$`sct-ncells`),50000,a$`sct-ncells`))
 umap_min_dist <- as.numeric(ifelse(is.null(a$`umap-min-dist`),0.3,a$`umap-min-dist`))
 resolutions <- as.numeric(strsplit(a$resolutions, ",", fixed=TRUE)[[1]])
+if(!length(resolutions)||any(!is.finite(resolutions))||anyDuplicated(resolutions))stop("--resolutions must be a nonempty unique numeric grid")
+minimum_resolution <- as.numeric(ifelse(is.null(a$`minimum-resolution`),0.1,a$`minimum-resolution`))
+if(!is.finite(minimum_resolution)||minimum_resolution<0)stop("--minimum-resolution must be finite and nonnegative")
+if(any(resolutions < minimum_resolution))stop("resolution below formal minimum ",minimum_resolution," is forbidden; repair the graph instead of lowering resolution")
+resolution_contract <- tolower(ifelse(is.null(a$`resolution-contract`),"generic",a$`resolution-contract`))
+if(!resolution_contract%in%c("generic","sheep_ovary"))stop("--resolution-contract must be generic or sheep_ovary")
+if(resolution_contract=="sheep_ovary"&&!identical(resolutions,c(0.1,0.2,0.3,0.4,0.6)))stop("sheep_ovary pool grid must equal 0.1,0.2,0.3,0.4,0.6")
+detect_scheduler_cpus <- function(){for(name in c("LSB_DJOB_NUMPROC","SLURM_CPUS_PER_TASK","NSLOTS","AIP_CPUS")){value<-suppressWarnings(as.integer(Sys.getenv(name,unset="")));if(length(value)&&is.finite(value)&&value>0L)return(list(cpus=value,source=name))};list(cpus=NA_integer_,source="not_detected")}
+scheduler_cpu<-detect_scheduler_cpus();resolution_workers_default<-if(is.finite(scheduler_cpu$cpus))min(length(resolutions),scheduler_cpu$cpus)else 1L
+resolution_workers_requested <- as.integer(ifelse(is.null(a$`resolution-workers`),resolution_workers_default,a$`resolution-workers`))
+resolution_future_plan_requested <- tolower(ifelse(is.null(a$`resolution-future-plan`),"auto",a$`resolution-future-plan`))
+if(!is.finite(resolution_workers_requested)||resolution_workers_requested<1L)stop("--resolution-workers must be >= 1")
+if(is.finite(scheduler_cpu$cpus)&&resolution_workers_requested>scheduler_cpu$cpus)stop("--resolution-workers exceeds scheduler allocation from ",scheduler_cpu$source)
+if(!resolution_future_plan_requested%in%c("auto","multicore","multisession","sequential"))stop("--resolution-future-plan must be auto, multicore, multisession or sequential")
+activate_resolution_parallelism <- function(requested_workers,n_tasks,requested_plan){
+  workers<-max(1L,min(as.integer(requested_workers),as.integer(n_tasks)));plan_used<-"sequential"
+  if(workers>1L&&requested_plan!="sequential"){
+    if(!requireNamespace("future",quietly=TRUE))stop("future is required when --resolution-workers is greater than one")
+    plan_used<-requested_plan;if(plan_used=="auto")plan_used<-if(future::supportsMulticore())"multicore"else"multisession"
+    if(plan_used=="multicore"&&!future::supportsMulticore())stop("multicore future plan was requested but is unsupported on this runtime")
+    if(plan_used=="multicore")future::plan(future::multicore,workers=workers)else future::plan(future::multisession,workers=workers)
+  }else{workers<-1L;if(requireNamespace("future",quietly=TRUE))future::plan(future::sequential)}
+  list(workers=workers,plan=plan_used)
+}
 method <- ifelse(is.null(a$normalization),"SCT",toupper(a$normalization))
 role_col <- ifelse(is.null(a$`role-col`),"query_or_anchor",a$`role-col`); anchor_col <- ifelse(is.null(a$`anchor-label-col`),"anchor_label",a$`anchor-label-col`)
 query_value <- ifelse(is.null(a$`query-value`),"query",a$`query-value`); anchor_value <- ifelse(is.null(a$`anchor-value`),"anchor",a$`anchor-value`)
@@ -67,7 +91,13 @@ if(anchor_mode){
   colnames(dmat)<-rownames(centroids);ord<-t(apply(dmat,1,order));top1<-colnames(dmat)[ord[,1]];top1d<-dmat[cbind(seq_len(nrow(dmat)),ord[,1])];top2d<-if(ncol(dmat)>1)dmat[cbind(seq_len(nrow(dmat)),ord[,2])]else rep(NA_real_,nrow(dmat))
   anchor_evidence<-data.table(cell_id=query_ids,nearest_anchor_label=top1,nearest_anchor_distance=top1d,anchor_distance_margin=top2d-top1d);fwrite(anchor_evidence,file.path(a$out,"tables","query_anchor_distance_evidence.tsv"),sep="\t")
 }else anchor_evidence<-data.table(cell_id=query_ids)
-q <- subset(joint,cells=query_ids); q <- FindNeighbors(q,reduction="pca",dims=seq_len(dims_use_n),k.param=k_param,nn.method="annoy",n.trees=50,annoy.metric="cosine",verbose=FALSE); q <- RunUMAP(q,reduction="pca",dims=seq_len(dims_use_n),n.neighbors=k_param,min.dist=umap_min_dist,metric="cosine",seed.use=seed,verbose=FALSE)
+q <- subset(joint,cells=query_ids)
+q <- FindNeighbors(q,reduction="pca",dims=seq_len(dims_use_n),k.param=k_param,nn.method="annoy",n.trees=50,annoy.metric="cosine",graph.name=c("POOL_nn","POOL_snn"),verbose=FALSE)
+resolution_parallel <- activate_resolution_parallelism(resolution_workers_requested,length(resolutions),resolution_future_plan_requested)
+message("Running ",length(resolutions)," pool Leiden resolutions with ",resolution_parallel$workers," future worker(s) using ",resolution_parallel$plan)
+cluster_results <- FindClusters(object=q[["POOL_snn"]],algorithm=4,resolution=resolutions,random.seed=seed,verbose=FALSE)
+q <- RunUMAP(q,reduction="pca",dims=seq_len(dims_use_n),n.neighbors=k_param,min.dist=umap_min_dist,metric="cosine",seed.use=seed,verbose=FALSE)
+if(requireNamespace("future",quietly=TRUE))future::plan(future::sequential)
 qmem<-mem[match(query_ids,get(cc))];stopifnot(all(qmem[[cc]]==query_ids))
 for(nm in setdiff(names(qmem),cc))q[[nm]]<-qmem[[nm]]
 metadata_names <- colnames(q[[]])
@@ -91,14 +121,16 @@ coords <- if (length(spatial_pair)) {
 um <- Embeddings(q,"umap"); umdt <- data.table(cell_id=rownames(um),UMAP_1=um[,1],UMAP_2=um[,2])
 source_cols<-intersect(c("source_key","state_tags","spatial_tags","qc_tags","candidate_lineages"),names(qmem)); composition_all<-list();qc_all<-list();anchor_all<-list();zz<-1L
 for (res in resolutions) {
-  cn <- paste0("framework_res",tag(res)); q <- FindClusters(q,resolution=res,cluster.name=cn,random.seed=seed,verbose=FALSE)
-  lab <- factor(as.character(q[[cn,drop=TRUE]]),levels=sort(unique(as.character(q[[cn,drop=TRUE]]))))
+  cn <- paste0("framework_res",tag(res)); result_col <- paste0("res.",res)
+  if(!result_col%in%names(cluster_results))stop("missing parallel Leiden result: ",result_col)
+  lab <- factor(as.character(cluster_results[[result_col]]),levels=sort(unique(as.character(cluster_results[[result_col]]))))
+  q[[cn]] <- lab
   dt <- data.table(cell_id=colnames(q),cluster=lab,resolution=res); fwrite(dt,file.path(a$out,"tables",paste0(cn,"_clusters.tsv")),sep="\t")
   Idents(q)<-lab; deg <- if(length(unique(lab))>1)as.data.table(FindAllMarkers(q,assay=assay,slot="data",only.pos=TRUE,test.use="wilcox",min.pct=0.05,logfc.threshold=0.1,return.thresh=1,max.cells.per.ident=2000,random.seed=seed,densify=FALSE,verbose=FALSE))else data.table(p_val=numeric(),avg_log2FC=numeric(),pct.1=numeric(),pct.2=numeric(),p_val_adj=numeric(),cluster=character(),gene=character())
   if(!ncol(deg))deg<-data.table(p_val=numeric(),avg_log2FC=numeric(),pct.1=numeric(),pct.2=numeric(),p_val_adj=numeric(),cluster=character(),gene=character())
   fwrite(deg,file.path(a$out,"tables",paste0(cn,"_DEG_all.tsv")),sep="\t"); lfc_col<-intersect(c("avg_log2FC","avg_logFC"),names(deg))[1];top<-deg[0]
   if(nrow(deg)&&length(lfc_col)&&all(c("p_val_adj","cluster")%in%names(deg))){sig<-deg[p_val_adj<0.05 & get(lfc_col)>0];top<-sig[order(cluster,p_val_adj,-get(lfc_col)),head(.SD,100),by=cluster]};fwrite(top,file.path(a$out,"tables",paste0(cn,"_DEG_top100.tsv")),sep="\t")
-  joined<-merge(dt,qmem,by.x="cell_id",by.y=cc,sort=FALSE);if(length(source_cols))for(sc in source_cols){tmp<-joined[,.(n=.N),by=c("cluster",sc)];tmp[,`:=`(resolution=res,field=sc,value=as.character(get(sc)))];tmp[,fraction:=n/sum(n),by=cluster];composition_all[[zz]]<-tmp[,.(resolution,cluster,field,value,n,fraction)];zz<-zz+1L}
+  joined<-merge(dt,qmem,by.x="cell_id",by.y=cc,sort=FALSE);if(length(source_cols))for(sc in source_cols){by_cols<-c("cluster",as.character(sc));tmp<-joined[,.(n=.N),by=by_cols];tmp[,`:=`(resolution=res,field=sc,value=as.character(get(sc)))];tmp[,fraction:=n/sum(n),by=cluster];composition_all[[zz]]<-tmp[,.(resolution,cluster,field,value,n,fraction)];zz<-zz+1L}
   md<-q[[]];qc_candidates<-intersect(c("nCount_Spatial","nFeature_Spatial","nCount_RNA","nFeature_RNA","percent.mt"),names(md));if(length(qc_candidates)){qq<-data.table(cell_id=rownames(md),md[,qc_candidates,drop=FALSE]);qq<-merge(dt,qq,by="cell_id");qc_all[[length(qc_all)+1L]]<-qq[,lapply(.SD,median,na.rm=TRUE),by=.(resolution,cluster),.SDcols=qc_candidates]}
   if(anchor_mode){ae<-merge(dt,anchor_evidence,by="cell_id");anchor_all[[length(anchor_all)+1L]]<-ae[,.(n=.N,mean_distance=mean(nearest_anchor_distance),mean_margin=mean(anchor_distance_margin,na.rm=TRUE)),by=.(resolution,cluster,nearest_anchor_label)][,fraction:=n/sum(n),by=.(resolution,cluster)]}
   pal<-setNames(hcl.colors(nlevels(lab),"Dynamic"),levels(lab)); u<-merge(umdt,dt,by="cell_id",sort=FALSE)
@@ -111,7 +143,7 @@ if(length(anchor_all))fwrite(rbindlist(anchor_all,fill=TRUE),file.path(a$out,"ta
 fwrite(mem, file.path(a$out,"tables","analyzed_membership.tsv.gz"), sep="\t")
 saveRDS(q,file.path(a$out,"pool_reclustered_query_seurat.rds"),compress=FALSE)
 if(anchor_mode)saveRDS(joint,file.path(a$out,"joint_query_anchor_pca_seurat.rds"),compress=FALSE)
-fwrite(data.table(parameter=c("normalization","full_feature_deg_assay","full_feature_normalization","sct_vst_flavor","sct_method","sct_ncells","sct_conserve_memory","sct_return_only_var_genes","pca_npcs_requested","pca_npcs_used","dims_requested","dims_used","neighbor_k","neighbor_method","neighbor_trees","neighbor_metric","umap_min_dist","umap_metric","nfeatures","resolutions","resolution_selection","seed","future_globals_max_gb","future_plan","anchor_assisted","query_only_graph_umap_deg","spatial_x_col","spatial_y_col","n_query_input","n_query_analyzed","n_anchors_analyzed","n_zero_query_qc","n_zero_anchor_excluded"),value=c(method,assay,"LogNormalize_scale_factor_10000",if(method=="SCT")"v2"else"not_applicable",if(method=="SCT")sct_method else "not_applicable",if(method=="SCT")min(sct_ncells_cap,ncol(joint))else"not_applicable",if(method=="SCT")TRUE else "not_applicable",if(method=="SCT")TRUE else "not_applicable",pca_npcs,pca_npcs_use,dims_n,dims_use_n,k_param,"annoy",50,"cosine",umap_min_dist,"cosine",nfeatures,paste(resolutions,collapse=","),"adaptive_pool_review_required",seed,future_globals_max_gb,"sequential",anchor_mode,TRUE,if(length(spatial_pair))spatial_pair[[1]]else"",if(length(spatial_pair))spatial_pair[[2]]else"",length(query_ids)+length(zero_query),ncol(q),length(anchor_ids),length(zero_query),length(zero_anchor))),file.path(a$out,"run_manifest.tsv"),sep="\t")
+fwrite(data.table(parameter=c("normalization","full_feature_deg_assay","full_feature_normalization","sct_vst_flavor","sct_method","sct_ncells","sct_conserve_memory","sct_return_only_var_genes","pca_npcs_requested","pca_npcs_used","dims_requested","dims_used","neighbor_k","neighbor_method","neighbor_trees","neighbor_metric","umap_min_dist","umap_metric","nfeatures","resolutions","minimum_resolution","resolution_contract","resolution_selection","seed","future_globals_max_gb","future_plan","scheduler_cpus_detected","scheduler_cpu_source","resolution_workers_requested","resolution_workers_used","umap_threads","anchor_assisted","query_only_graph_umap_deg","spatial_x_col","spatial_y_col","n_query_input","n_query_analyzed","n_anchors_analyzed","n_zero_query_qc","n_zero_anchor_excluded"),value=c(method,assay,"LogNormalize_scale_factor_10000",if(method=="SCT")"v2"else"not_applicable",if(method=="SCT")sct_method else "not_applicable",if(method=="SCT")min(sct_ncells_cap,ncol(joint))else"not_applicable",if(method=="SCT")TRUE else"not_applicable",if(method=="SCT")TRUE else "not_applicable",pca_npcs,pca_npcs_use,dims_n,dims_use_n,k_param,"annoy",50,"cosine",umap_min_dist,"cosine",nfeatures,paste(resolutions,collapse=","),minimum_resolution,resolution_contract,"adaptive_pool_review_required",seed,future_globals_max_gb,resolution_parallel$plan,if(is.finite(scheduler_cpu$cpus))scheduler_cpu$cpus else "",scheduler_cpu$source,resolution_workers_requested,resolution_parallel$workers,resolution_parallel$workers,anchor_mode,TRUE,if(length(spatial_pair))spatial_pair[[1]]else"",if(length(spatial_pair))spatial_pair[[2]]else"",length(query_ids)+length(zero_query),ncol(q),length(anchor_ids),length(zero_query),length(zero_anchor))),file.path(a$out,"run_manifest.tsv"),sep="\t")
 capture.output(sessionInfo(), file=file.path(a$out,"sessionInfo.txt"))
 writeLines(c("status\tPASS",paste0("completed_at\t",format(Sys.time(),tz="UTC",usetz=TRUE))),file.path(a$out,"RUN_COMPLETE.tsv"))
 quit(save="no",status=0,runLast=FALSE)

@@ -41,10 +41,10 @@ Rooda et al., *The adult ovary at single cell resolution: an expert review*, Ame
 
 ## Machine-actionable consequences
 
-- Candidate broad checklist: Oocyte, Granulosa, Theca, Stromal/mesenchymal, Smooth muscle, Pericyte/mural, Vascular/endothelial, Immune, Epithelial/mesothelial; Luteal and Neural/Schwann are context-gated.
-- This checklist is not a quota. A documented negative audit is a successful result.
+- Use `sheep_ovary_candidate_lineage_catalog.json` as the machine-actionable audit surface. It covers default, evidence-dependent, stage-dependent and anatomy-dependent boundaries across follicular/germline, stromal/contractile/mural, vascular/lymphatic, immune, epithelial/mesothelial and neural/neuroendocrine families.
+- The catalog is not a quota and is not exhaustive. Every catalog boundary receives a supported/not-supported/not-evaluable result, and any coherent unmodeled program must be added to the current-sample audit. A documented negative audit is a successful result.
 - `ACTA2/TAGLN` without `MYH11/CNN1/ACTG2` and coherent tracks remains contractile stroma/myofibroblast state.
 - `RGS5/PDGFRB/CSPG4/NOTCH3/MCAM` plus vascular adjacency is required for Pericyte/mural.
 - `DLG2`, `RBFOX1`, `TENM3` or another isolated neural gene cannot establish Neural/Schwann or Neuroendocrine. Require a multi-gene resident program, anti-program clearance and track-like morphology; neuroendocrine additionally requires a secretory-neuroendocrine backbone.
 - Zona transcripts in Granulosa do not establish Oocyte. Require multiple non-ZP oocyte identity/maternal-ooplasm modules and object-level morphology.
-- The primary broad DEG and dotplots use the inclusive biological membership, including every calibrated broad rescue. Strict cells are an additional sensitivity cohort, not a replacement.
+- The primary broad DEG and dotplots use the complete accepted final biological membership, including every calibrated moderate-or-higher broad rescue. High-confidence fine labels alone supply subtype evidence.

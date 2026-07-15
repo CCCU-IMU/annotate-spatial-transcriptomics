@@ -17,10 +17,10 @@ Comparable annotation quality requires:
 1. Exact `full_object`, `analysis_set`, initial-QC and post-clustering-holdout accounting.
 2. Per-class cell/bin-level lineage-core, support and anti-program audits on the full-feature object.
 3. Marker, DEG, anchor distance, source/QC composition and spatial morphology review for every large label and every large unresolved pool.
-4. Strict context gates for rare/ambient-prone identities; report spatial objects separately from observation counts.
+4. Open-world discovery plus strict context gates for ambient-prone identities; rarity alone is not a class or route. Report spatial objects separately from observation counts.
 5. Route-A anchor reclustering for large usable uncertainty before supervised assistance.
-6. Tiered low-priority RCTD evidence: extreme plus independent evidence may support fine, high returns broad-only, medium/low continues to calibrated atlas/internal anchors.
-7. Atlas/internal-anchor rescue only after depth-matched calibration; calibrated moderate-or-high atlas calls may return broad-only, while lower calls remain rejects. Accepted cells cannot seed fine discovery. Default held-out target-precision tiers are moderate 0.90 and high 0.95; they are not raw per-cell score cutoffs.
+6. Tiered low-priority RCTD evidence: extreme plus independent evidence may support fine, high returns broad-only, and medium/low enters the frozen QC holdout rather than Atlas.
+7. Atlas/internal-anchor rescue only for the residual cells left in QC after the complete QC-holdout anchor reclustering and depth-matched calibration; calibrated moderate-or-high Atlas calls may return broad-only, while lower calls remain rejects. Already defined broad/fine cells and ordinary biological pools are forbidden Atlas queries. Accepted cells cannot seed fine discovery. Default held-out target-precision tiers are moderate 0.90 and high 0.95; they are not raw per-cell score cutoffs.
 8. A small/local retained interface, or a documented irreducible QC/technical remainder after every applicable route. Large/diffuse retention automatically reopens.
 9. Broad and subtype evidence assets are separate. The subtype tree may be shallow when the data support only broad identities.
 10. A navigable report whose annotation tree, node highlights, DEG, marker dotplots, spatial gene maps, source ancestry and detailed workflow all resolve to audited artifacts.
@@ -38,3 +38,7 @@ Do not impose a universal annotation-rate quota. Instead, treat any large or spa
 ## Forward-test target
 
 A fresh Agent receives raw inputs, biological context and this Skill, but not the intended clustering or final labels. It must autonomously discover inputs, select/adapt resolutions, submit and repair jobs, reopen overbroad labels, route uncertainty, write immutable state and build the complete report with only genuinely blocking user questions. Evaluate evidence completeness and biological safety first; historical label agreement is a blind secondary diagnostic.
+
+## Post-completion main-Agent approval
+
+For every sample, the main conversation Agent performs one biological quality approval only after pool reclustering, all applicable multi-route rescue, final label materialization and the completion gate have finished. The completion gate proves workflow closure; the approval does not repeat it. Review broad-label reasonableness, marker/anti-marker plus spatial support, rare or confounded lineage safety, and whether the result reaches the evidence quality of the validated deidentified sheep-ovary R-first reference. Exact label/count agreement and equally deep subtypes are not required. A result may pass with documented concerns; a material biological error returns the same sample worker to targeted iteration. User confirmation and final assets remain blocked until this approval passes.

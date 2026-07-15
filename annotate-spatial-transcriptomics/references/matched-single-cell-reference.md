@@ -36,13 +36,13 @@ The matched reference is normally the strongest **external** channel, but it doe
 - A combined source label such as `APCs&B` has a broad-only ceiling until APC and B-cell programs separate in the current query.
 - A source label whose displayed markers do not support its name is a review hypothesis, not a transferable identity. For example, neuronal genes without `CHGA/CHGB/SYP/SCG/INSM1` do not establish a neuroendocrine lineage.
 - Preserve absent reference classes as negative audits. Do not lower a query gate to reproduce the reference taxonomy.
-- Do not merge reference cells into the spatial query for final DEG, detection percentages or marker dotplots. Final broad DEG/dotplots use every spatial observation formally assigned to that broad class; strict subtype assets use validated fine-label cells only.
+- Do not merge reference cells into the spatial query for final DEG, detection percentages or marker dotplots. Final broad DEG/dotplots use every spatial observation formally assigned to that broad class; subtype assets use validated high-confidence fine-label cells only.
 
 ## Transfer and calibration
 
 Build depth-matched held-out reference cells only to diagnose reference separability. Final rescue thresholds require disjoint held-out current-query anchors with frozen truth, target membership and an origin manifest. Derive score and margin thresholds per route and candidate broad class from those query-like anchors. Reference self-classification is never an acceptable final calibration target.
 
-For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel after current-query anchors. If the matched artifact is only a dotplot, it remains marker/anti-marker evidence and GSE233801 is the primary public adult-sheep somatic atlas for calibrated rescue. GSE233801 does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
+For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel after current-query anchors **when the residual-QC Atlas/reference-rescue route is actually reached**. It may provide marker/anti-marker evidence elsewhere, but cell-level transfer is not run routinely on defined broad/fine cells or ordinary biological pools. If the matched artifact is only a dotplot, it remains marker/anti-marker evidence and GSE233801 is the primary public adult-sheep somatic Atlas only for the residual post-QC-anchor holdout. GSE233801 does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
 
 The default crosswalk ceiling is `broad_only_after_calibration`. A reference prediction may return a broad label only when:
 
@@ -64,4 +64,4 @@ The report must show:
 - broad labels rescued with matched-reference support;
 - reference candidates rejected or retained as negative audits.
 
-Display the matched single-cell dotplot as a reference panel, not as the spatial result. The final spatial broad DEG and canonical/data-specific marker dotplots must be recomputed from the complete inclusive spatial broad memberships.
+Display the matched single-cell dotplot as a reference panel, not as the spatial result. The final spatial broad DEG and canonical/data-specific marker dotplots must be recomputed from the complete accepted final spatial broad memberships.

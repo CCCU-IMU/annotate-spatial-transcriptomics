@@ -46,6 +46,17 @@ umap_min_dist <- as_num("umap-min-dist", 0.3)
 seed <- as_int("seed", 20260706)
 resolutions <- as.numeric(strsplit(value_or("resolutions", "0.1,0.2,0.3,0.4,0.6"), ",", fixed = TRUE)[[1]])
 future_globals_max_gb <- as_num("future-globals-max-gb", 100)
+detect_scheduler_cpus <- function() {
+  for (name in c("LSB_DJOB_NUMPROC", "SLURM_CPUS_PER_TASK", "NSLOTS", "AIP_CPUS")) {
+    value <- suppressWarnings(as.integer(Sys.getenv(name, unset = "")))
+    if (length(value) && is.finite(value) && value > 0L) return(list(cpus = value, source = name))
+  }
+  list(cpus = NA_integer_, source = "not_detected")
+}
+scheduler_cpu <- detect_scheduler_cpus()
+resolution_workers_default <- if (is.finite(scheduler_cpu$cpus)) min(length(resolutions), scheduler_cpu$cpus) else 1L
+resolution_workers_requested <- as_int("resolution-workers", resolution_workers_default)
+resolution_future_plan_requested <- tolower(as.character(value_or("resolution-future-plan", "auto")))
 
 fixed_profile <- list(
   `min-counts` = 100, `min-features` = 75, nfeatures = 3000,
@@ -79,6 +90,39 @@ if (!requireNamespace("digest", quietly = TRUE)) {
 }
 if (pca_npcs < dims_n) stop("--pca-npcs must be >= --dims")
 if (any(!is.finite(resolutions)) || !length(resolutions)) stop("Invalid --resolutions")
+if (!is.finite(resolution_workers_requested) || resolution_workers_requested < 1L) stop("--resolution-workers must be >= 1")
+if (is.finite(scheduler_cpu$cpus) && resolution_workers_requested > scheduler_cpu$cpus) {
+  stop("--resolution-workers exceeds scheduler allocation from ", scheduler_cpu$source)
+}
+if (!resolution_future_plan_requested %in% c("auto", "multicore", "multisession", "sequential")) {
+  stop("--resolution-future-plan must be auto, multicore, multisession or sequential")
+}
+
+activate_resolution_parallelism <- function(requested_workers, n_tasks, requested_plan) {
+  workers <- max(1L, min(as.integer(requested_workers), as.integer(n_tasks)))
+  plan_used <- "sequential"
+  if (workers > 1L && requested_plan != "sequential") {
+    if (!requireNamespace("future", quietly = TRUE)) {
+      stop("future is required when --resolution-workers is greater than one")
+    }
+    plan_used <- requested_plan
+    if (plan_used == "auto") {
+      plan_used <- if (future::supportsMulticore()) "multicore" else "multisession"
+    }
+    if (plan_used == "multicore" && !future::supportsMulticore()) {
+      stop("multicore future plan was requested but is unsupported on this runtime")
+    }
+    if (plan_used == "multicore") {
+      future::plan(future::multicore, workers = workers)
+    } else {
+      future::plan(future::multisession, workers = workers)
+    }
+  } else {
+    workers <- 1L
+    if (requireNamespace("future", quietly = TRUE)) future::plan(future::sequential)
+  }
+  list(workers = workers, plan = plan_used)
+}
 
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(file.path(out_dir, "tables"), showWarnings = FALSE)
@@ -158,6 +202,15 @@ obj <- FindNeighbors(
   graph.name = c("SCT_nn", "SCT_snn"),
   verbose = TRUE
 )
+resolution_parallel <- activate_resolution_parallelism(
+  requested_workers = resolution_workers_requested,
+  n_tasks = length(resolutions),
+  requested_plan = resolution_future_plan_requested
+)
+message(
+  "Running ", length(resolutions), " Leiden resolutions with ",
+  resolution_parallel$workers, " future worker(s) using ", resolution_parallel$plan
+)
 obj <- FindClusters(
   obj,
   graph.name = "SCT_snn",
@@ -176,6 +229,7 @@ obj <- RunUMAP(
   seed.use = seed,
   verbose = TRUE
 )
+if (requireNamespace("future", quietly = TRUE)) future::plan(future::sequential)
 
 resolution_cols <- paste0("SCT_snn_res.", resolutions)
 if (!all(resolution_cols %in% colnames(obj[[]]))) {
@@ -234,6 +288,7 @@ manifest <- data.table(
     "pca_npcs", "neighbor_dims", "neighbor_k", "neighbor_method", "neighbor_trees",
     "neighbor_metric", "cluster_algorithm", "resolution_grid", "resolution_selection",
     "umap_neighbors", "umap_min_dist", "umap_metric", "seed", "future_plan",
+    "scheduler_cpus_detected", "scheduler_cpu_source", "resolution_workers_requested", "resolution_workers_used", "umap_threads",
     "tiny_cluster_policy", "batch_profile_status", "batch_exception_reason", "spatial_x_col", "spatial_y_col"
   ),
   value = as.character(c(
@@ -243,7 +298,9 @@ manifest <- data.table(
     nrow(scope), ncol(obj), hash_ids(colnames(obj)), "v2", "glmGamPoi",
     nfeatures, sct_ncells, TRUE, TRUE, pca_npcs, dims_n, k_param, "annoy", annoy_trees,
     "cosine", 4, paste(resolutions, collapse = ","), "not_selected_adaptive_review_required",
-    k_param, umap_min_dist, "cosine", seed, "sequential",
+    k_param, umap_min_dist, "cosine", seed, resolution_parallel$plan,
+    if (is.finite(scheduler_cpu$cpus)) scheduler_cpu$cpus else "", scheduler_cpu$source,
+    resolution_workers_requested, resolution_parallel$workers, resolution_parallel$workers,
     "flag_below_100_never_auto_reassign", if (length(different)) "approved_recorded_exception" else "frozen_profile_exact",
     if (length(different)) exception_reason else "", if (length(spatial_pair)) spatial_pair[[1]] else "",
     if (length(spatial_pair)) spatial_pair[[2]] else ""

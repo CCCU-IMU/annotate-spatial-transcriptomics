@@ -70,7 +70,7 @@ def main() -> int:
         "backup": str(backup),
         "required_next_actions": [
             "populate tier fields for active applicable RCTD/reference-assisted routes",
-            "route every medium/low observation to calibrated atlas/internal-anchor fallback",
+            "route every medium/low observation to the frozen QC holdout; Atlas is permitted only for post-QC-anchor residuals under the current Skill",
             "supersede legacy terminal routes rather than editing their biological conclusions in place",
             "rerun next-iteration and completion audits",
         ],

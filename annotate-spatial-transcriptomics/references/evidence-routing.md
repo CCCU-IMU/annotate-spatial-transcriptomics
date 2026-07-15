@@ -26,7 +26,7 @@ Recheck the query/reference boundary for every child pool, even when reusing a p
 
 `scripts/run_rctd_review.R` supplies a versioned local-review adapter. Require explicit query-depth `UMI_min`/`counts_MIN`; its results and weights are evidence artifacts only.
 
-Use a tiered fallback: extreme confidence plus independent current-query evidence may support a subtype; high confidence may support only a broad return; medium/low confidence proceeds to depth-matched atlas/internal-anchor mapping. If atlas also rejects it, retain it explicitly. Never equate an RCTD reject with a terminal anatomical interface without checking size and spatial locality.
+Use tiered RCTD evidence: extreme confidence plus independent current-query evidence may support a subtype; high confidence may support only a broad return; medium/low confidence enters the frozen post-clustering QC holdout. It must participate in the complete QC-pool anchor reclustering and may reach depth-matched Atlas/internal-anchor mapping only if it remains in the residual QC child snapshot. Never equate an RCTD reject with a terminal anatomical interface without checking size and spatial locality.
 
 ### QC holdout plus atlas
 
@@ -48,7 +48,7 @@ For H5AD references, first use `scripts/downsample_anchors_to_query_depth.py` to
 
 Use `interface_review`, `qc_holdout` or `technical_state` when evidence remains insufficient. Annotation rate is not an optimization target.
 
-Before retention, compare the proposed interface/QC fraction with the current analysis-set structure. This is a diagnostic trigger, not a quota: a large or diffuse retained pool must demonstrate that broad anchor reclustering, RCTD tiering and atlas/internal-anchor fallback were all exhausted. Do not preserve a high unresolved fraction simply to maximize specificity.
+Before retention, compare the proposed interface/QC fraction with the current analysis-set structure. This is a diagnostic trigger, not a quota: a large or diffuse retained pool must demonstrate that broad anchor reclustering, RCTD tiering, complete QC-holdout anchor reclustering and residual-QC-only Atlas/internal-anchor review were all exhausted in that order. Do not preserve a high unresolved fraction simply to maximize specificity.
 
 ## Contamination and ambient signal
 

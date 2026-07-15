@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import gzip
+import importlib.util
 import json
 import subprocess
 import sys
@@ -30,7 +32,19 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         self.assertEqual(profile["external_reference_policy"]["calibration_origin"], "query_like_heldout_current_query_anchors")
         self.assertEqual(profile["external_reference_policy"]["accepted_calibrated_tiers"], ["high", "moderate"])
         self.assertEqual(profile["external_reference_policy"]["atlas_rescue_ceiling"], "broad_only")
-        self.assertTrue(profile["release_policy"]["all_broad_rescues_enter_final_inclusive_deg_and_dotplots"])
+        self.assertTrue(profile["release_policy"]["all_accepted_broad_rescues_enter_final_deg_and_dotplots"])
+
+    def test_sheep_immunoglobulin_aliases_enable_guarded_plasma_route(self) -> None:
+        profile = json.loads((SKILL / "references/profiles/sheep_ovary.json").read_text())
+        immune = profile["lineages"]["immune"]
+        self.assertEqual(
+            immune["sheep_immunoglobulin_aliases"],
+            ["LOC101108817", "LOC101108781", "LOC121817142", "LOC114108841"],
+        )
+        for regulator in ["JCHAIN", "POU2AF1", "TENT5C", "MZB1"]:
+            self.assertIn(regulator, immune["b_plasma"])
+        self.assertIn("at least two sheep immunoglobulin loci", immune["antibody_secreting_alternative_gate"])
+        self.assertIn("single immunoglobulin locus", immune["safety"])
 
     def test_resolver_automatically_selects_sheep_ovary_cellbin_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -79,6 +93,25 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         for token in ["v2", "glmGamPoi", "3000", "50000", "pca-npcs", "annoy-trees", "0.1,0.2,0.3,0.4,0.6"]:
             self.assertIn(token, text)
 
+    def test_seurat_resolution_grids_expose_real_parallel_workers(self) -> None:
+        whole = (SCRIPTS / "run_seurat_sct_preprocess.R").read_text()
+        pool = (SCRIPTS / "run_seurat_pool_recluster.R").read_text()
+        for runner in [whole, pool]:
+            self.assertIn("resolution-workers", runner)
+            self.assertIn("resolution-future-plan", runner)
+            self.assertIn("future::multicore", runner)
+            self.assertIn("resolution_workers_used", runner)
+            self.assertIn("umap_threads", runner)
+        self.assertIn('by_cols<-c("cluster",as.character(sc))', pool)
+        self.assertNotIn('by=c("cluster",sc)', pool)
+        self.assertIn('resolution = resolutions', whole)
+        self.assertIn('FindClusters(object=q[["POOL_snn"]],algorithm=4,resolution=resolutions', pool)
+        self.assertIn('resolution_contract=="sheep_ovary"', pool)
+        self.assertIn('resolution below formal minimum', pool)
+        orchestration = (SKILL / "references/job-orchestration.md").read_text()
+        self.assertIn("Mandatory CPU-to-parallelism contract", orchestration)
+        self.assertIn("CPU/wall ratio", orchestration)
+
     def test_reference_self_calibration_and_legacy_writeback_are_blocked(self) -> None:
         bundle = (SCRIPTS / "build_depth_matched_atlas_bundle.py").read_text()
         tiered = (SCRIPTS / "calibrate_tiered_mapping_thresholds.py").read_text()
@@ -105,7 +138,7 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         self.assertIn("not a quota", text)
         case = (SKILL / "references/profiles/sheep_ovary_rfirst_case_reference.md").read_text()
         self.assertIn("reusable strategy trace", case)
-        self.assertIn("inclusive broad membership", case)
+        self.assertIn("final broad membership", case)
         self.assertNotIn("D055", case)
         self.assertNotIn("/" + "share" + "/" + "org" + "/", case)
 
@@ -134,6 +167,8 @@ class SheepOvaryReleaseContract(unittest.TestCase):
     def test_microclusters_are_audited_but_never_removed_from_all_cell_scores(self) -> None:
         compare = (SCRIPTS / "compare_clusterings.py").read_text()
         for token in [
+            "detect_cluster_separator",
+            'endswith((".tsv", ".tsv.gz", ".txt", ".txt.gz"))',
             "ARI_all_observations",
             "AMI_all_observations",
             "ARI_macro_restricted",
@@ -145,6 +180,81 @@ class SheepOvaryReleaseContract(unittest.TestCase):
             self.assertIn(token, compare)
         clustering_policy = (SKILL / "references/clustering-selection.md").read_text()
         self.assertIn("size alone never deletes, relabels or suppresses", clustering_policy)
+
+    def test_cortical_or_edge_location_is_not_negative_oocyte_evidence(self) -> None:
+        profile = json.loads((SKILL / "references/profiles/sheep_ovary.json").read_text())
+        rule = profile["context_specific_identity_rules"]["oocyte"]["spatial_location_rule"].lower()
+        for token in ["cortical", "peripheral", "section-edge", "never negative evidence"]:
+            self.assertIn(token, rule)
+        self.assertIn("location alone is not positive evidence", rule)
+        context = (SKILL / "references/context-and-biology.md").read_text().lower()
+        self.assertIn("small and primordial oocytes may occur in the ovarian cortex", context)
+
+    @unittest.skipUnless(importlib.util.find_spec("pandas"), "pandas runtime unavailable")
+    def test_oocyte_route_reclusters_full_starting_pool_not_only_strict_seeds(self) -> None:
+        profile = json.loads((SKILL / "references/profiles/sheep_ovary.json").read_text())
+        oocyte = profile["context_specific_identity_rules"]["oocyte"]
+        self.assertFalse(oocyte["spatial_focus_hard_filter_for_candidate_pool"])
+        self.assertIn("all observations", oocyte["candidate_pool_policy"])
+        self.assertIn("never the final census", oocyte["strict_seed_role"])
+        route = (SKILL / "references/profiles/sheep_ovary_oocyte_rfirst_route.md").read_text()
+        self.assertIn("complete starting pool", route)
+        self.assertIn("Strict seeds and spatial foci", route)
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            screen = root / "screen.tsv"
+            out = root / "out"
+            fields = [
+                "cell_id",
+                "starting_marker_gate",
+                "spatial_focus_supported",
+                "spatial_focus_id",
+                "total_oocyte_program_hits",
+                "identity_core_hits",
+                "modules_detected",
+                "contradictory_somatic_hits",
+            ]
+            with screen.open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
+                writer.writeheader()
+                for index in range(12):
+                    writer.writerow(
+                        {
+                            "cell_id": f"cell_{index}",
+                            "starting_marker_gate": "TRUE",
+                            "spatial_focus_supported": "TRUE" if index < 10 else "FALSE",
+                            "spatial_focus_id": 1 if index < 5 else (2 if index < 10 else -1),
+                            "total_oocyte_program_hits": 8 if index < 3 else 4,
+                            "identity_core_hits": 5 if index < 3 else 2,
+                            "modules_detected": 3,
+                            "contradictory_somatic_hits": 0 if index < 3 else 2,
+                        }
+                    )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "calibrate_rare_cell_candidates.py"),
+                    "--screen",
+                    str(screen),
+                    "--out",
+                    str(out),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            summary = json.loads((out / "calibrated_rare_focus_summary.json").read_text())
+            self.assertEqual(summary["full_candidate_recluster_pool"], 12)
+            self.assertLess(summary["strict_seeds"], 12)
+            self.assertEqual(
+                summary["canonical_recluster_membership"],
+                "rare_candidate_recluster_pool.tsv.gz",
+            )
+            with gzip.open(out / "rare_candidate_recluster_pool.tsv.gz", "rt") as handle:
+                rows = list(csv.DictReader(handle, delimiter="\t"))
+            self.assertEqual(len(rows), 12)
+            self.assertTrue(all(row["full_candidate_recluster_member"] == "True" for row in rows))
 
 
 class CohortOrchestrationContract(unittest.TestCase):

@@ -1,13 +1,122 @@
 #!/usr/bin/env python3
-"""Calibrate strict rare-cell seeds from the query, then expand spatial objects."""
+"""Calibrate strict rare-cell seeds without shrinking the full candidate pool."""
 from __future__ import annotations
-import argparse,json
+
+import argparse
+import json
 from pathlib import Path
+
 import pandas as pd
-def main():
-    p=argparse.ArgumentParser();p.add_argument("--screen",required=True,type=Path);p.add_argument("--out",required=True,type=Path);p.add_argument("--cell-id-col",default="cell_id");p.add_argument("--positive-quantile",type=float,default=.75);p.add_argument("--contradictory-quantile",type=float,default=.25);p.add_argument("--modules-required",type=int,default=3);a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True);d=pd.read_csv(a.screen,sep="\t",dtype={a.cell_id_col:str});g=d[d.starting_marker_gate.astype(str).str.lower().isin(["true","1"])].copy()
-    need={"spatial_focus_supported","spatial_focus_id","total_oocyte_program_hits","identity_core_hits","modules_detected","contradictory_somatic_hits"};missing=need-set(g.columns)
-    if missing:raise SystemExit(f"screen lacks columns: {sorted(missing)}")
-    if len(g)<10:raise SystemExit("too few starting-gate observations for query-calibrated quantiles")
-    tt=float(g.total_oocyte_program_hits.quantile(a.positive_quantile));ti=float(g.identity_core_hits.quantile(a.positive_quantile));tc=float(g.contradictory_somatic_hits.quantile(a.contradictory_quantile));supported=g.spatial_focus_supported.astype(str).str.lower().isin(["true","1"]);seed=supported & g.total_oocyte_program_hits.ge(tt)&g.identity_core_hits.ge(ti)&g.modules_detected.ge(a.modules_required)&g.contradictory_somatic_hits.le(tc);groups=set(g.loc[seed,"spatial_focus_id"]);pool=g[g.spatial_focus_id.isin(groups)].copy();pool["strict_seed_calibrated"]=pool[a.cell_id_col].isin(set(g.loc[seed,a.cell_id_col]));pool.to_csv(a.out/"calibrated_rare_focus_pool.tsv.gz",sep="\t",index=False,compression="gzip");summary={"status":"CALIBRATED_CANDIDATE_POOL","starting_gate":len(g),"spatial_supported":int(supported.sum()),"positive_quantile":a.positive_quantile,"contradictory_quantile":a.contradictory_quantile,"thresholds":{"total_program_hits":tt,"identity_core_hits":ti,"contradictory_hits":tc,"modules_required":a.modules_required},"strict_seeds":int(seed.sum()),"strict_seed_groups":len(groups),"expanded_focus_pool":len(pool),"warning":"Query-calibrated seeds and expanded spatial objects remain candidates, not final rare-cell labels; observations are not biological-cell counts."};(a.out/"calibrated_rare_focus_summary.json").write_text(json.dumps(summary,indent=2)+"\n");print(json.dumps(summary,indent=2))
-if __name__=="__main__":main()
+
+
+def as_bool(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.lower().isin(["true", "1"])
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--screen", required=True, type=Path)
+    parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--cell-id-col", default="cell_id")
+    parser.add_argument("--positive-quantile", type=float, default=0.75)
+    parser.add_argument("--contradictory-quantile", type=float, default=0.25)
+    parser.add_argument("--modules-required", type=int, default=3)
+    args = parser.parse_args()
+    args.out.mkdir(parents=True, exist_ok=True)
+
+    data = pd.read_csv(args.screen, sep="\t", dtype={args.cell_id_col: str})
+    gate = as_bool(data["starting_marker_gate"])
+    candidates = data.loc[gate].copy()
+    required = {
+        "spatial_focus_supported",
+        "spatial_focus_id",
+        "total_oocyte_program_hits",
+        "identity_core_hits",
+        "modules_detected",
+        "contradictory_somatic_hits",
+    }
+    missing = required - set(candidates.columns)
+    if missing:
+        raise SystemExit(f"screen lacks columns: {sorted(missing)}")
+    if len(candidates) < 10:
+        raise SystemExit("too few starting-gate observations for query-calibrated quantiles")
+
+    total_threshold = float(
+        candidates["total_oocyte_program_hits"].quantile(args.positive_quantile)
+    )
+    identity_threshold = float(
+        candidates["identity_core_hits"].quantile(args.positive_quantile)
+    )
+    contradiction_threshold = float(
+        candidates["contradictory_somatic_hits"].quantile(
+            args.contradictory_quantile
+        )
+    )
+    spatial_supported = as_bool(candidates["spatial_focus_supported"])
+    strict_seed = (
+        spatial_supported
+        & candidates["total_oocyte_program_hits"].ge(total_threshold)
+        & candidates["identity_core_hits"].ge(identity_threshold)
+        & candidates["modules_detected"].ge(args.modules_required)
+        & candidates["contradictory_somatic_hits"].le(
+            contradiction_threshold
+        )
+    )
+    seed_groups = set(candidates.loc[strict_seed, "spatial_focus_id"])
+    seed_group_expanded = candidates["spatial_focus_id"].isin(seed_groups)
+
+    candidates["strict_seed_calibrated"] = strict_seed.to_numpy()
+    candidates["strict_seed_group_expanded"] = seed_group_expanded.to_numpy()
+    candidates["full_candidate_recluster_member"] = True
+    candidates["candidate_pool_role"] = "full_starting_gate_recluster_pool"
+
+    # Canonical R-first membership: the complete starting gate is reclustered.
+    candidates.to_csv(
+        args.out / "rare_candidate_recluster_pool.tsv.gz",
+        sep="\t",
+        index=False,
+        compression="gzip",
+    )
+
+    # Backward-compatible seed-focus artifact.  This is supporting evidence,
+    # not the canonical recluster membership or a final rare-cell call.
+    focus_pool = candidates.loc[seed_group_expanded].copy()
+    focus_pool.to_csv(
+        args.out / "calibrated_rare_focus_pool.tsv.gz",
+        sep="\t",
+        index=False,
+        compression="gzip",
+    )
+
+    summary = {
+        "status": "CALIBRATED_TWO_TIER_CANDIDATE_ROUTE",
+        "starting_gate": len(candidates),
+        "full_candidate_recluster_pool": len(candidates),
+        "spatial_supported": int(spatial_supported.sum()),
+        "positive_quantile": args.positive_quantile,
+        "contradictory_quantile": args.contradictory_quantile,
+        "thresholds": {
+            "total_program_hits": total_threshold,
+            "identity_core_hits": identity_threshold,
+            "contradictory_hits": contradiction_threshold,
+            "modules_required": args.modules_required,
+        },
+        "strict_seeds": int(strict_seed.sum()),
+        "strict_seed_groups": len(seed_groups),
+        "strict_seed_group_expanded": len(focus_pool),
+        "canonical_recluster_membership": "rare_candidate_recluster_pool.tsv.gz",
+        "warning": (
+            "The complete multi-module starting gate is the canonical query-only "
+            "recluster pool. Strict seeds and expanded spatial objects are support, "
+            "not the final census or a membership filter. Observations are not "
+            "biological-cell counts."
+        ),
+    }
+    (args.out / "calibrated_rare_focus_summary.json").write_text(
+        json.dumps(summary, indent=2) + "\n"
+    )
+    print(json.dumps(summary, indent=2))
+
+
+if __name__ == "__main__":
+    main()

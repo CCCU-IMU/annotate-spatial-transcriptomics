@@ -19,6 +19,7 @@ STAGES = {
     "50": "RCTD",
     "51": "ATLAS",
     "60": "RARE",
+    "61": "CONTEXT",
     "70": "WRITEBACK",
     "75": "CONFIRM",
     "80": "FINALDEG",

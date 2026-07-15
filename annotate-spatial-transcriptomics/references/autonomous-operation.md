@@ -15,10 +15,11 @@ Pause only when a missing fact would materially change the biological question o
 3. Validate artifacts before changing the run from `submitted` to `validated_done`.
 4. Run `plan_next_iteration.py` after every biological writeback. Execute the entire queue, including child pools created by the current route.
 5. Re-run state validation and the completion gate after the last **biological-analysis** run registry update. Never trust a PASS artifact older than a biological ledger or registry before confirmation.
-6. Build strict, inclusive and display views. After the biological completion gate passes, freeze the census with `request_final_annotation_confirmation.py` and pause for explicit user approval. Do not generate final DEG, dotplot, spatial or HTML assets before that approval.
-7. Bind the approval to the current ledger/gate hashes with `record_final_annotation_confirmation.py`, then generate final assets and the report. Post-confirmation runs must be release-only stages (`final_*`, `release_*` or `report_*`): they remain subject to run monitoring and release checks, but their run-registry entries do not reopen the frozen biological gate. Any later cell/cluster ledger or completion-gate change, or any post-confirmation non-release analysis run, invalidates the approval and returns to step 6.
-8. Rebuild the release manifest after every report/state/asset change, then run the full release audit.
-9. Stop only when `autopilot_status.py` returns `COMPLETE` and `release_audit.json` is PASS.
+6. Build one final annotation: moderate-or-higher broad labels and high-confidence fine labels. After the biological completion and incident gates pass, generate only the frozen broad spatial and canonical-marker evidence assets. Then freeze `master_quality_review_request.json`. The main conversation Agent—not the sample worker—performs a concise annotation-quality review against the validated R-first reference and records `PASS`, `PASS` with concerns, or `RETURN_FOR_ITERATION`. Completion is already proven by the completion gate; this approval evaluates biological reasonableness and must never be requested after broad annotation alone.
+7. After main-Agent quality approval, build the lightweight confirmation HTML from the support registry and approved evidence, then pause for explicit user approval. Do not generate final DEG, full tree dotplots, per-node/per-gene maps or the release HTML before approval.
+8. Bind the approval to the current cell/cluster/support ledgers, taxonomy/completion/master-quality gates and lightweight-review hashes with `record_final_annotation_confirmation.py`, then generate final assets and the report. Post-confirmation runs must be release-only stages (`final_*`, `release_*` or `report_*`): they remain subject to run monitoring and release checks, but their run-registry entries do not reopen the frozen biological gate. Any later bound-artifact change, or any post-confirmation non-release analysis run, invalidates the approval and returns to step 6.
+9. Rebuild the release manifest after every report/state/asset change, then run the full release audit.
+10. Stop only when `autopilot_status.py` returns `COMPLETE` and `release_audit.json` is PASS.
 
 ## Forbidden early exits
 
@@ -45,4 +46,4 @@ Preserve failed/cancelled jobs, logs, route attempts and invalid decisions. Repa
 
 ## Final handoff
 
-Return the audited report, cell/cluster ledgers, route/branch/run registries, strict/inclusive/display metadata, DEG and figure source tables, environment/session records, manifest, checksums, release audit and the reusable Skill package. Distinguish biological cell counts from spot/cellbin observations in every summary.
+Return the audited report, single final annotation metadata, cell/cluster ledgers, route/branch/run/incident registries, DEG and figure source tables, environment/session records, manifest, checksums and release audit. Distinguish biological cell counts from spot/cellbin observations in every summary.

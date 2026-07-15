@@ -48,6 +48,10 @@ def load_valid_confirmation(root: Path) -> dict:
         ("cell_ledger", "cell_ledger_sha256"),
         ("cluster_ledger", "cluster_ledger_sha256"),
         ("completion_gate", "completion_gate_sha256"),
+        ("master_quality_approval", "master_quality_approval_sha256"),
+        ("confirmation_review_report", "confirmation_review_report_sha256"),
+        ("confirmation_review_manifest", "confirmation_review_manifest_sha256"),
+        ("annotation_support_registry", "annotation_support_registry_sha256"),
     ):
         target = root / str(record.get(key, ""))
         if not target.is_file() or sha256(target) != record.get(hash_key):
@@ -86,22 +90,29 @@ def main() -> int:
     route_attempts = read_tsv(root / "state/route_attempt_registry.tsv")
     branches = read_tsv(root / "state/branch_control_board.tsv")
     workflow_events = read_tsv(root / "state/workflow_event_registry.tsv")
-    annotation_views = read_tsv(root / "state/annotation_view_registry.tsv")
+    annotation_views = [row for row in read_tsv(root / "state/annotation_view_registry.tsv") if row.get("view") == "final"]
     multi_path = root / "provenance/multiroute_audit.json"
     multi_audit = json.loads(multi_path.read_text()) if multi_path.exists() else {"status":"NOT_RUN","gaps":[]}
     context_path = root / "config/biological_context.json"
     context = json.loads(context_path.read_text(encoding="utf-8")) if context_path.exists() else {}
     gate_path = root / "provenance/completion_gate.json"
     gate = json.loads(gate_path.read_text(encoding="utf-8")) if gate_path.exists() else {"status":"NOT_RUN","errors":["completion gate has not run"]}
+    master_quality_path = root / "state/master_quality_approval.json"
+    master_quality = json.loads(master_quality_path.read_text(encoding="utf-8")) if master_quality_path.exists() else {"status":"MISSING"}
     feature_path = root / "provenance/full_feature_validation.json"
     feature_audit = json.loads(feature_path.read_text(encoding="utf-8")) if feature_path.exists() else {"status":"NOT_RUN"}
     scope_path = root / "provenance/analysis_scope_policy.json"
     scope_policy = json.loads(scope_path.read_text(encoding="utf-8")) if scope_path.exists() else {}
-    atlas_policy_path = root / "provenance/atlas_broad_rescue_policy_quality_reopen.json"
+    atlas_policy_path = root / "provenance/atlas_broad_rescue_policy.json"
+    if not atlas_policy_path.exists():
+        atlas_policy_path = root / "provenance/atlas_broad_rescue_policy_quality_reopen.json"  # legacy project compatibility
     atlas_policy = json.loads(atlas_policy_path.read_text(encoding="utf-8")) if atlas_policy_path.exists() else {}
-    strict_census = read_tsv(root / "tables/strict_annotation_census.tsv")
-    inclusive_census = read_tsv(root / "tables/inclusive_annotation_census.tsv")
-    display_census = read_tsv(root / "tables/display_annotation_census.tsv")
+    open_world_validation_path = root / "provenance/open_world_lineage_audit_validation.json"
+    open_world_validation = json.loads(open_world_validation_path.read_text(encoding="utf-8")) if open_world_validation_path.exists() else {"status": "NOT_RUN"}
+    open_world_source = asset_path(str(open_world_validation.get("audit", "")), root) if open_world_validation.get("audit") else None
+    open_world_catalog = asset_path(str(open_world_validation.get("candidate_catalog", "")), root) if open_world_validation.get("candidate_catalog") else None
+    open_world = json.loads(open_world_source.read_text(encoding="utf-8")) if open_world_source and open_world_source.is_file() else {}
+    final_census = read_tsv(root / "tables/final_annotation_census.tsv")
     final_status = "最终版（completion gate 已通过）" if gate.get("status") == "PASS" else "初步版（仍需迭代，禁止作为最终注释）"
     nodes = read_tsv(root / "tables/spatial_node_asset_index.tsv")
     genes = read_tsv(root / "tables/spatial_gene_asset_index.tsv")
@@ -114,18 +125,13 @@ def main() -> int:
     for filename, title in [("final_broad_spatial.png","大类空间图"),("final_subtype_spatial.png","亚群空间图"),("final_broad_UMAP.png","大类 UMAP"),("final_subtype_UMAP.png","亚群 UMAP")]:
         p = root / "figures" / filename
         if p.exists(): overview_cards.append(f"<article class='card'><h3>{title}</h3><img src='../figures/{filename}'></article>")
-    view_overview_sections = []
-    for view in ["strict","inclusive","display"]:
-        cards = []
-        for kind,title in [
-            ("broad_spatial","大类空间图"),("subtype_spatial","亚群空间图"),
-            ("broad_UMAP","大类 UMAP"),("subtype_UMAP","亚群 UMAP"),
-        ]:
-            p=root/"figures"/f"{view}_{kind}.png"
-            if p.exists():cards.append(f"<article class='card'><h3>{view} {title}</h3><img src='../figures/{p.name}'></article>")
-        view_overview_sections.append(
-            f"<details {'open' if view == 'display' else ''}><summary><b>{view}</b> 注释总览</summary>"
-            f"<div class='grid'>{''.join(cards)}</div></details>"
+    open_world_rows = open_world.get("candidate_reviews", []) if isinstance(open_world.get("candidate_reviews", []), list) else []
+    if open_world_validation.get("status") != "NOT_RUN":
+        overview_cards.append(
+            "<article class='card'><h3>开放式谱系发现</h3>"
+            f"<p>验证状态：{html.escape(str(open_world_validation.get('status','')))}；已审查家族：{html.escape('、'.join(map(str,open_world_validation.get('reviewed_families',[]))))}。候选目录不是封闭标签表，也不要求每类存在。</p>"
+            + table(open_world_rows, ["candidate_id", "outcome", "evidence_summary", "action", "limitation"])
+            + "</article>"
         )
     node_cards = []
     for r in nodes:
@@ -169,8 +175,7 @@ def main() -> int:
     summary_rows = [{"state": k, "n_observations": v} for k, v in sorted(state_summary.items(), key=lambda x: -x[1])]
     downloads = []
     download_candidates = [
-        ("Strict broad DEG", root/"tables/strict_broad_DEG_one_vs_rest_all.tsv"), ("Strict subtype DEG", root/"tables/strict_subtype_DEG_one_vs_rest_all.tsv"),
-        ("Display broad DEG", root/"tables/display_broad_DEG_one_vs_rest_all.tsv"), ("Display subtype DEG", root/"tables/display_subtype_DEG_one_vs_rest_all.tsv"),
+        ("Final broad DEG", root/"tables/final_broad_DEG_one_vs_rest_all.tsv"), ("Final subtype DEG", root/"tables/final_subtype_DEG_one_vs_rest_all.tsv"),
         ("Broad DEG", root/"tables/broad_DEG_one_vs_rest_all.tsv"), ("Subtype DEG", root/"tables/subtype_DEG_one_vs_rest_all.tsv"),
         ("Broad DEG top", root/"tables/broad_DEG_top100.tsv"), ("Subtype DEG top", root/"tables/subtype_DEG_top100.tsv"),
         ("Cell ledger", root/"state/cell_ledger.tsv.gz"), ("Cell ledger", root/"tables/cell_ledger.tsv.gz"),
@@ -181,13 +186,23 @@ def main() -> int:
         ("Full-feature validation", feature_path),
         ("Analysis-scope policy", scope_path),
         ("Atlas broad-rescue policy", atlas_policy_path),
+        ("Open-world lineage audit validation", open_world_validation_path),
         ("Final annotation user confirmation", root/"state/final_annotation_confirmation.json"),
+        ("Main-Agent annotation-quality approval", master_quality_path),
+        ("Main-Agent quality review request", root/"provenance/master_quality_review_request.json"),
+        ("Pre-confirmation lightweight review", root/"review/confirmation/index.html"),
+        ("Annotation support registry", root/"state/annotation_support_registry.tsv"),
+        ("Confirmation review manifest", root/"provenance/confirmation_review_manifest.json"),
         ("Completion gate", gate_path), ("Iteration plan", root/"provenance/iteration_plan.json"),
         ("Multi-route audit", multi_path), ("Route attempts", root/"state/route_attempt_registry.tsv"),
         ("Branch control board", root/"state/branch_control_board.tsv"), ("Workflow events", root/"state/workflow_event_registry.tsv"),
         ("Annotation views", root/"state/annotation_view_registry.tsv"),
         ("Checksums", root/"provenance/checksums.sha256"), ("Session info", root/"provenance/release_sessionInfo.txt"),
     ]
+    if open_world_source and open_world_source.is_file():
+        download_candidates.append(("Open-world lineage audit source", open_world_source))
+    if open_world_catalog and open_world_catalog.is_file():
+        download_candidates.append(("Sheep-ovary candidate lineage catalog", open_world_catalog))
     seen_downloads = set()
     for label, p in download_candidates:
         if p.exists() and p not in seen_downloads:
@@ -207,8 +222,8 @@ def main() -> int:
         if tree_overview_path.exists() else
         "<p>注释后空间总图尚未生成；发布审计将失败。</p>"
     )
-    atlas_external = atlas_policy.get("current_external_atlas_result_g067", {})
-    atlas_internal = atlas_policy.get("current_internal_anchor_result_g067", {})
+    atlas_external = atlas_policy.get("external_atlas_result", atlas_policy.get("current_external_atlas_result_g067", {}))
+    atlas_internal = atlas_policy.get("internal_anchor_result", atlas_policy.get("current_internal_anchor_result_g067", {}))
     atlas_rows = []
     if atlas_external:
         atlas_rows.append({
@@ -226,19 +241,20 @@ def main() -> int:
             "moderate_or_higher_n": atlas_internal.get("moderate_or_higher_n", ""),
             "low_reject_n": "", "stromal_moderate_or_higher_n": "", "direct_writeback": False,
         })
-    atlas_writeback_rows = [atlas_policy.get("nested_recalibration_writeback_counts", {})] if atlas_policy.get("nested_recalibration_writeback_counts") else []
+    writeback_counts = atlas_policy.get("writeback_counts", atlas_policy.get("nested_recalibration_writeback_counts", {}))
+    atlas_writeback_rows = [writeback_counts] if writeback_counts else []
     body = f"""<!doctype html><html lang='zh'><head><meta charset='utf-8'><title>{html.escape(cfg['sample_id'])} 注释报告</title>
 <style>body{{font-family:Arial,'Noto Sans CJK SC',sans-serif;margin:0;background:#f5f7fa;color:#20242a}}header,main{{max-width:1500px;margin:auto;padding:24px}}header{{background:#17324d;color:white;max-width:none}}nav a{{color:#d8efff;margin-right:18px}}section{{background:white;margin:18px 0;padding:20px;border-radius:10px;scroll-margin-top:12px}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:16px}}.card{{border:1px solid #d9e0e8;padding:12px;border-radius:8px}}img{{width:100%;height:auto}}table{{border-collapse:collapse;width:100%;font-size:12px}}th,td{{border:1px solid #ccd4dd;padding:5px;text-align:left}}pre{{white-space:pre-wrap}}details{{margin:8px 0;padding:6px;border-left:3px solid #d9e0e8}}summary{{cursor:pointer}}.button,button{{display:inline-block;background:#176b87;color:white!important;border:0;border-radius:5px;padding:7px 10px;text-decoration:none;cursor:pointer;margin:3px}}input[type=search]{{padding:8px;min-width:320px;border:1px solid #9ca9b5;border-radius:5px}}</style></head>
-<body><header><h1>{html.escape(cfg['sample_id'])} 可追溯注释报告</h1><p>{html.escape(final_status)} · {html.escape(cfg['modality'])} · observation={html.escape(cfg['observation_unit'])} · framework={html.escape(cfg['framework_version'])}</p><nav><a href='#context'>生物学背景</a><a href='#overview'>全局图</a><a href='#views'>三层注释</a><a href='#selection'>聚类选择</a><a href='#tree'>注释决策</a><a href='#routes'>多路线裁决</a><a href='#iterations'>多轮池状态</a><a href='#uncertainty'>不确定群体</a><a href='#dot-broad'>大类点图</a><a href='#dot-subtype'>亚群点图</a><a href='#rare-audit'>稀有细胞审计</a><a href='#nodes'>空间节点</a><a href='#genes'>空间基因</a><a href='#downloads'>下载与审计</a><a href='#workflow'>全流程详细版</a></nav></header><main>
-<section id='context'><h2>生物学背景与完成门</h2><p><b>报告状态：</b>{html.escape(final_status)}</p><p><b>用户终审：</b>{html.escape(str(confirmation.get('status')))}；确认时间={html.escape(str(confirmation.get('confirmed_at','')))}；decision version={html.escape(str(confirmation.get('decision_version','')))}。</p><p><b>物种/组织：</b>{html.escape(str(context.get('species','未记录')))} / {html.escape(str(context.get('tissue','未记录')))}；<b>阶段：</b>{html.escape(str(context.get('developmental_or_reproductive_stage','未记录')))}；<b>平台/单位：</b>{html.escape(str(context.get('platform','未记录')))} / {html.escape(str(context.get('observation_unit',cfg.get('observation_unit',''))))}</p><p><b>主要问题：</b>{html.escape('；'.join(map(str,context.get('primary_questions',[]))))}</p><p><b>分析范围：</b>full object={html.escape(str(scope_policy.get('full_object_n','未记录')))}；analysis set={html.escape(str(scope_policy.get('analysis_set_n','未记录')))}；excluded initial QC={html.escape(str(scope_policy.get('excluded_initial_qc_n','未记录')))}。初始 QC 排除仍保留在完整账本和空间图，但不进入 DEG、marker、锚点或生物学比例。</p><p><b>全特征验证：</b>{html.escape(str(feature_audit.get('status')))}；features={html.escape(str(feature_audit.get('n_features','NA')))}；profile marker coverage={html.escape(str(feature_audit.get('profile_marker_coverage','NA')))}</p><p><b>completion gate：</b>{html.escape(str(gate.get('status')))}；{html.escape('；'.join(map(str,gate.get('errors',[]))))}</p></section>
+<body><header><h1>{html.escape(cfg['sample_id'])} 可追溯注释报告</h1><p>{html.escape(final_status)} · {html.escape(cfg['modality'])} · observation={html.escape(cfg['observation_unit'])} · framework={html.escape(cfg['framework_version'])}</p><nav><a href='#context'>生物学背景</a><a href='#overview'>注释空间图</a><a href='#final'>最终注释</a><a href='#selection'>聚类选择</a><a href='#tree'>注释树</a><a href='#routes'>多路线裁决</a><a href='#iterations'>多轮池状态</a><a href='#uncertainty'>保留状态</a><a href='#dot-broad'>大类点图</a><a href='#dot-subtype'>亚群点图</a><a href='#rare-audit'>Oocyte/特异候选审计</a><a href='#nodes'>空间节点</a><a href='#genes'>空间基因</a><a href='#downloads'>下载与审计</a><a href='#workflow'>全流程详细版</a></nav></header><main>
+<section id='context'><h2>生物学背景与完成门</h2><p><b>报告状态：</b>{html.escape(final_status)}</p><p><b>主 Agent 注释质量审批：</b>{html.escape(str(master_quality.get('status')))}；{html.escape(str(master_quality.get('rationale','')))}</p><p><b>用户终审：</b>{html.escape(str(confirmation.get('status')))}；确认时间={html.escape(str(confirmation.get('confirmed_at','')))}；decision version={html.escape(str(confirmation.get('decision_version','')))}。</p><p><b>物种/组织：</b>{html.escape(str(context.get('species','未记录')))} / {html.escape(str(context.get('tissue','未记录')))}；<b>阶段：</b>{html.escape(str(context.get('developmental_or_reproductive_stage','未记录')))}；<b>平台/单位：</b>{html.escape(str(context.get('platform','未记录')))} / {html.escape(str(context.get('observation_unit',cfg.get('observation_unit',''))))}</p><p><b>主要问题：</b>{html.escape('；'.join(map(str,context.get('primary_questions',[]))))}</p><p><b>分析范围：</b>full object={html.escape(str(scope_policy.get('full_object_n','未记录')))}；analysis set={html.escape(str(scope_policy.get('analysis_set_n','未记录')))}；excluded initial QC={html.escape(str(scope_policy.get('excluded_initial_qc_n','未记录')))}。初始 QC 排除仍保留在完整账本和空间图，但不进入 DEG、marker、锚点或生物学比例。</p><p><b>全特征验证：</b>{html.escape(str(feature_audit.get('status')))}；features={html.escape(str(feature_audit.get('n_features','NA')))}；profile marker coverage={html.escape(str(feature_audit.get('profile_marker_coverage','NA')))}</p><p><b>completion gate：</b>{html.escape(str(gate.get('status')))}；{html.escape('；'.join(map(str,gate.get('errors',[]))))}</p></section>
 <section id='overview'><h2>{'最终' if gate.get('status') == 'PASS' else '当前'}注释总览</h2><div class='grid'>{''.join(overview_cards) or '<p>当前阶段尚未生成总览图。</p>'}</div></section>
-<section id='views'><h2>Strict / Inclusive / Display 三层注释</h2><p>Inclusive 是最终大类 DEG、canonical/data-specific marker dotplot 的主统计层，纳入全部经审核并正式回归大类的 cellbin；Strict 用于纯锚点、亚型证据和大类敏感性分析；Display 是人工裁决后的主报告层。Broad-only rescue 参与所属大类的最终表达汇总，但不进入亚型发现，也不会被强行赋予 fine label。界面、QC holdout 和初始 QC 排除不进入生物学 DEG。</p>{table(annotation_views,['view','n_observations','policy','marker_deg_eligible','status','artifact'])}{''.join(view_overview_sections)}<h3>Strict 证据层 census</h3>{table(strict_census,['state','broad_label','fine_label','n_observations'])}<h3>Inclusive 主解释层 census</h3>{table(inclusive_census,['state','broad_label','fine_label','n_observations'])}</section>
+<section id='final'><h2>单一最终注释</h2><p>本报告只发布一套标签：大类至少为中等置信度，亚群必须为高置信度。经审核的 broad-only 救回参与所属大类的最终 DEG、dotplot、UMAP 和空间统计，但不能成为亚群锚点或被强行赋予 fine label。界面、QC holdout、技术状态和初始 QC 排除不进入生物学 DEG。</p>{table(annotation_views,['view','n_observations','policy','marker_deg_eligible','status','artifact'])}<h3>最终注释 census</h3>{table(final_census,['state','broad_label','fine_label','assignment_tier','n_observations'])}</section>
 <section id='selection'><h2>聚类选择与候选审计</h2>{table(clustering,['run_id','parameters','n_clusters','quantitative_rank','decision','rationale'])}</section>
 <section id='tree'><h2>可展开注释树与决策</h2>{tree_overview}<p><button onclick="toggleDetails('tree',true)">全部展开</button><button onclick="toggleDetails('tree',false)">全部折叠</button><input id='tree-search' type='search' placeholder='搜索大类或亚群' oninput="filterNodes(this.value,'.tree-node')"></p>{''.join(tree_parts) or '<p>注释树将在最终空间节点资产生成后显示。</p>'}<h3>逐簇/逐池决策账本（含历史与 supersedes）</h3>{table(clusters,['decision_id','source_run_id','source_cluster','n_observations','spatial_object_count','count_interpretation','broad_label','fine_label','state','confidence','validation_feature_scope','iteration','route','supersedes','next_action'])}</section>
-<section id='routes'><h2>多路线待定义细胞裁决</h2><p><b>多路线完成状态：</b>{html.escape(str(multi_audit.get('status','NOT_RUN')))}。大型生物学池必须完成 balanced-anchor query-only 重聚类；局部界面必须先完成无监督复核，再将 RCTD 作为低优先级分层证据；大型聚类后 QC 必须先完成完整 QC 大池锚点重聚类，再处理 atlas rejects。</p><p><b>Atlas broad rescue：</b>held-out target precision 默认 moderate-or-higher={html.escape(str(atlas_policy.get('moderate_target_precision',0.90)))}、high={html.escape(str(atlas_policy.get('high_target_precision',0.95)))}，并使用嵌套阈值；每个 high 都同时达到 moderate-or-higher 门槛。互斥结果应分别报告 high、moderate-only 和 low-reject，同时报告 high + moderate-only 的累计数。中等及以上均可成为 broad-only 回归候选，低于中等保留 reject/review。上述数值是校准精度目标，不是单个 observation 的原始 confidence 阈值；外部 Atlas 必须与本样本 marker/anti-marker、路线及空间或内部锚点证据联合，所有回归均 <code>fine_anchor_eligible=false</code>。</p><h3>嵌套 Atlas / 内部锚点校准结果</h3>{table(atlas_rows,['channel','n_query','high_n','moderate_only_n','moderate_or_higher_n','low_reject_n','stromal_moderate_or_higher_n','direct_writeback'])}<h3>v073 联合裁决实际写回</h3>{table(atlas_writeback_rows,['granulosa_broad_only','theca_broad_only','strict_changes','vascular_candidates_rejected','legacy_stromal_labels_retained'])}<h3>Route attempts</h3>{table(route_attempts,['route_attempt_id','decision_id','pool_snapshot_id','route_class','failure_mode','applicability','n_query','n_anchors','query_only_graph','depth_matched_validation','observed_density_spatial_prior','selected_resolution','status','rctd_extreme_n','rctd_high_n','rctd_medium_low_n','rctd_fine_return_n','rctd_broad_return_n','fallback_route_attempt_id','n_rerouted','n_interface_retained','n_qc_retained','validation_artifact'])}<h3>尚未闭环的路线</h3>{table(multi_audit.get('gaps',[]),['decision_id','n_observations','required_route','reason'])}<h3>Branch control / no-repeat</h3>{table(branches,['branch_id','parent_decision_id','pool_snapshot_id','generation','run_id','selected_resolution','n_query','current_state','recluster_policy','terminal','next_action','authoritative_artifact'])}</section>
+<section id='routes'><h2>多路线待定义细胞裁决</h2><p><b>多路线完成状态：</b>{html.escape(str(multi_audit.get('status','NOT_RUN')))}。确认门必须位于 whole-tissue、开放式谱系发现、Route A 大池锚点重聚类、Route B 界面复核、Route C 完整 QC-holdout 锚点重聚类及其残余 Atlas、适用时的 Oocyte 抗污染验证和最终单一注释之后。不存在通用“稀有细胞路线”；Neural/Schwann、黄体、平滑肌及其他样本特异候选进入普通生物学池验证。</p><p><b>Atlas broad rescue：</b>Atlas 只允许处理完整 QC-holdout 锚点重聚类后仍留在 QC 的残余细胞，不对已定义大类、亚群或普通生物学池常规运行。RCTD 的 medium/low 先汇入冻结 QC holdout，不能直接进入 Atlas。Atlas 的 query membership 必须与前序 QC-anchor 输出的 residual-QC hash 完全一致。held-out target precision 默认 moderate-or-higher={html.escape(str(atlas_policy.get('moderate_target_precision',0.90)))}、high={html.escape(str(atlas_policy.get('high_target_precision',0.95)))}。中等及以上可成为 broad-only 回归候选，低于中等保留 reject/review；所有外部救回均需当前样本 marker/anti-marker 和内部锚点或观测密度空间证据，且 <code>fine_anchor_eligible=false</code>。</p><h3>标准阶段状态</h3>{table([{'phase':k,'status':v} for k,v in multi_audit.get('phase_status',{}).items()],['phase','status'])}<h3>残余 QC 的 Atlas / 内部锚点校准结果</h3>{table(atlas_rows,['channel','n_query','high_n','moderate_only_n','moderate_or_higher_n','low_reject_n','stromal_moderate_or_higher_n','direct_writeback'])}<h3>联合裁决写回</h3>{table(atlas_writeback_rows,['granulosa_broad_only','theca_broad_only','vascular_candidates_rejected','legacy_stromal_labels_retained'])}<h3>Route attempts</h3>{table(route_attempts,['route_attempt_id','decision_id','source_state','pool_snapshot_id','parent_pool_snapshot_id','route_class','failure_mode','applicability','n_query','n_anchors','query_membership_sha256','query_only_graph','candidate_resolutions','selected_resolution','residual_qc_membership_sha256','prerequisite_route_attempt_id','prerequisite_outcome_sha256','prerequisite_residual_qc_sha256','successor_state','status','rctd_extreme_n','rctd_high_n','rctd_medium_low_n','rctd_fine_return_n','rctd_broad_return_n','fallback_route_attempt_id','n_rerouted','n_interface_retained','n_qc_retained','validation_artifact'])}<h3>尚未闭环的路线</h3>{table(multi_audit.get('gaps',[]),['decision_id','n_observations','required_route','reason'])}<h3>Branch control / no-repeat</h3>{table(branches,['branch_id','parent_decision_id','pool_snapshot_id','generation','run_id','selected_resolution','n_query','current_state','recluster_policy','terminal','next_action','authoritative_artifact'])}</section>
 <section id='iterations'><h2>多轮池、作业与下一动作</h2><h3>池注册表</h3>{table(pools,['pool_id','parent_pool_id','n_observations','purpose','status','decision_version'])}<h3>分析运行</h3>{table(runs,['run_id','stage','environment','scheduler_job_name','scheduler_job_id','status','output_root'])}<h3>强制下一动作队列</h3>{table(queue,['priority','source_cluster','n_observations','current_state','required_route','reason','target_pool'])}</section>
-<section id='uncertainty'><h2>状态数量与未解决群体</h2><p>下方 display census 只统计冻结的 analysis set；随后 active-decision 表保留 full-object 历史状态，因此可能包含已划入 excluded-initial-QC 的 observation，二者不可混为生物学未注释率。</p>{table(display_census,['state','broad_label','fine_label','n_observations'])}<h3>Full-object active decision 状态</h3>{table(summary_rows,['state','n_observations'])}<h3>保留审查/排除状态的历史决策</h3>{table(unresolved,['source_cluster','n_observations','state','evidence_status','route','next_action'])}</section>
-{''.join(sections)}<section id='rare-audit'><h2>稀有细胞空间对象审计</h2><p>此处对象数与 cellbin 数均不等同于生物学细胞计数；只有通过 completion gate 的标签才进入最终注释。</p><div class='grid'>{''.join(rare_cards) or '<p>当前项目无稀有细胞对象审计图。</p>'}</div></section><section id='nodes'><h2>逐节点空间高亮</h2><p><button onclick="toggleDetails('nodes',true)">全部展开</button><button onclick="toggleDetails('nodes',false)">全部折叠</button><input type='search' placeholder='搜索节点空间图' oninput="filterNodes(this.value,'.node-card')"></p>{''.join(node_cards) or '<p>单细胞项目或当前阶段无节点空间图。</p>'}</section><section id='genes'><h2>按细胞类型分组的空间 marker</h2>{gene_sections or '<p>当前阶段尚未生成空间基因资产。</p>'}</section><section id='downloads'><h2>结果下载、运行记录与审计</h2><ul>{''.join(downloads) or '<li>当前阶段尚无发布文件。</li>'}</ul></section><section id='workflow'><h2>中文全流程详细版：从原始输入到最终发布</h2><p>下表由 workflow event registry 还原，包含输入、参数、调度作业、失败修复、生物学裁决和原子写回。最底部保留状态文件原文。</p>{table(workflow_events,['timestamp','phase','branch_id','action','input_scope','parameters','scheduler_job_id','status','decision_summary_zh','artifact','supersedes_event_id'])}<h3>状态文件原文折叠备份</h3><details><summary>展开 annotation_state.md</summary><pre>{html.escape(state)}</pre></details></section></main><script>function toggleDetails(id,open){{document.querySelectorAll('#'+id+' details').forEach(x=>x.open=open);}}function filterNodes(value,selector){{const q=value.trim().toLowerCase();document.querySelectorAll(selector).forEach(x=>{{const s=(x.dataset.search||x.textContent).toLowerCase();x.style.display=!q||s.includes(q)?'block':'none';}});}}</script></body></html>"""
+<section id='uncertainty'><h2>保留状态与未解决群体</h2><p>最终 census 只统计冻结 analysis set。没有达到中等大类置信度的 observation 保留为界面、QC、技术或待审查状态，不伪装成细胞类型。</p>{table(final_census,['state','broad_label','fine_label','assignment_tier','n_observations'])}<h3>Full-object active decision 状态</h3>{table(summary_rows,['state','n_observations'])}<h3>保留审查/排除状态的历史决策</h3>{table(unresolved,['source_cluster','n_observations','state','evidence_status','route','next_action'])}</section>
+{''.join(sections)}<section id='rare-audit'><h2>Oocyte 与样本特异候选空间对象审计</h2><p>仅展示实际触发的候选验证；不存在按“稀有”强制生成的细胞类型。对象数与 cellbin 数均不等同于生物学细胞计数。</p><div class='grid'>{''.join(rare_cards) or '<p>当前项目没有需要专门空间对象审计的候选。</p>'}</div></section><section id='nodes'><h2>逐节点空间高亮</h2><p><button onclick="toggleDetails('nodes',true)">全部展开</button><button onclick="toggleDetails('nodes',false)">全部折叠</button><input type='search' placeholder='搜索节点空间图' oninput="filterNodes(this.value,'.node-card')"></p>{''.join(node_cards) or '<p>单细胞项目或当前阶段无节点空间图。</p>'}</section><section id='genes'><h2>按细胞类型分组的空间 marker</h2>{gene_sections or '<p>当前阶段尚未生成空间基因资产。</p>'}</section><section id='downloads'><h2>结果下载、运行记录与审计</h2><ul>{''.join(downloads) or '<li>当前阶段尚无发布文件。</li>'}</ul></section><section id='workflow'><h2>中文全流程详细版：从原始输入到最终发布</h2><p>下表由 workflow event registry 还原，包含输入、参数、调度作业、失败修复、生物学裁决和原子写回。最底部保留状态文件原文。</p>{table(workflow_events,['timestamp','phase','branch_id','action','input_scope','parameters','scheduler_job_id','status','decision_summary_zh','artifact','supersedes_event_id'])}<h3>状态文件原文折叠备份</h3><details><summary>展开 annotation_state.md</summary><pre>{html.escape(state)}</pre></details></section></main><script>function toggleDetails(id,open){{document.querySelectorAll('#'+id+' details').forEach(x=>x.open=open);}}function filterNodes(value,selector){{const q=value.trim().toLowerCase();document.querySelectorAll(selector).forEach(x=>{{const s=(x.dataset.search||x.textContent).toLowerCase();x.style.display=!q||s.includes(q)?'block':'none';}});}}</script></body></html>"""
     out = report_dir / "index.html"; out.write_text(body, encoding="utf-8"); print(out); return 0
 
 

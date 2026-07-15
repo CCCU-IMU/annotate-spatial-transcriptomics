@@ -19,7 +19,7 @@ For every open biological pool:
 1. Combine queries with frozen relevant anchors when needed.
 2. Test several pool-appropriate resolutions; shortlist quantitatively and choose the lowest resolution preserving stable biological compartments.
 3. Generate per-resolution DEG, UMAP, spatial maps and cluster migration/stability evidence.
-4. Decide each subcluster as defined, returned to a named parent pool, interface, QC/technical retention, RCTD/reference-assisted review or strict rare-cell validation.
+4. Decide each subcluster as defined, returned to a named parent pool, interface, QC/technical retention, RCTD/reference-assisted review or triggered context-specific validation. Do not route by rarity alone.
 5. Write membership, route, run ID, iteration and evidence before closing the run.
 6. Roll back splits driven only by ECM, stress, cell cycle, ribosomal/mitochondrial load or graph fragmentation.
 
@@ -31,7 +31,7 @@ Do not demand a fine subtype when biology or depth supports only a broad type. A
 
 - Large usable unresolved population: anchor-assisted pool reclustering.
 - Mixed local interface: targeted reclustering, then optional calibrated RCTD.
-- Low-depth/QC holdout: depth-matched atlas plus internal-anchor rescue; retain rejects.
+- Low-depth/QC holdout: complete broad-anchor QC-pool reclustering first; only its frozen residual QC proceeds to depth-matched Atlas/internal-anchor rescue; retain rejects.
 - Rare identity: positive modules, negative programs, spatial objects, morphology and strict-pool reclustering.
 - Irreducible/technical: explicit retained state, not a forced label.
 
@@ -39,8 +39,8 @@ Do not demand a fine subtype when biology or depth supports only a broad type. A
 
 Run `plan_next_iteration.py` after every writeback. Submit its queued routes, inspect outputs and update state. A non-empty queue means the report is preliminary. Run `check_completion_gate.py` only after the queue is empty; a blocked gate requires another round.
 
-The plan and completion gate must inspect route attempts, branch no-repeat state, strict/inclusive/display views and the distinction between full-object, analysis-set, initial-QC and post-clustering holdout ledgers. “All decisions closed” alone is not completion.
+The plan and completion gate must inspect route attempts, branch no-repeat state, the single final annotation and the distinction between full-object, analysis-set, initial-QC and post-clustering holdout ledgers. “All decisions closed” alone is not completion.
 
 The Agent must narrate biological conclusions separately from automated scores, cite evidence artifacts, and record rejected alternatives. Numerical ranks and reference predictions are decision support, not label writers.
 
-After RCTD, route extreme/high/medium-low confidence separately. Medium/low confidence continues to calibrated atlas/internal-anchor review. Reopen a terminal interface when it is too large or spatially diffuse to be anatomically local. Also reopen large direct first-pass labels when cell-level lineage purity and spatial continuity were never tested, even if their cluster-level DEG looked canonical.
+After RCTD, route extreme/high/medium-low confidence separately. Medium/low confidence enters the post-clustering QC holdout and cannot call Atlas directly. After the complete QC-holdout anchor reclustering, only residual QC may continue to calibrated Atlas/internal-anchor review. Reopen a terminal interface when it is too large or spatially diffuse to be anatomically local. Also reopen large direct first-pass labels when cell-level lineage purity and spatial continuity were never tested, even if their cluster-level DEG looked canonical.

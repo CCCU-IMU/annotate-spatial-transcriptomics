@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse,csv,hashlib,json,re
 from pathlib import Path
 from multiroute_lib import audit_multiroute
+from validate_incident_registry import validate as validate_incidents
+from validate_profile_role import load_profile
 
 def read(path):
     if not path.exists():return []
@@ -19,7 +21,28 @@ def sha256(path):
         for b in iter(lambda:f.read(1024*1024),b""):h.update(b)
     return h.hexdigest()
 def main():
-    p=argparse.ArgumentParser();p.add_argument("project_root",type=Path);p.add_argument("--context",type=Path);p.add_argument("--profile",type=Path);a=p.parse_args();r=a.project_root;errors=[];all_clusters=read(r/"state/cluster_decision_ledger.tsv");clusters=active_decisions(all_clusters);pools=read(r/"state/pool_registry.tsv");runs=read(r/"state/run_registry.tsv");queue=read(r/"state/next_action_queue.tsv")
+    p=argparse.ArgumentParser();p.add_argument("project_root",type=Path);p.add_argument("--context",type=Path);p.add_argument("--biological-profile",type=Path);p.add_argument("--profile",type=Path,help="deprecated alias; must still be a biological_evidence profile");a=p.parse_args();r=a.project_root;errors=[];all_clusters=read(r/"state/cluster_decision_ledger.tsv");clusters=active_decisions(all_clusters);pools=read(r/"state/pool_registry.tsv");runs=read(r/"state/run_registry.tsv");queue=read(r/"state/next_action_queue.tsv")
+    project_path=r/"config/project.json";project=json.loads(project_path.read_text()) if project_path.exists() else {};preset_requested=project.get("strategy_preset_requested","");preset_record={}
+    if preset_requested:
+        preset_path=r/"config/active_strategy_preset.json"
+        if not preset_path.exists():errors.append("requested strategy preset is not activated in config/active_strategy_preset.json")
+        else:
+            preset_record=json.loads(preset_path.read_text())
+            if preset_record.get("strategy_preset_status")!="ACTIVE" or preset_record.get("strategy_preset_id")!=preset_requested:errors.append("active strategy preset does not match the requested preset")
+            if preset_record.get("strategy_preset_preprocessing_mode")!="fixed_verified_same_batch_contract" or preset_record.get("fixed_cellbin_preprocessing_required") is not True:errors.append("same-batch R-first preset lacks independently verified fixed cellbin preprocessing provenance")
+            bindings=preset_record.get("strategy_preset_bindings") or {}
+            for key,expected in bindings.items():
+                if not key.endswith("_sha256"):continue
+                source_key=key[:-7];value=bindings.get(source_key,"");path=Path(value)
+                if not value or not path.is_file() or sha256(path)!=expected:errors.append(f"strategy preset binding is missing or stale: {source_key}")
+            discovery_audit=r/"provenance/open_world_lineage_audit_validation.json"
+            if not discovery_audit.exists():errors.append("same-batch strategy preset lacks the open-world lineage discovery audit")
+            else:
+                discovery=json.loads(discovery_audit.read_text());ledger=r/"state/cluster_decision_ledger.tsv"
+                if discovery.get("status")!="PASS" or not ledger.exists() or discovery.get("cluster_ledger_sha256")!=sha256(ledger):errors.append("open-world lineage discovery audit is failed or stale")
+                for source_key,hash_key in (("audit","audit_sha256"),("candidate_catalog","candidate_catalog_sha256"),("biological_profile","biological_profile_sha256")):
+                    value=str(discovery.get(source_key,"") or "");path=Path(value) if value else Path()
+                    if not value or not path.is_file() or discovery.get(hash_key)!=sha256(path):errors.append(f"open-world lineage discovery binding is missing or stale: {source_key}")
     context_path=a.context or r/"config/biological_context.json";context={}
     if not context_path.exists():errors.append("missing biological context")
     else:context=json.loads(context_path.read_text())
@@ -37,10 +60,19 @@ def main():
                 "annotation review gate remains open: "
                 + str(review_gate.get("required_next_action", review_gate.get("reason", "unspecified review")))
             )
-    if a.profile:
-        profile=json.loads(a.profile.read_text());multi=audit_multiroute(r,context,profile);gap_routes={}
+    profile_path=a.biological_profile or a.profile;profile={}
+    if profile_path:
+        try:profile=load_profile(profile_path,"biological_evidence")
+        except Exception as exc:errors.append(f"invalid biological profile binding: {exc}")
+        multi=audit_multiroute(r,context,profile);gap_routes={}
         for gap in multi.get("gaps",[]):gap_routes.setdefault(gap.get("decision_id",""),set()).add(gap.get("required_route",""))
     else:multi={"status":"NOT_RUN"};gap_routes={}
+    if context.get("profile") and not profile_path:errors.append("biological --profile is required for profiled completion")
+    if profile.get("multi_route_policy",{}).get("incident_registry_required",False):
+        incident_path=r/"provenance/incidents/incident_registry.tsv"
+        incident=validate_incidents(incident_path)
+        (r/"provenance/incident_registry_validation.json").write_text(json.dumps(incident,ensure_ascii=False,indent=2)+"\n")
+        if incident.get("status")!="PASS":errors.append(f"incident registry blocks completion: {len(incident.get('open_incidents',[]))} open; {'; '.join(incident.get('errors',[]))}")
     for x in clusters:
         did=x.get("decision_id") or f"{x.get('decision_version','')}:{x.get('source_run_id','')}:{x.get('source_cluster','')}";closed=str(x.get("closed","")).lower() in {"true","1","yes"}
         artifact=x.get("validation_artifact","");ap=Path(artifact) if artifact else None;artifact_ok=bool(ap and (ap if ap.is_absolute() else r/ap).exists());evidence=(x.get("route","")+" "+x.get("evidence_status","")+" "+x.get("validation_status","")).lower()
@@ -75,7 +107,7 @@ def main():
         for rel,expected in validated.items():
             pth=r/rel
             if not pth.exists() or sha256(pth)!=expected:errors.append(f"state validation is stale for {rel}")
-    if a.profile:
+    if profile_path:
         taxonomy_path=r/"provenance/release_taxonomy_audit.json"
         cell_ledger=r/"state/cell_ledger.tsv.gz"
         if not taxonomy_path.exists():errors.append("missing provenance/release_taxonomy_audit.json")
@@ -86,8 +118,8 @@ def main():
             except Exception:taxonomy_metadata=Path()
             if taxonomy_metadata!=cell_ledger.resolve():errors.append("release taxonomy audit was not run on the current cell ledger")
             if not cell_ledger.exists() or taxonomy.get("metadata_sha256")!=sha256(cell_ledger):errors.append("release taxonomy audit is stale for state/cell_ledger.tsv.gz")
-            if taxonomy.get("profile_sha256")!=sha256(a.profile):errors.append("release taxonomy audit is stale for the active profile")
+            if taxonomy.get("profile_sha256")!=sha256(profile_path):errors.append("release taxonomy audit is stale for the active biological profile")
         (r/"provenance/multiroute_audit.json").write_text(json.dumps(multi,ensure_ascii=False,indent=2)+"\n")
         if multi.get("status")!="PASS":errors.append(f"multi-route completion is blocked: {len(multi.get('gaps',[]))} route gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
-    result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"pools":len(pools),"runs":len(runs),"multiroute_status":multi.get("status"),"context":context};(r/"provenance/completion_gate.json").parent.mkdir(parents=True,exist_ok=True);(r/"provenance/completion_gate.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n");print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not errors else 2
+    result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"pools":len(pools),"runs":len(runs),"multiroute_status":multi.get("status"),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context};(r/"provenance/completion_gate.json").parent.mkdir(parents=True,exist_ok=True);(r/"provenance/completion_gate.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n");print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not errors else 2
 if __name__=="__main__":raise SystemExit(main())

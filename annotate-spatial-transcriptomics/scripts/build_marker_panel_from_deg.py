@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a marker panel from inclusive broad and strict subtype DEG tables."""
+"""Build a marker panel from the single final broad and high-confidence subtype DEG tables."""
 from __future__ import annotations
 
 import argparse
@@ -26,21 +26,23 @@ def number(value: str, default: float) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--broad-deg", required=True, type=Path)
-    parser.add_argument("--subtype-deg", required=True, type=Path)
+    parser.add_argument("--subtype-deg", type=Path, help="optional; omit when no high-confidence fine labels are released")
     parser.add_argument("--canonical", required=True, type=Path)
     parser.add_argument("--group-alias", type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--top-per-label", type=int, default=4)
     parser.add_argument("--min-pct", type=float, default=0.05)
     parser.add_argument("--max-padj", type=float, default=0.05)
-    parser.add_argument("--broad-view", default="inclusive")
-    parser.add_argument("--subtype-view", default="strict")
+    parser.add_argument("--broad-view", default="final")
+    parser.add_argument("--subtype-view", default="final")
     parser.add_argument(
         "--exclude-regex", default=r"^(LOC|ENSOARG|MT-|RPS|RPL|HBA|HBB|EEF1|GAPDH$|ACTB$|MALAT1$|GNAS$)",
     )
     args = parser.parse_args()
 
-    deg = {"broad": read(args.broad_deg), "subtype": read(args.subtype_deg)}
+    deg = {"broad": read(args.broad_deg)}
+    if args.subtype_deg:
+        deg["subtype"] = read(args.subtype_deg)
     for level, rows in deg.items():
         if not rows:
             raise SystemExit(f"{level} DEG is empty")
@@ -72,7 +74,7 @@ def main() -> int:
         source = row.get("marker_group", "")
         targets = aliases.get((level, source), [source])
         for target in targets:
-            if target == "__DROP__" or target not in label_sets[level]:
+            if target == "__DROP__" or level not in label_sets or target not in label_sets[level]:
                 continue
             output.append({
                 "gene": row.get("gene", ""), "marker_group": target,
@@ -124,7 +126,7 @@ def main() -> int:
         if not row["gene"] or key in seen_rows:
             continue
         seen_rows.add(key); deduplicated.append(row)
-    for level in ["broad", "subtype"]:
+    for level in label_sets:
         for panel in ["canonical", "data_specific"]:
             covered = {row["marker_group"] for row in deduplicated if row["level"] == level and row["panel"] == panel}
             missing = label_sets[level] - covered
@@ -137,7 +139,7 @@ def main() -> int:
         writer.writeheader(); writer.writerows(deduplicated)
     print(
         f"PASS rows={len(deduplicated)} broad_labels={len(label_sets['broad'])} "
-        f"subtype_labels={len(label_sets['subtype'])} out={args.out}"
+        f"subtype_labels={len(label_sets.get('subtype', set()))} out={args.out}"
     )
     return 0
 
