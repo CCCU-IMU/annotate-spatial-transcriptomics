@@ -92,7 +92,7 @@ VERIFY_SCRIPT="${SCRIPT_DIR}/scripts/verify_install.py"
 if [[ -f "$VERIFY_SCRIPT" ]] && command -v python >/dev/null 2>&1; then
   python "$VERIFY_SCRIPT" "$TARGET"
 else
-  for required in SKILL.md references/iterative-controller.md references/multi-route-controller.md references/report-contract.md scripts/init_annotation_project.py scripts/check_completion_gate.py scripts/build_report.py; do
+  for required in SKILL.md references/direct-lineage-controller.md references/iterative-controller.md references/report-contract.md scripts/init_annotation_project.py scripts/validate_direct_lineage_workflow.py scripts/check_completion_gate.py scripts/request_master_quality_review.py scripts/record_master_quality_approval.py scripts/build_report.py; do
     [[ -f "$TARGET/$required" ]] || { printf 'Missing installed file: %s\n' "$required" >&2; exit 1; }
   done
 fi

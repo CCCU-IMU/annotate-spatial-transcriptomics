@@ -12,7 +12,7 @@ from pathlib import Path
 
 FIELDS = {
     "worker_registry.tsv": ["sample_id", "worker_id", "worker_generation", "wave", "status", "sample_root", "assigned_at", "updated_at", "supersedes_worker_id"],
-    "sample_gate_registry.tsv": ["sample_id", "status", "packet_path", "packet_sha256", "completion_gate_path", "completion_gate_sha256", "release_audit_path", "release_audit_sha256", "master_decision", "updated_at"],
+    "sample_gate_registry.tsv": ["sample_id", "status", "packet_path", "packet_sha256", "completion_gate_path", "completion_gate_sha256", "master_quality_approval_path", "master_quality_approval_sha256", "confirmation_review_path", "confirmation_review_sha256", "release_audit_path", "release_audit_sha256", "master_decision", "updated_at"],
     "cohort_run_index.tsv": ["work_key", "sample_id", "stage", "owner_worker_id", "attempt", "scheduler_job_name", "scheduler_job_id", "status", "output_root", "supersedes_work_key", "updated_at"],
     "cohort_event_registry.tsv": ["event_id", "sample_id", "worker_id", "phase", "status", "summary", "artifact", "timestamp"],
 }
@@ -64,7 +64,7 @@ def main() -> int:
         wave = index // args.max_active_workers + 1
         samples.append({**row, "sample_root": str(sample_root), "wave": wave})
         workers.append({"sample_id": row["sample_id"], "worker_id": "", "worker_generation": 0, "wave": wave, "status": "PLANNED", "sample_root": str(sample_root), "assigned_at": "", "updated_at": now, "supersedes_worker_id": ""})
-        gates.append({"sample_id": row["sample_id"], "status": "PLANNED", "packet_path": "", "packet_sha256": "", "completion_gate_path": "", "completion_gate_sha256": "", "release_audit_path": "", "release_audit_sha256": "", "master_decision": "", "updated_at": now})
+        gates.append({"sample_id": row["sample_id"], "status": "PLANNED", "packet_path": "", "packet_sha256": "", "completion_gate_path": "", "completion_gate_sha256": "", "master_quality_approval_path": "", "master_quality_approval_sha256": "", "confirmation_review_path": "", "confirmation_review_sha256": "", "release_audit_path": "", "release_audit_sha256": "", "master_decision": "", "updated_at": now})
     if len({row["sample_root"] for row in samples}) != len(samples):
         raise SystemExit("sample roots must be unique")
     sample_fields = list(source[0]) + [name for name in ["sample_root", "wave"] if name not in source[0]]
@@ -73,7 +73,7 @@ def main() -> int:
     write_tsv(root / "control/sample_gate_registry.tsv", FIELDS["sample_gate_registry.tsv"], gates)
     write_tsv(root / "control/cohort_run_index.tsv", FIELDS["cohort_run_index.tsv"], [])
     write_tsv(root / "control/cohort_event_registry.tsv", FIELDS["cohort_event_registry.tsv"], [])
-    config = {"cohort_id": args.cohort_id, "status": "PLANNED", "master_agent_only_user_facing": True, "one_logical_worker_per_sample": True, "n_samples": len(samples), "max_active_workers": args.max_active_workers, "n_waves": max(row["wave"] for row in samples), "created_at": now}
+    config = {"cohort_id": args.cohort_id, "status": "PLANNED", "master_agent_only_user_facing": True, "one_logical_worker_per_sample": True, "post_completion_master_quality_approval_required": True, "n_samples": len(samples), "max_active_workers": args.max_active_workers, "n_waves": max(row["wave"] for row in samples), "created_at": now}
     (root / "config/cohort.json").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(config, ensure_ascii=False, indent=2))
     return 0

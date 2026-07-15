@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed audit of release taxonomy versus routing pools and retained states."""
+"""Fail-closed audit of release taxonomy versus computational cohorts and retained states."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ RETAINED_STATUSES = {
     "pending_review",
     "excluded_initial_qc",
 }
-POOL_SUFFIXES = ("_review", "_candidate", "_unresolved", "_holdout")
+NON_BIOLOGICAL_SUFFIXES = ("_review", "_candidate", "_unresolved", "_holdout", "_cohort")
 
 
 def open_text(path: Path):
@@ -54,7 +54,8 @@ def main() -> int:
     ap.add_argument("metadata", type=Path)
     ap.add_argument("--profile", required=True, type=Path)
     ap.add_argument("--broad-column", default="broad_label")
-    ap.add_argument("--pool-column", default="source_pool")
+    ap.add_argument("--cohort-column", default="recluster_cohort_id")
+    ap.add_argument("--pool-column", help="legacy alias for projects being migrated")
     ap.add_argument("--status-column", default="annotation_status")
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
@@ -71,7 +72,7 @@ def main() -> int:
     biological = Counter()
     retained = Counter()
     statuses = Counter()
-    copied_pool = Counter()
+    copied_provenance = Counter()
     total = 0
 
     with open_text(args.metadata) as handle:
@@ -81,18 +82,19 @@ def main() -> int:
         missing = sorted(required - fields)
         if missing:
             errors.append("missing required columns: " + ", ".join(missing))
-        has_pool = args.pool_column in fields
-        if not has_pool:
-            warnings.append(f"pool column absent: {args.pool_column}; pool-copy check skipped")
+        provenance_column = args.pool_column or args.cohort_column
+        has_provenance = provenance_column in fields
+        if not has_provenance:
+            warnings.append(f"cohort provenance column absent: {provenance_column}; identifier-copy check skipped")
 
         for row in reader:
             total += 1
             label = (row.get(args.broad_column) or "").strip()
             status = (row.get(args.status_column) or "").strip()
-            pool = (row.get(args.pool_column) or "").strip() if has_pool else ""
+            provenance_id = (row.get(provenance_column) or "").strip() if has_provenance else ""
             statuses[status or "<empty>"] += 1
             nlabel = norm(label)
-            npool = norm(pool)
+            nprovenance = norm(provenance_id)
 
             if status in BIOLOGICAL_STATUSES:
                 biological[label or "<empty>"] += 1
@@ -104,18 +106,18 @@ def main() -> int:
                     errors.append(f"retained-state name used as biological broad label: {label}")
                 if allowed and nlabel not in allowed:
                     errors.append(f"biological broad label is outside the profile release vocabulary: {label}")
-                if any(nlabel.endswith(s) for s in POOL_SUFFIXES):
-                    errors.append(f"routing pool suffix used in biological broad label: {label}")
-                if pool and nlabel == npool:
-                    copied_pool[label] += 1
+                if any(nlabel.endswith(s) for s in NON_BIOLOGICAL_SUFFIXES):
+                    errors.append(f"workflow-state suffix used in biological broad label: {label}")
+                if provenance_id and nlabel == nprovenance:
+                    copied_provenance[label] += 1
             elif status in RETAINED_STATUSES:
                 retained[label or status or "<empty>"] += 1
             else:
                 retained[label or status or "<empty>"] += 1
                 warnings.append(f"unrecognized annotation status: {status or '<empty>'}")
 
-    for label, count in copied_pool.items():
-        errors.append(f"pool name copied directly into biological label ({count} rows): {label}")
+    for label, count in copied_provenance.items():
+        errors.append(f"cohort/provenance identifier copied directly into biological label ({count} rows): {label}")
 
     result = {
         "schema_version": "1.0",

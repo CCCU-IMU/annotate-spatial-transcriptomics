@@ -27,8 +27,8 @@ dir.create(arg$out, recursive = TRUE, showWarnings = FALSE)
 arg$out <- normalizePath(arg$out, mustWork = TRUE)
 min_n <- as.integer(ifelse(is.null(arg$`min-n`), 20, arg$`min-n`))
 clip <- as.numeric(ifelse(is.null(arg$clip), 2.5, arg$clip))
-analysis_view <- ifelse(is.null(arg$`analysis-view`), "provided_labels", arg$`analysis-view`)
-evidence_cohort <- ifelse(is.null(arg$`evidence-cohort`), "provided_metadata", arg$`evidence-cohort`)
+analysis_view <- ifelse(is.null(arg$`analysis-view`), "final", arg$`analysis-view`)
+evidence_cohort <- ifelse(is.null(arg$`evidence-cohort`), "final_annotation_level_specific", arg$`evidence-cohort`)
 
 read_any <- function(path) {
   if (grepl("\\.gz$", path, ignore.case = TRUE)) fread(cmd = paste("gzip -dc", shQuote(path))) else fread(path)
@@ -116,7 +116,10 @@ make_source <- function(label_col, level_name, panel_name) {
   counts <- table(labels[valid]); keep_labels <- names(counts[counts >= min_n])
   valid <- valid & labels %in% keep_labels
   labels <- labels[valid]; cells <- common[valid]
-  if (!length(cells) || length(unique(labels)) < 2L) stop(level_name, " has fewer than two eligible labels")
+  if (!length(cells)) {
+    if (level_name == "subtype") return(NULL)
+    stop(level_name, " has no eligible labels")
+  }
   genes <- unique(panel_dt[["gene"]])
   dm <- data_mat[genes, cells, drop = FALSE]; cm <- count_mat[genes, cells, drop = FALSE]
   rows <- vector("list", length(unique(labels))); z <- 1L
@@ -145,10 +148,13 @@ make_source <- function(label_col, level_name, panel_name) {
   tree_ds <- unique(ds[, .(label, gene, avg_expression_scaled_within_gene)])
   mat <- dcast(tree_ds, label ~ gene, value.var = "avg_expression_scaled_within_gene", fill = 0)
   labs <- mat$label; x <- as.matrix(mat[, -1]); rownames(x) <- labs
-  hc <- hclust(dist(x), method = "ward.D2"); ord <- hc$labels[hc$order]
+  if (nrow(x) >= 2L) {
+    hc <- hclust(dist(x), method = "ward.D2"); ord <- hc$labels[hc$order]; seg <- hclust_segments(hc)
+  } else {
+    ord <- labs; seg <- data.table(x = numeric(), xend = numeric(), y = numeric(), yend = numeric())
+  }
   ds[, label := factor(label, levels = ord)]
   ds[, gene := factor(gene, levels = unique(panel_dt[["gene"]]))]
-  seg <- hclust_segments(hc)
   # Put the label tree on the left and marker genes on the x axis. Faceting
   # genes by marker_group makes the cell type/program supported by each marker
   # explicit above the x axis, while the tree and label rows remain aligned.
@@ -190,6 +196,6 @@ for (lev in c("broad", "subtype")) {
 }
 asset_dt <- rbindlist(assets, fill = TRUE)
 fwrite(asset_dt, file.path(arg$out, "marker_dotplot_asset_index.tsv"), sep = "\t", quote = FALSE)
-required_levels <- c("broad", "subtype")
-if (!all(required_levels %in% asset_dt$level)) stop("Both broad and subtype dotplots are required")
+required_levels <- c("broad", if(any(!is.na(meta[[arg$`subtype-col`]]) & nzchar(as.character(meta[[arg$`subtype-col`]])))) "subtype")
+if (!all(required_levels %in% asset_dt$level)) stop("Required broad/high-confidence subtype dotplots are missing")
 message("Completed marker dotplots: ", nrow(asset_dt), " assets")

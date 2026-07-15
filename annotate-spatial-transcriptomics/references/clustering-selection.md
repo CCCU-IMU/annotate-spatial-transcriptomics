@@ -41,4 +41,4 @@ For mesenchymal-rich tissues, candidate selection must demonstrate whether gener
 
 ## Subset reclustering
 
-Repeat selection inside every broad pool. Do not copy whole-tissue resolution, BANKSY k, number of PCs or neighbor settings into a subset without re-evaluation.
+Repeat biological selection inside every broad pool. For sheep ovary, keep the fixed formal resolution candidates `0.1,0.2,0.3,0.4,0.6` while adapting the selected value, PCs and k; do not introduce below-floor resolutions. Other profiles may declare different grids.

@@ -34,9 +34,13 @@ def main():
     d["strict_candidate_for_recluster"]=d.spatial_focus_supported & d.contradiction_gate_review
     seed_foci=set(d.loc[d.strict_candidate_for_recluster & d.spatial_focus_id.ge(0),"spatial_focus_id"])
     # Preserve the complete multi-bin spatial object around a strict seed.  The
-    # seed is evidence; the expanded object remains a review/recluster pool and
+    # seed is evidence; the expanded object remains targeted-cohort support and
     # is not a final rare-cell call.
     d["strict_focus_for_recluster"]=d.spatial_focus_id.isin(seed_foci) & gate
+    # R-first two-tier route: spatial foci are supporting evidence.  The full
+    # multi-module starting gate remains the canonical query-only recluster
+    # cohort, including isolated high-evidence candidates.
+    d["full_targeted_cohort_member"]=gate
     out=a.out/"rare_cell_spatial_focus_screen.tsv.gz";d.to_csv(out,sep="\t",index=False,compression="gzip")
     focus=d.loc[gate & d.spatial_focus_id.ge(0)].groupby("spatial_focus_id",as_index=False).agg(
         n_observations=(a.cell_id_col,"size"),x_min=(a.x_col,"min"),x_max=(a.x_col,"max"),
@@ -48,5 +52,7 @@ def main():
     focus.to_csv(a.out/"rare_cell_focus_objects.tsv",sep="\t",index=False)
     membership_cols=[a.cell_id_col,a.x_col,a.y_col,"spatial_focus_id","total_oocyte_program_hits","contradictory_somatic_hits","strict_candidate_for_recluster"]
     d.loc[d.strict_focus_for_recluster,membership_cols].to_csv(a.out/"strict_focus_recluster_membership.tsv.gz",sep="\t",index=False,compression="gzip")
-    result={"n_screened":len(d),"starting_marker_gate":int(gate.sum()),"eps":eps,"min_samples":a.min_samples,"spatial_focus_supported":int(d.spatial_focus_supported.sum()),"strict_candidate_for_recluster":int(d.strict_candidate_for_recluster.sum()),"strict_focus_recluster_pool":int(d.strict_focus_for_recluster.sum()),"spatial_focus_groups":int(d.loc[d.spatial_focus_id.ge(0),"spatial_focus_id"].nunique()),"strict_focus_groups":len(seed_foci),"warning":"Candidates require strict-pool reclustering and biological review; this script does not assign Oocyte."};(a.out/"rare_cell_spatial_focus_summary.json").write_text(json.dumps(result,indent=2)+"\n");print(json.dumps(result,indent=2))
+    full_membership_cols=membership_cols+["spatial_focus_supported","strict_focus_for_recluster","full_targeted_cohort_member"]
+    d.loc[gate,full_membership_cols].to_csv(a.out/"full_candidate_recluster_membership.tsv.gz",sep="\t",index=False,compression="gzip")
+    result={"n_screened":len(d),"starting_marker_gate":int(gate.sum()),"full_targeted_recluster_cohort":int(gate.sum()),"eps":eps,"min_samples":a.min_samples,"spatial_focus_supported":int(d.spatial_focus_supported.sum()),"strict_candidate_for_recluster":int(d.strict_candidate_for_recluster.sum()),"strict_focus_support_n":int(d.strict_focus_for_recluster.sum()),"spatial_focus_groups":int(d.loc[d.spatial_focus_id.ge(0),"spatial_focus_id"].nunique()),"strict_focus_groups":len(seed_foci),"canonical_recluster_membership":"full_candidate_recluster_membership.tsv.gz","warning":"The complete starting marker gate is the canonical query-only targeted cohort. Strict seeds/foci are supporting evidence and this script does not assign Oocyte."};(a.out/"rare_cell_spatial_focus_summary.json").write_text(json.dumps(result,indent=2)+"\n");print(json.dumps(result,indent=2))
 if __name__=="__main__":main()

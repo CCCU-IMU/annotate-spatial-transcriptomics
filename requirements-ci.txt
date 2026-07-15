@@ -1,0 +1,2 @@
+# Dependencies imported by release-contract regression tests.
+pandas>=2.0,<3.0

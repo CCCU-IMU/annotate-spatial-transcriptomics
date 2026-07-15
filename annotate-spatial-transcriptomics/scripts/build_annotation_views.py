@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build strict, inclusive and display fields without losing base provenance."""
+"""Legacy v1.1-v1.4 three-view migration helper; never use for a current release."""
 
 from __future__ import annotations
 
@@ -46,6 +46,10 @@ def main() -> int:
     parser.add_argument("--sample", required=True)
     parser.add_argument("--view-version", default="v001")
     parser.add_argument(
+        "--legacy-migration-only", action="store_true",
+        help="required acknowledgement that these compatibility fields will not be published",
+    )
+    parser.add_argument(
         "--mode", choices=["derive", "preserve"], default="derive",
         help="derive views from route policy, or preserve already adjudicated view fields and only refresh census/registry",
     )
@@ -54,6 +58,11 @@ def main() -> int:
         help="authoritative membership file to hash/register; defaults to --out",
     )
     args = parser.parse_args()
+    if not args.legacy_migration_only:
+        raise SystemExit(
+            "strict/inclusive/display generation is retired. Use build_final_annotation.py; "
+            "pass --legacy-migration-only only to inspect an old project before migration."
+        )
     route_registry = args.project_root / "state/route_attempt_registry.tsv"
     qc_routes, interface_routes = set(QC_RESCUE), set(INTERFACE_RETURN)
     if route_registry.exists():

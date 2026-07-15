@@ -14,6 +14,11 @@ from scheduler_job_name import validate as validate_scheduler_job_name
 
 
 ALLOWED = {"defined_fine", "defined_broad_only", "interface_review", "qc_holdout", "technical_state", "pending_review", "excluded_initial_qc", "closed_and_frozen"}
+CONFIDENCE_RANK = {
+    "low": 0, "low_confidence": 0, "medium_low": 0,
+    "moderate": 1, "moderate_only": 1, "medium": 1, "medium_high": 1, "moderate_high": 1,
+    "high": 2, "high_confidence": 2, "very_high": 2,
+}
 
 
 def rows(path: Path):
@@ -40,7 +45,8 @@ def main() -> int:
     state = args.project_root / "state"
     config_path = args.project_root / "config/project.json"
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
-    multi_required = bool(config.get("multi_route_completion_required"))
+    workflow_required = bool(config.get("annotation_workflow_completion_required", config.get("multi_route_completion_required")))
+    direct_workflow = config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts"}
     cell_ledger = args.cell_ledger
     if cell_ledger is None:
         for candidate in (state / "cell_ledger.tsv.gz", state / "cell_ledger.tsv"):
@@ -79,8 +85,15 @@ def main() -> int:
                     require(False, "analysis-scope policy count is invalid", errors)
         except (OSError, json.JSONDecodeError) as exc:
             require(False, f"analysis-scope policy is unreadable: {exc}", errors)
-    required = ["input_snapshot_registry.tsv", "clustering_decision_ledger.tsv", "cluster_decision_ledger.tsv", "pool_registry.tsv", "run_registry.tsv"]
-    if multi_required: required += ["pool_snapshot_registry.tsv", "route_attempt_registry.tsv", "branch_control_board.tsv", "workflow_event_registry.tsv", "annotation_view_registry.tsv"]
+    required = ["input_snapshot_registry.tsv", "clustering_decision_ledger.tsv", "cluster_decision_ledger.tsv", "run_registry.tsv"]
+    if direct_workflow:
+        required += ["recluster_cohort_registry.tsv", "direct_return_registry.tsv"]
+    else:
+        required += ["pool_registry.tsv"]
+    if workflow_required:
+        required += ["route_attempt_registry.tsv", "workflow_event_registry.tsv", "annotation_view_registry.tsv", "annotation_support_registry.tsv"]
+        if not direct_workflow:
+            required += ["pool_snapshot_registry.tsv", "branch_control_board.tsv"]
     for f in required: require((state / f).exists(), f"missing registry: {f}", errors)
     configured_sample = str(config.get("sample_id", ""))
     require(bool(configured_sample), "project config sample_id is empty", errors)
@@ -132,7 +145,12 @@ def main() -> int:
                 require(vp.exists(),f"line {i}: passed validation artifact missing",errors)
     if cell_ledger:
         seen = set(); n = 0; it=iter(rows(cell_ledger));first=next(it,None);required_fields={"sample_id","cell_id","decision_id","state","broad_label","fine_label","validation_feature_scope"}
-        if multi_required: required_fields.update({"analysis_scope","source_key","parent_decision_id","pool_snapshot_id","generation","route_attempt_id","state_tags","spatial_tags","qc_tags","candidate_lineages","strict_state","strict_broad_label","strict_fine_label","inclusive_state","inclusive_broad_label","inclusive_fine_label","display_state","display_broad_label","display_fine_label","display_policy"})
+        if workflow_required:
+            required_fields.update({"analysis_scope","source_key","parent_decision_id","route_attempt_id","state_tags","spatial_tags","qc_tags","candidate_lineages","confidence","fine_anchor_eligible","final_state","final_broad_label","final_fine_label","final_confidence","final_assignment_tier","final_broad_eligible","final_fine_eligible"})
+            if direct_workflow:
+                required_fields.update({"initial_broad_label", "assignment_mode", "recluster_cohort_id", "cross_lineage_target"})
+            else:
+                required_fields.update({"pool_snapshot_id", "generation"})
         fields=set(first or {});missing_fields=required_fields-fields;require(not missing_fields,f"cell ledger missing fields: {sorted(missing_fields)}",errors);oocyte_object_missing=False;analysis_n=0;analysis_ids_seen=set();excluded_n=0
         import itertools
         for i, row in enumerate(itertools.chain([first] if first else [],it), 2):
@@ -144,23 +162,38 @@ def main() -> int:
                 require(row.get("fine_anchor_eligible", "").lower() in {"false", "0", "no"}, f"cell line {i}: broad-only is fine anchor", errors)
             if "decision_id" in fields:require(row.get("decision_id") in active_ids,f"cell line {i}: decision_id is not active",errors)
             if "oocyte" in (row.get("broad_label","")+row.get("fine_label","")).lower() and not row.get("spatial_object_id"):oocyte_object_missing=True
-            if multi_required:
+            if workflow_required:
                 scope=row.get("analysis_scope","");require(scope in {"analysis_set","excluded_initial_qc"},f"cell line {i}: invalid analysis_scope",errors)
                 if scope=="analysis_set":
                     analysis_n+=1
                     analysis_ids_seen.add(row.get("cell_id", ""))
-                    for view in ["strict","inclusive","display"]:require(bool(row.get(f"{view}_state")),f"cell line {i}: {view} view is empty",errors)
+                    require(bool(row.get("final_state")),f"cell line {i}: final state is empty",errors)
+                    final_broad = row.get("final_broad_label", "")
+                    final_fine = row.get("final_fine_label", "")
+                    broad_confidence = (row.get("final_broad_confidence") or row.get("final_confidence", "")).strip().lower().replace("-", "_").replace(" ", "_")
+                    fine_confidence = (row.get("final_fine_confidence") or row.get("final_confidence", "")).strip().lower().replace("-", "_").replace(" ", "_")
+                    broad_rank = CONFIDENCE_RANK.get(broad_confidence, -1)
+                    fine_rank = CONFIDENCE_RANK.get(fine_confidence, -1)
+                    broad_flag = row.get("final_broad_eligible", "").lower() in {"true", "1", "yes"}
+                    fine_flag = row.get("final_fine_eligible", "").lower() in {"true", "1", "yes"}
+                    require(broad_flag == bool(final_broad), f"cell line {i}: final broad eligibility disagrees with label", errors)
+                    require(fine_flag == bool(final_fine), f"cell line {i}: final fine eligibility disagrees with label", errors)
+                    if final_broad:
+                        require(broad_rank >= 1, f"cell line {i}: final broad label is below moderate confidence", errors)
+                    if final_fine:
+                        require(bool(final_broad), f"cell line {i}: final fine label lacks final broad parent", errors)
+                        require(fine_rank >= 2, f"cell line {i}: final fine label is below high confidence", errors)
+                        require(row.get("fine_anchor_eligible", "").lower() in {"true", "1", "yes"}, f"cell line {i}: final fine label is not fine-anchor eligible", errors)
                 elif scope=="excluded_initial_qc":
                     excluded_n+=1
-                    for view in ["strict", "inclusive", "display"]:
-                        require(row.get(f"{view}_state") == "excluded_initial_qc", f"cell line {i}: excluded observation leaked into {view} state", errors)
-                        require(not row.get(f"{view}_broad_label"), f"cell line {i}: excluded observation has {view} broad label", errors)
-                        require(not row.get(f"{view}_fine_label"), f"cell line {i}: excluded observation has {view} fine label", errors)
-                if row.get("route") in {"depth_matched_atlas_anchor_mapping_fullfeature_rescue","qc_anchor_recluster_broad_rescue","interface_rctd_broad_return"}:
+                    require(row.get("final_state") == "excluded_initial_qc", f"cell line {i}: excluded observation leaked into final state", errors)
+                    require(not row.get("final_broad_label"), f"cell line {i}: excluded observation has final broad label", errors)
+                    require(not row.get("final_fine_label"), f"cell line {i}: excluded observation has final fine label", errors)
+                if row.get("route") in {"depth_matched_atlas_anchor_mapping_fullfeature_rescue","qc_anchor_recluster_broad_rescue","interface_rctd_broad_return","residual_qc_atlas_broad_rescue"} or row.get("assignment_mode") == "atlas_broad_rescue":
                     require(row.get("fine_anchor_eligible","").lower() in {"false","0","no"},f"cell line {i}: rescue route is a fine anchor",errors)
-                    require(not row.get("strict_broad_label"),f"cell line {i}: calibrated broad rescue leaked into strict biological view",errors)
+                    require(not row.get("final_fine_label"),f"cell line {i}: broad-only rescue leaked into final fine annotation",errors)
         require(not oocyte_object_missing,"Oocyte-associated cellbins lack spatial_object_id",errors)
-        if multi_required:
+        if workflow_required:
             if expected_analysis_ids is not None:
                 require(analysis_ids_seen == expected_analysis_ids, "cell-ledger analysis_set differs from frozen analysis-scope membership", errors)
                 try:
@@ -169,11 +202,20 @@ def main() -> int:
                 except (TypeError, ValueError):
                     require(False, "analysis-scope excluded count is invalid", errors)
             view_rows=list(rows(state/"annotation_view_registry.tsv"));validated={x.get("view"):x for x in view_rows if x.get("status")=="validated"}
-            for view in ["strict","inclusive","display"]:
-                require(view in validated,f"missing validated {view} annotation view",errors)
-                if view in validated:
-                    try:require(int(float(validated[view].get("n_observations",0)))==analysis_n,f"{view} view count differs from analysis set",errors)
-                    except ValueError:require(False,f"{view} view count is invalid",errors)
+            require("final" in validated,"missing validated final annotation",errors)
+            if "final" in validated:
+                try:require(int(float(validated["final"].get("n_observations",0)))==analysis_n,"final annotation count differs from analysis set",errors)
+                except ValueError:require(False,"final annotation count is invalid",errors)
+                membership_value = validated["final"].get("membership_path", "")
+                membership_path = Path(membership_value) if membership_value else Path()
+                membership_path = membership_path if membership_path.is_absolute() else args.project_root / membership_path
+                require(bool(membership_value) and membership_path.is_file(), "final annotation membership artifact is missing", errors)
+                if membership_value and membership_path.is_file():
+                    require(sha256(membership_path) == validated["final"].get("membership_sha256", ""), "final annotation membership hash is stale", errors)
+                artifact_value = validated["final"].get("artifact", "")
+                artifact_path = Path(artifact_value) if artifact_value else Path()
+                artifact_path = artifact_path if artifact_path.is_absolute() else args.project_root / artifact_path
+                require(bool(artifact_value) and artifact_path.is_file(), "final annotation census artifact is missing", errors)
     validated={str(cluster_path.relative_to(args.project_root)):sha256(cluster_path)} if cluster_path.exists() else {}
     if cell_ledger and cell_ledger.exists():validated[str(cell_ledger.resolve().relative_to(args.project_root.resolve()))]=sha256(cell_ledger)
     result = {"status": "PASS" if not errors else "FAIL", "errors": errors,"validated_files":validated}

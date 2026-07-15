@@ -19,11 +19,11 @@ Use this contract when a user requests more than one sample, parallel sample ann
 
 ## Lifecycle
 
-`PLANNED -> WORKER_ASSIGNED -> ANALYSIS_RUNNING -> READY_FOR_MASTER_SAMPLE_GATE -> SAMPLE_FROZEN -> CROSS_SAMPLE_AUDIT -> COHORT_CONFIRMATION_PENDING -> RELEASE_RUNNING -> RELEASED`
+`PLANNED -> WORKER_ASSIGNED -> ANALYSIS_RUNNING -> READY_FOR_MASTER_QUALITY_GATE -> MASTER_QUALITY_APPROVED -> SAMPLE_FROZEN -> CROSS_SAMPLE_AUDIT -> COHORT_CONFIRMATION_PENDING -> RELEASE_RUNNING -> RELEASED`
 
-The sample worker completes all computational/biological gates before `READY_FOR_MASTER_SAMPLE_GATE`, then sends a decision packet containing census, unresolved/interface/QC counts, rare calls, Atlas/RCTD returns, negative audits, route history and missing assets. The master independently verifies the packet and freezes each sample. After every sample is frozen, the master checks taxonomy semantics and evidence quality across samples without forcing identical labels. One aggregate user confirmation can authorize all unchanged frozen samples. Any later ledger/gate change invalidates that sample's confirmation.
+The sample worker completes every broad/targeted cohort, direct/cross-lineage return, residual-QC rescue, final annotation and the completion gate before `READY_FOR_MASTER_QUALITY_GATE`. It sends label-support reasons, broad spatial/marker evidence, census, unresolved/interface/QC counts, context-gated calls, Atlas/RCTD returns, negative audits and route history. Only then does the main conversation Agent judge whether the annotation is biologically reasonable and comparable in quality to the validated R-first sheep-ovary reference; exact label/count agreement is not required. `PASS` may retain concerns, while a blocking problem returns the same worker to targeted iteration. After `MASTER_QUALITY_APPROVED`, the lightweight HTML is built and the sample may be frozen for user confirmation. Any later bound ledger/gate/review change invalidates that approval.
 
-After confirmation, the same sample worker may generate final inclusive DEG, both broad and subtype dotplots, maps and audited HTML. Each sample must independently reach `autopilot_status=COMPLETE` and `audit_release=PASS`; a cohort is never released because most samples passed.
+After confirmation, the same sample worker may generate the single-final-annotation DEG, broad and subtype dotplots, maps and audited HTML. Each sample must independently reach `autopilot_status=COMPLETE` and `audit_release=PASS`.
 
 ## Cohort control files
 

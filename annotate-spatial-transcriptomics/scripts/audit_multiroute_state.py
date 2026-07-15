@@ -9,18 +9,23 @@ import json
 from pathlib import Path
 
 from multiroute_lib import audit_multiroute
+from validate_profile_role import load_profile
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("project_root", type=Path)
     parser.add_argument("--context", required=True, type=Path)
-    parser.add_argument("--profile", required=True, type=Path)
+    parser.add_argument("--biological-profile", type=Path)
+    parser.add_argument("--profile", type=Path, help="deprecated biological-profile alias")
     args = parser.parse_args()
+    profile_path = args.biological_profile or args.profile
+    if not profile_path:
+        raise SystemExit("--biological-profile is required")
     result = audit_multiroute(
         args.project_root,
         json.loads(args.context.read_text()),
-        json.loads(args.profile.read_text()),
+        load_profile(profile_path, "biological_evidence"),
     )
     out = args.project_root / "provenance/multiroute_audit.json"
     out.parent.mkdir(parents=True, exist_ok=True)

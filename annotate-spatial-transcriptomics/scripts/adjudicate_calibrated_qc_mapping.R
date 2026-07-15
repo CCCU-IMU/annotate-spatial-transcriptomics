@@ -119,7 +119,7 @@ mp[, `:=`(
   final_broad_label = ifelse(validated_broad_return, predicted_label_canonical, NA_character_),
   final_state = ifelse(validated_broad_return, "defined_broad_only", "qc_holdout"),
   final_confidence = ifelse(validated_broad_return & mapping_tier == "high", "high", ifelse(validated_broad_return, "medium", "low")),
-  final_action = ifelse(validated_broad_return, "postrecluster_calibrated_atlas_fullfeature_spatial_rescue", "retain_qc_after_completed_multiroute_review"),
+  final_action = ifelse(validated_broad_return, "terminal_residual_qc_atlas_broad_rescue", "retain_terminal_qc_reject"),
   fine_anchor_eligible = FALSE, x = qxy[cell_id, 1], y = qxy[cell_id, 2]
 )]
 

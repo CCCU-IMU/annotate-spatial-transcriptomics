@@ -1,0 +1,146 @@
+{
+  "catalog_id": "sheep_ovary_literature_candidate_lineages_2025_2026",
+  "catalog_schema_version": "1.0",
+  "purpose": "A literature-informed, non-exhaustive boundary audit for sheep-ovary annotation. It is not a required label list and does not imply that every candidate is present.",
+  "taxonomy_policy": {
+    "presence_is_never_required": true,
+    "negative_audit_is_valid": true,
+    "unmodeled_multigene_programs_must_be_reported": true,
+    "least_specific_honest_release_label": true,
+    "generic_rare_cell_route": false,
+    "state_patterns_are_not_lineages": [
+      "ECM-rich", "contractile-only", "stress", "hypoxia", "cell-cycle",
+      "low-RNA", "ambient", "cortical", "follicle-adjacent"
+    ]
+  },
+  "candidate_boundaries": [
+    {
+      "candidate_id": "granulosa",
+      "family": "follicular_somatic",
+      "release_level": "default_broad_candidate",
+      "profile_program": "lineages.granulosa",
+      "review_required": true,
+      "release_rule": "Coherent granulosa backbone with somatic anti-program clearance and follicular morphology; functional subtypes are optional and high-confidence only."
+    },
+    {
+      "candidate_id": "oocyte",
+      "family": "germline",
+      "release_level": "context_specific_broad_candidate",
+      "profile_program": "context_specific_identity_rules.oocyte",
+      "review_required": true,
+      "release_rule": "Use the dedicated contamination-safe route only when a multi-module candidate exists; non-ZP identity, somatic anti-program and object morphology must all pass."
+    },
+    {
+      "candidate_id": "theca_steroidogenic",
+      "family": "follicular_somatic",
+      "release_level": "evidence_dependent_broad_candidate",
+      "profile_program": "lineages.theca_steroidogenic",
+      "review_required": true,
+      "release_rule": "Require a coherent steroidogenic/androgenic program and compatible outer-follicular morphology; ECM, LHCGR or wall location alone is insufficient."
+    },
+    {
+      "candidate_id": "luteal_steroidogenic",
+      "family": "follicular_somatic",
+      "release_level": "stage_dependent_broad_candidate",
+      "profile_program": "lineages.luteal_steroidogenic",
+      "review_required": true,
+      "release_rule": "Require reproductive-stage compatibility, coherent steroidogenesis and a corpus-luteum-like structure; granulosa-lutein/theca-lutein are optional fine labels."
+    },
+    {
+      "candidate_id": "stromal_mesenchymal",
+      "family": "stromal_contractile_mural",
+      "release_level": "default_broad_candidate",
+      "profile_program": "lineages.stromal",
+      "review_required": true,
+      "release_rule": "Use as the honest generic parent after separately auditing steroidogenic, mature-contractile, mural and endothelial alternatives."
+    },
+    {
+      "candidate_id": "mesenchymal_progenitor_like",
+      "family": "stromal_contractile_mural",
+      "release_level": "evidence_dependent_broad_or_fine_candidate",
+      "profile_program": "lineages.mesenchymal_progenitor_like",
+      "review_required": true,
+      "release_rule": "Require a stable S100A4/progenitor-like program and morphology distinct from generic stroma; generic collagen/DCN/LUM is insufficient."
+    },
+    {
+      "candidate_id": "smooth_muscle",
+      "family": "stromal_contractile_mural",
+      "release_level": "evidence_dependent_broad_candidate",
+      "profile_program": "lineages.smooth_muscle",
+      "review_required": true,
+      "release_rule": "Require a mature MYH11/CNN1/ACTG2-centered contractile backbone, stable separation and coherent structural tracks."
+    },
+    {
+      "candidate_id": "pericyte_mural",
+      "family": "stromal_contractile_mural",
+      "release_level": "evidence_dependent_broad_candidate",
+      "profile_program": "lineages.pericyte_mural",
+      "review_required": true,
+      "release_rule": "Require a coherent RGS5/PDGFRB/CSPG4/NOTCH3/MCAM mural program and vascular adjacency, not ACTA2 or proximity alone."
+    },
+    {
+      "candidate_id": "vascular_endothelial",
+      "family": "vascular",
+      "release_level": "default_broad_candidate",
+      "profile_program": "lineages.blood_endothelial",
+      "review_required": true,
+      "release_rule": "Release the broad vascular/endothelial parent when a coherent endothelial backbone and branching morphology pass."
+    },
+    {
+      "candidate_id": "lymphatic_endothelial",
+      "family": "vascular",
+      "release_level": "evidence_dependent_fine_or_standalone_candidate",
+      "profile_program": "lineages.lymphatic_endothelial",
+      "review_required": true,
+      "release_rule": "Require both an endothelial backbone and coherent PROX1/FLT4/MMRN1/LYVE1/PDPN/CCL21 support; otherwise retain Vascular/endothelial."
+    },
+    {
+      "candidate_id": "immune",
+      "family": "immune",
+      "release_level": "default_broad_candidate",
+      "profile_program": "lineages.immune",
+      "review_required": true,
+      "release_rule": "Establish the broad immune lineage first; myeloid, lymphoid, plasma/B and granulocyte labels are optional high-confidence children only."
+    },
+    {
+      "candidate_id": "epithelial_mesothelial",
+      "family": "epithelial_mesothelial",
+      "release_level": "default_broad_candidate",
+      "profile_program": "lineages.epithelial_mesothelial",
+      "review_required": true,
+      "release_rule": "Require a coherent epithelial/mesothelial program and compatible surface morphology; WT1, MUC16 or an isolated keratin alone is insufficient."
+    },
+    {
+      "candidate_id": "neural_schwann_glia",
+      "family": "neural_neuroendocrine",
+      "release_level": "anatomy_dependent_broad_candidate",
+      "profile_program": "lineages.neural_schwann",
+      "review_required": true,
+      "release_rule": "Require a coherent SOX10/S100B/PLP1/MPZ-like glial program, anti-program clearance and nerve-track morphology."
+    },
+    {
+      "candidate_id": "neuroendocrine",
+      "family": "neural_neuroendocrine",
+      "release_level": "context_dependent_broad_or_fine_candidate",
+      "profile_program": "lineages.neuroendocrine",
+      "review_required": true,
+      "release_rule": "Require a CHGA/CHGB/SYP/SCG/INSM1 secretory core plus compatible morphology; isolated neuronal genes remain state evidence."
+    }
+  ],
+  "optional_high_confidence_children": {
+    "granulosa": ["cumulus-like", "mural/estrogenic", "luteinizing"],
+    "luteal_steroidogenic": ["granulosa-lutein-like", "theca-lutein-like"],
+    "immune": ["macrophage/myeloid", "T/NK", "B/plasma", "granulocyte"],
+    "vascular_endothelial": ["blood endothelial", "lymphatic endothelial"],
+    "epithelial_mesothelial": ["surface epithelial", "mesothelial-like"]
+  },
+  "literature_basis": [
+    "adult sheep whole-ovary GSE233801",
+    "Tibetan-sheep ovary multiomics 2024",
+    "sheep ovarian development iScience 2025",
+    "human-mouse ovary Science 2025",
+    "adult ovary expert review AJOG 2025",
+    "sheep-human reproductive atlas Advanced Science 2026",
+    "nine-species ovary integration 2026"
+  ]
+}

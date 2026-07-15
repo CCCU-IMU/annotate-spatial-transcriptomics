@@ -1,0 +1,79 @@
+{
+  "preset_id": "sheep_ovary_same_batch_rfirst",
+  "preset_schema_version": "1.0",
+  "profile_role": "strategy_preset",
+  "activation": "explicit_only",
+  "purpose": "Reuse the validated deidentified sheep-ovary R-first decision process for same-batch samples without copying sample-specific parameters, cluster labels or outcomes.",
+  "requires": {
+    "species_tissue": "sheep ovary",
+    "preferred_input": "full-feature Seurat RDS",
+    "fixed_preprocessing_only_if": "StereoPy cellbin_PPed raw-count carrier contract is independently verified"
+  },
+  "bound_references": {
+    "workflow_profile": "sheep_ovary_rfirst_profile.json",
+    "biological_profile": "sheep_ovary.json",
+    "candidate_lineage_catalog": "sheep_ovary_candidate_lineage_catalog.json",
+    "decision_process_reference": "sheep_ovary_rfirst_case_reference.md",
+    "standard_workflow": "sheep_ovary_standard_workflow.md"
+  },
+  "phase_order": [
+    "input_and_expression_audit",
+    "fresh_same_batch_preprocessing",
+    "adaptive_whole_tissue_resolution",
+    "clusterwise_open_world_initial_broad_annotation",
+    "initial_low_information_to_qc_holdout_without_pool_creation",
+    "one_adaptive_recluster_cohort_per_supported_broad_class",
+    "subcluster_high_confidence_fine_or_direct_broad_return",
+    "direct_cross_lineage_return_when_another_lineage_is_supported",
+    "targeted_recluster_or_calibrated_rctd_only_for_interpretable_mixture",
+    "irreducible_or_low_information_to_final_qc_holdout",
+    "residual_qc_direct_calibrated_atlas_without_qc_reclustering",
+    "final_broad_writeback_and_optional_high_confidence_fine_labels",
+    "completion_gate",
+    "post_completion_main_agent_quality_approval",
+    "lightweight_user_confirmation",
+    "final_deg_figures_and_release_report"
+  ],
+  "routing_model": "broad_then_subtype_direct_cross_lineage_then_residual_qc_atlas",
+  "persistent_biological_pools": false,
+  "membership_objects": {
+    "broad_recluster_cohort": "one immutable adaptive reclustering cohort per initial broad class",
+    "targeted_recluster_cohort": "temporary immutable subset only for a decision-relevant interpretable mixture, including Oocyte contamination-safe review",
+    "qc_holdout": "a retained state and final Atlas query boundary, never a biological pool"
+  },
+  "open_world_lineage_discovery": {
+    "candidate_catalog": "sheep_ovary_candidate_lineage_catalog.json",
+    "rule": "Review every catalog boundary in every sample and scan every unexplained multi-gene program for additional lineages. A not-supported decision is valid; absence in the reference case is not negative evidence and the catalog is not exhaustive.",
+    "candidate_trigger": "coherent multi-gene program plus anti-marker compatibility and resolution/spatial support",
+    "candidate_action": "assign an initial broad class when moderate-or-higher evidence passes; otherwise use QC holdout. Subsequent supported cross-lineage findings return directly to the target without an intermediate pool.",
+    "negative_audit_allowed": true
+  },
+  "fixed_when_same_batch_contract_is_verified": [
+    "entry_qc_contract",
+    "SCT_v2_glmGamPoi_contract",
+    "PCA_and_neighbor_construction_contract",
+    "normal_candidate_resolution_grid",
+    "route_order_and_evidence_gates",
+    "state_and_report_contract"
+  ],
+  "always_adaptive": [
+    "selected_whole_tissue_resolution",
+    "selected_broad_or_targeted_cohort_resolution",
+    "recluster_cohort_membership",
+    "anchor_membership",
+    "biological_labels",
+    "optional_subtype_depth",
+    "route_applicability_and_outcomes"
+  ],
+  "forbidden_transfer_from_reference_case": [
+    "cluster_number_to_label_mapping",
+    "selected_resolution",
+    "cell_or_cellbin_membership",
+    "label_counts_or_proportions",
+    "fine_subtype_inventory"
+  ],
+  "persistent_pool_route": "disabled globally for every new project; legacy pool registries remain migration-only provenance",
+  "generic_rare_cell_route": "disabled; Oocyte uses a temporary contamination-safe targeted cohort because zona/adjacent signal is a known confounder, not because it is rare.",
+  "quality_endpoint": "moderate-or-higher broad classes plus high-confidence fine labels only",
+  "deviation_policy": "Record a preset exception with the affected phase, current-sample evidence, reason and replacement safeguard; never silently skip or reorder a mandatory phase."
+}

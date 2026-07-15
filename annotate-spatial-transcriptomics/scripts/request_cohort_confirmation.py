@@ -31,7 +31,9 @@ def main() -> int:
     samples = []
     for row in rows:
         item = {"sample_id": row["sample_id"]}
-        for prefix in ["packet", "completion_gate"]:
+        if row.get("master_decision") != "APPROVED":
+            raise SystemExit(f"sample lacks main-Agent quality approval: {row['sample_id']}")
+        for prefix in ["packet", "completion_gate", "master_quality_approval", "confirmation_review"]:
             path = Path(row.get(f"{prefix}_path", ""))
             if not path.is_absolute():
                 path = root / path

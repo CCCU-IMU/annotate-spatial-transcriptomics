@@ -26,7 +26,7 @@ Recheck the query/reference boundary for every child pool, even when reusing a p
 
 `scripts/run_rctd_review.R` supplies a versioned local-review adapter. Require explicit query-depth `UMI_min`/`counts_MIN`; its results and weights are evidence artifacts only.
 
-Use a tiered fallback: extreme confidence plus independent current-query evidence may support a subtype; high confidence may support only a broad return; medium/low confidence proceeds to depth-matched atlas/internal-anchor mapping. If atlas also rejects it, retain it explicitly. Never equate an RCTD reject with a terminal anatomical interface without checking size and spatial locality.
+Use tiered RCTD evidence: extreme confidence plus independent current-query evidence may support a subtype; high confidence may support only a broad return; medium/low confidence enters the frozen post-clustering QC holdout. It may reach depth-matched Atlas/internal-anchor mapping only after every broad/targeted cohort is terminal and only as part of the complete final QC membership; do not recluster QC first. Never equate an RCTD reject with a terminal anatomical interface without checking size and spatial locality.
 
 ### QC holdout plus atlas
 
@@ -42,13 +42,13 @@ Use `scripts/adjudicate_multichannel_broad_rescue.py` after assembling the evide
 
 The default structural minima are two concordant channels for moderate-or-higher and three for high, but held-out precision calibration may select stricter observed thresholds. High must remain a subset of moderate-or-higher. A group without enough query-like held-out support remains rejected; do not borrow a permissive threshold from an unrelated route merely to increase coverage.
 
-For H5AD references, first use `scripts/downsample_anchors_to_query_depth.py` to create disjoint held-out **current-query anchors** matching the QC pool's count-depth distribution. `scripts/run_anchor_knn_mapping.py` creates auditable atlas/internal-anchor predictions for those anchors and the QC query; calibrate nested high/moderate tiers with `scripts/calibrate_tiered_mapping_thresholds.py` and its required origin manifest. `scripts/build_depth_matched_atlas_bundle.py` splits an external reference and is diagnostic reference-self-classification only; it cannot calibrate query rescue. The legacy `calibrate_mapping_thresholds.py` is diagnostic-only and never writeback eligible. Accepted rows remain `defined_broad_only`, `fine_anchor_eligible=false`; rejects remain QC/review. More sophisticated mapping methods may replace kNN but must obey the same disjoint query-like calibration contract.
+For H5AD references, first use `scripts/downsample_anchors_to_query_depth.py` to create disjoint held-out **current-query anchors** matching the final QC membership's count-depth distribution. `scripts/run_anchor_knn_mapping.py` creates auditable atlas/internal-anchor predictions for those anchors and the QC query; calibrate nested high/moderate tiers with `scripts/calibrate_tiered_mapping_thresholds.py` and its required origin manifest. `scripts/build_depth_matched_atlas_bundle.py` splits an external reference and is diagnostic reference-self-classification only; it cannot calibrate query rescue. The legacy `calibrate_mapping_thresholds.py` is diagnostic-only and never writeback eligible. Accepted rows remain `defined_broad_only`, `fine_anchor_eligible=false`; rejects remain QC/review. More sophisticated mapping methods may replace kNN but must obey the same disjoint query-like calibration contract.
 
 ### Retain uncertainty
 
 Use `interface_review`, `qc_holdout` or `technical_state` when evidence remains insufficient. Annotation rate is not an optimization target.
 
-Before retention, compare the proposed interface/QC fraction with the current analysis-set structure. This is a diagnostic trigger, not a quota: a large or diffuse retained pool must demonstrate that broad anchor reclustering, RCTD tiering and atlas/internal-anchor fallback were all exhausted. Do not preserve a high unresolved fraction simply to maximize specificity.
+Before retention, compare the proposed interface/QC fraction with the current analysis-set structure. This is a diagnostic trigger, not a quota: a large or diffuse retained pool must demonstrate that broad anchor reclustering, RCTD tiering, complete QC-holdout anchor reclustering and residual-QC-only Atlas/internal-anchor review were all exhausted in that order. Do not preserve a high unresolved fraction simply to maximize specificity.
 
 ## Contamination and ambient signal
 

@@ -48,10 +48,8 @@ max_cells <- as.integer(ifelse(is.null(a$`max-cells-per-ident`), 3000, a$`max-ce
 set.seed(seed)
 
 prefix <- ifelse(is.null(a$prefix), "", paste0(a$prefix, "_"))
-analysis_view <- ifelse(is.null(a$`analysis-view`),
-                        ifelse(nzchar(prefix), sub("_$", "", prefix), "provided_labels"),
-                        a$`analysis-view`)
-evidence_cohort <- ifelse(is.null(a$`evidence-cohort`), "provided_metadata", a$`evidence-cohort`)
+analysis_view <- ifelse(is.null(a$`analysis-view`), "final", a$`analysis-view`)
+evidence_cohort <- ifelse(is.null(a$`evidence-cohort`), "all_accepted_final_broad", a$`evidence-cohort`)
 
 if (inherits(obj, "Seurat")) {
   assay <- ifelse(is.null(a$assay), DefaultAssay(obj), a$assay)
@@ -129,5 +127,72 @@ write_level <- function(level, column) {
 }
 
 write_level("broad", a$`broad-col`)
-write_level("subtype", a$`subtype-col`)
+
+write_subtype_level <- function(column, broad_column) {
+  fine <- as.character(meta[[column]])
+  broad <- as.character(meta[[broad_column]])
+  labs <- sort(unique(fine[!is.na(fine) & nzchar(fine)]))
+  if (!length(labs)) {
+    message("No high-confidence final fine labels; subtype DEG is correctly omitted")
+    return(invisible(NULL))
+  }
+  if (length(labs) < 2L) stop("A released fine label requires at least one other high-confidence fine-label comparator for final subtype DEG")
+  results <- list()
+  for (lab in labs) {
+    parents <- unique(broad[fine == lab & !is.na(fine)])
+    parents <- parents[!is.na(parents) & nzchar(parents)]
+    if (length(parents) != 1L) stop("Fine label must have exactly one broad parent: ", lab)
+    parent <- parents[[1]]
+    target <- !is.na(fine) & fine == lab & !is.na(broad) & broad == parent
+    other_fine <- !is.na(fine) & nzchar(fine) & fine != lab
+    within_parent <- other_fine & !is.na(broad) & broad == parent
+    comparator <- if (any(within_parent)) within_parent else other_fine
+    comparison_name <- if (any(within_parent)) "within_parent_high_confidence_fine_rest" else "global_high_confidence_fine_rest"
+    cohort <- target | comparator
+    if (!any(target) || !any(comparator)) stop("No eligible high-confidence fine-label comparator for released fine label: ", lab)
+    if (inherits(obj, "Seurat")) {
+      query_cells <- cells[cohort]
+      query <- subset(obj, cells = query_cells)
+      DefaultAssay(query) <- assay
+      group <- ifelse(target[cohort], lab, "__parent_rest__")
+      Idents(query) <- factor(setNames(group, query_cells)[colnames(query)], levels = c(lab, "__parent_rest__"))
+      part <- as.data.table(FindMarkers(
+        query, ident.1 = lab, ident.2 = "__parent_rest__", assay = assay, slot = data_layer,
+        only.pos = TRUE, test.use = "wilcox", min.pct = 0.05, logfc.threshold = 0.1,
+        max.cells.per.ident = max_cells, random.seed = seed, densify = FALSE, verbose = TRUE
+      ), keep.rownames = "gene")
+    } else {
+      available <- SummarizedExperiment::assayNames(obj)
+      data_name <- if (!is.null(a$`data-assay`)) a$`data-assay` else if ("normcounts" %in% available) "normcounts" else if ("logcounts" %in% available) "logcounts" else stop("Specify --data-assay")
+      count_name <- if (!is.null(a$`count-assay`)) a$`count-assay` else "counts"
+      normalized <- SummarizedExperiment::assay(obj, data_name)[, cells, drop = FALSE]
+      counts <- SummarizedExperiment::assay(obj, count_name)[, cells, drop = FALSE]
+      target_mean <- Matrix::rowMeans(normalized[, target, drop = FALSE])
+      rest_mean <- Matrix::rowMeans(normalized[, comparator, drop = FALSE])
+      part <- data.table(
+        gene = rownames(obj), avg_expression = target_mean,
+        pct_expressed_absolute = 100 * Matrix::rowMeans(counts[, target, drop = FALSE] > 0),
+        avg_expression_rest = rest_mean,
+        avg_log2FC = log2((target_mean + 1e-4) / (rest_mean + 1e-4))
+      )[avg_log2FC > 0]
+    }
+    part[, `:=`(
+      label = lab, broad_parent = parent, comparison = comparison_name,
+      n_observations = sum(target), n_comparator = sum(comparator),
+      analysis_view = "final", evidence_cohort = "high_confidence_fine_only"
+    )]
+    results[[lab]] <- part
+  }
+  deg <- rbindlist(results, fill = TRUE)
+  fwrite(deg, file.path(a$out, "tables", paste0(prefix, "subtype_DEG_one_vs_rest_all.tsv")), sep = "\t")
+  lfc_column <- intersect(c("avg_log2FC", "avg_logFC"), names(deg))[1]
+  if ("p_val_adj" %in% names(deg)) {
+    top <- deg[p_val_adj < 0.05 & get(lfc_column) > 0][order(label, p_val_adj, -get(lfc_column)), head(.SD, 100), by = label]
+  } else {
+    top <- deg[order(label, -get(lfc_column)), head(.SD, 100), by = label]
+  }
+  fwrite(top, file.path(a$out, "tables", paste0(prefix, "subtype_DEG_top100.tsv")), sep = "\t")
+}
+
+write_subtype_level(a$`subtype-col`, a$`broad-col`)
 capture.output(sessionInfo(), file = file.path(a$out, "provenance", "DEG_sessionInfo.txt"))
