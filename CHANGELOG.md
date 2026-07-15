@@ -8,7 +8,7 @@
 - Added direct cross-lineage return without intermediate target pools or automatic repeat reclustering.
 - Reworked Skill entry, R-first guide, state contract, iteration planner, completion gate, master review and report around the same architecture.
 - Preserved old pool/branch registries only as migration provenance.
-- Declared clean-runner regression-test dependencies, made them part of repository validation, and removed duplicate PR-branch `push` checks while retaining validation on `main`.
+- Declared clean-runner regression-test dependencies, made them mandatory in both PR validation and Release packaging, and removed duplicate PR-branch `push` checks while retaining validation on `main`.
 
 ## 1.5.1 — 2026-07-15
 
