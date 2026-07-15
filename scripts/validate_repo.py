@@ -27,6 +27,7 @@ def main() -> int:
     problems: list[str] = []
     required = [
         ROOT / "README.md",
+        ROOT / "requirements-ci.txt",
         ROOT / "install.sh",
         ROOT / "LICENSE",
         SKILL / "SKILL.md",

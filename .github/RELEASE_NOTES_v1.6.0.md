@@ -9,5 +9,6 @@ This release makes the direct-lineage cohort controller the single architecture 
 - Terminal residual QC goes directly to calibrated Atlas review without mandatory QC reclustering.
 - RCTD extreme plus independent evidence may support fine, high supports broad-only, and medium/low enters QC.
 - State, planner, completion, master-review and report contracts now bind cohort/direct-return provenance.
+- Clean GitHub runners now install declared regression-test dependencies before validating report contracts; PR branches run one validation check instead of duplicate push and pull-request checks.
 
 Historical pool registries remain readable for migration but are not active routing instructions.

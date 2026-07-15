@@ -355,9 +355,13 @@ python scripts/verify_install.py "${CODEX_HOME:-$HOME/.codex}/skills/annotate-sp
 发布前验证：
 
 ```bash
+python -m pip install -r requirements-ci.txt
 python scripts/validate_repo.py
+PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v
 bash -n install.sh
 ```
+
+GitHub Actions 使用 Python 3.11 和仓库内的 `requirements-ci.txt` 建立干净验证环境。该依赖文件包含报告元数据与发布合同测试实际导入的包；发布测试不得因缺少可选依赖而静默跳过关键合同。
 
 对 Skill 的重要更新必须用新 Agent 做 forward test：只给它原始输入与 Skill，不给预期聚类选择和注释答案；评价其是否能自主完成多轮分流、恢复失败、控制稀有谱系和产出完整报告，而不是是否复现某个旧项目的标签。
 
