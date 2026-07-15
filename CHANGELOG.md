@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0 — 2026-07-15
+
+- Replaced persistent biological review pools with one default direct-lineage architecture for every new project.
+- Added immutable broad-class/targeted cohort and direct-return registries plus a fail-closed workflow validator.
+- Removed mandatory QC reclustering before terminal Atlas rescue; moderate-or-higher Atlas returns remain broad-only and low confidence remains QC.
+- Added direct cross-lineage return without intermediate target pools or automatic repeat reclustering.
+- Reworked Skill entry, R-first guide, state contract, iteration planner, completion gate, master review and report around the same architecture.
+- Preserved old pool/branch registries only as migration provenance.
+
 ## 1.5.1 — 2026-07-15
 
 - 新增逐样本主 Agent 注释质量审批硬门：仅在池重聚类、适用的 Route A–D、救回写回、单一最终注释及 completion gate 全部完成后触发，禁止在仅完成大类注释时提前审批。

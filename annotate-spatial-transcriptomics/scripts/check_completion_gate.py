@@ -3,7 +3,7 @@
 from __future__ import annotations
 import argparse,csv,hashlib,json,re
 from pathlib import Path
-from multiroute_lib import audit_multiroute
+from validate_direct_lineage_workflow import audit as audit_direct_lineage
 from validate_incident_registry import validate as validate_incidents
 from validate_profile_role import load_profile
 
@@ -21,7 +21,7 @@ def sha256(path):
         for b in iter(lambda:f.read(1024*1024),b""):h.update(b)
     return h.hexdigest()
 def main():
-    p=argparse.ArgumentParser();p.add_argument("project_root",type=Path);p.add_argument("--context",type=Path);p.add_argument("--biological-profile",type=Path);p.add_argument("--profile",type=Path,help="deprecated alias; must still be a biological_evidence profile");a=p.parse_args();r=a.project_root;errors=[];all_clusters=read(r/"state/cluster_decision_ledger.tsv");clusters=active_decisions(all_clusters);pools=read(r/"state/pool_registry.tsv");runs=read(r/"state/run_registry.tsv");queue=read(r/"state/next_action_queue.tsv")
+    p=argparse.ArgumentParser();p.add_argument("project_root",type=Path);p.add_argument("--context",type=Path);p.add_argument("--biological-profile",type=Path);p.add_argument("--profile",type=Path,help="deprecated alias; must still be a biological_evidence profile");a=p.parse_args();r=a.project_root;errors=[];all_clusters=read(r/"state/cluster_decision_ledger.tsv");clusters=active_decisions(all_clusters);cohorts=read(r/"state/recluster_cohort_registry.tsv");returns=read(r/"state/direct_return_registry.tsv");runs=read(r/"state/run_registry.tsv");queue=read(r/"state/next_action_queue.tsv")
     project_path=r/"config/project.json";project=json.loads(project_path.read_text()) if project_path.exists() else {};preset_requested=project.get("strategy_preset_requested","");preset_record={}
     if preset_requested:
         preset_path=r/"config/active_strategy_preset.json"
@@ -61,14 +61,15 @@ def main():
                 + str(review_gate.get("required_next_action", review_gate.get("reason", "unspecified review")))
             )
     profile_path=a.biological_profile or a.profile;profile={}
+    direct_workflow = project.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts"}
+    if not direct_workflow:errors.append("legacy pool-routing project must be migrated to the direct-lineage cohort architecture before completion")
     if profile_path:
         try:profile=load_profile(profile_path,"biological_evidence")
         except Exception as exc:errors.append(f"invalid biological profile binding: {exc}")
-        multi=audit_multiroute(r,context,profile);gap_routes={}
-        for gap in multi.get("gaps",[]):gap_routes.setdefault(gap.get("decision_id",""),set()).add(gap.get("required_route",""))
-    else:multi={"status":"NOT_RUN"};gap_routes={}
+    multi=audit_direct_lineage(r);gap_routes={}
+    for gap in multi.get("gaps",[]):gap_routes.setdefault(gap.get("decision_id",""),set()).add(gap.get("required_route",""))
     if context.get("profile") and not profile_path:errors.append("biological --profile is required for profiled completion")
-    if profile.get("multi_route_policy",{}).get("incident_registry_required",False):
+    if profile.get("annotation_workflow_policy",{}).get("incident_registry_required",False):
         incident_path=r/"provenance/incidents/incident_registry.tsv"
         incident=validate_incidents(incident_path)
         (r/"provenance/incident_registry_validation.json").write_text(json.dumps(incident,ensure_ascii=False,indent=2)+"\n")
@@ -90,8 +91,6 @@ def main():
                 try:object_ok=float(x.get("spatial_object_count",0) or 0)>0 and "not" in x.get("count_interpretation","").lower()
                 except ValueError:object_ok=False
                 if not object_ok:errors.append(f"rare-cell cluster {x.get('source_cluster')} lacks object-level count interpretation")
-    for x in pools:
-        if x.get("status") not in {"closed_and_frozen","explicitly_retained_closed"}:errors.append(f"pool {x.get('pool_id')} remains {x.get('status')}")
     for x in runs:
         if x.get("status") not in {"validated_done","failed_preserved","cancelled_preserved"}:errors.append(f"run {x.get('run_id')} remains {x.get('status')}")
     required=["provenance/state_validation.json"]
@@ -119,7 +118,7 @@ def main():
             if taxonomy_metadata!=cell_ledger.resolve():errors.append("release taxonomy audit was not run on the current cell ledger")
             if not cell_ledger.exists() or taxonomy.get("metadata_sha256")!=sha256(cell_ledger):errors.append("release taxonomy audit is stale for state/cell_ledger.tsv.gz")
             if taxonomy.get("profile_sha256")!=sha256(profile_path):errors.append("release taxonomy audit is stale for the active biological profile")
-        (r/"provenance/multiroute_audit.json").write_text(json.dumps(multi,ensure_ascii=False,indent=2)+"\n")
-        if multi.get("status")!="PASS":errors.append(f"multi-route completion is blocked: {len(multi.get('gaps',[]))} route gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
-    result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"pools":len(pools),"runs":len(runs),"multiroute_status":multi.get("status"),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context};(r/"provenance/completion_gate.json").parent.mkdir(parents=True,exist_ok=True);(r/"provenance/completion_gate.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n");print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not errors else 2
+    (r/"provenance/direct_lineage_workflow_audit.json").write_text(json.dumps(multi,ensure_ascii=False,indent=2)+"\n")
+    if multi.get("status")!="PASS":errors.append(f"annotation workflow completion is blocked: {len(multi.get('gaps',[]))} gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
+    result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"recluster_cohorts":len(cohorts),"direct_returns":len(returns),"persistent_biological_pools":False,"runs":len(runs),"annotation_workflow_status":multi.get("status"),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context};(r/"provenance/completion_gate.json").parent.mkdir(parents=True,exist_ok=True);(r/"provenance/completion_gate.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n");print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not errors else 2
 if __name__=="__main__":raise SystemExit(main())

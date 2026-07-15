@@ -49,10 +49,14 @@ def main() -> int:
     root = args.release_root.resolve(); errors = []
     config_path = root / "config/project.json"
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
+    workflow_required = config.get(
+        "annotation_workflow_completion_required",
+        config.get("multi_route_completion_required", False),
+    )
     final_census_path = root / "tables/final_annotation_census.tsv"
     final_census = read_tsv(final_census_path) if final_census_path.exists() else []
     has_final_fine = any(row.get("fine_label", "") and int(float(row.get("n_observations", 0) or 0)) > 0 for row in final_census)
-    subtype_required = has_final_fine if config.get("multi_route_completion_required") else True
+    subtype_required = has_final_fine if workflow_required else True
     def req(ok, msg):
         if not ok: errors.append(msg)
     report = root / "report/index.html"
@@ -121,18 +125,18 @@ def main() -> int:
                 req(target.is_file(), f"confirmed snapshot target is missing: {key}")
                 if target.is_file():
                     req(sha256(target) == confirmation.get(hash_key), f"confirmed snapshot is stale: {key}")
-        if config.get("multi_route_completion_required"):
+        if workflow_required:
             req(final_census_path.exists() and bool(final_census), "missing or empty single-final-annotation census")
-            multi_path = root / "provenance/multiroute_audit.json"
-            req(multi_path.exists(), "missing multi-route audit")
-            if multi_path.exists(): req(json.loads(multi_path.read_text()).get("status") == "PASS", "multi-route audit did not pass")
-            for name in ["state/route_attempt_registry.tsv", "state/branch_control_board.tsv", "state/workflow_event_registry.tsv", "state/annotation_view_registry.tsv", "state/annotation_support_registry.tsv"]:
-                req((root/name).exists(), f"missing multi-route registry: {name}")
+            workflow_path = root / "provenance/direct_lineage_workflow_audit.json"
+            req(workflow_path.exists(), "missing direct-lineage workflow audit")
+            if workflow_path.exists(): req(json.loads(workflow_path.read_text()).get("status") == "PASS", "direct-lineage workflow audit did not pass")
+            for name in ["state/recluster_cohort_registry.tsv", "state/direct_return_registry.tsv", "state/route_attempt_registry.tsv", "state/workflow_event_registry.tsv", "state/annotation_view_registry.tsv", "state/annotation_support_registry.tsv"]:
+                req((root/name).exists(), f"missing annotation workflow registry: {name}")
             route_rows = read_tsv(root/"state/route_attempt_registry.tsv") if (root/"state/route_attempt_registry.tsv").exists() else []
             event_rows = read_tsv(root/"state/workflow_event_registry.tsv") if (root/"state/workflow_event_registry.tsv").exists() else []
             view_rows = read_tsv(root/"state/annotation_view_registry.tsv") if (root/"state/annotation_view_registry.tsv").exists() else []
-            req(bool(route_rows), "multi-route release has no route attempts")
-            req(bool(event_rows), "multi-route release has no workflow events")
+            req(bool(route_rows), "annotation release has no terminal assisted-route record, including zero-query Atlas audit")
+            req(bool(event_rows), "annotation release has no workflow events")
             req("final" in {x.get("view") for x in view_rows if x.get("status")=="validated"}, "single final annotation is not validated")
             req(all(x.get("analysis_view")=="final" for x in assets), "mandatory marker dotplots must use the final annotation")
             scope_path = root / "provenance/analysis_scope_policy.json"
@@ -189,11 +193,11 @@ def main() -> int:
         if subtype_required:
             required_combos.update({("subtype", "canonical"), ("subtype", "data_specific")})
         req(required_combos.issubset(combos), "full release requires canonical and data-specific dotplots for broad and every released high-confidence subtype level")
-        if not config.get("multi_route_completion_required"):
+        if not workflow_required:
             req(any_file("tables/broad_DEG_one_vs_rest_all.tsv*"), "missing broad one-vs-rest DEG")
             req(any_file("tables/subtype_DEG_one_vs_rest_all.tsv*"), "missing subtype one-vs-rest DEG")
         req(any_file("state/cell_ledger.tsv*", 1000) or any_file("tables/cell_ledger.tsv*", 1000) or any_file("tables/cell_metadata*.tsv*", 1000), "missing cell-level ledger")
-        for name in ["state/pool_registry.tsv","state/run_registry.tsv","state/next_action_queue.tsv","state/master_quality_approval.json","state/final_annotation_confirmation.json","state/annotation_support_registry.tsv","review/confirmation/index.html","provenance/confirmation_review_manifest.json","provenance/full_feature_validation.json","provenance/release_manifest.tsv","provenance/checksums.sha256","provenance/release_sessionInfo.txt"]:
+        for name in ["state/recluster_cohort_registry.tsv","state/direct_return_registry.tsv","state/run_registry.tsv","state/next_action_queue.tsv","state/master_quality_approval.json","state/final_annotation_confirmation.json","state/annotation_support_registry.tsv","review/confirmation/index.html","provenance/confirmation_review_manifest.json","provenance/full_feature_validation.json","provenance/release_manifest.tsv","provenance/checksums.sha256","provenance/release_sessionInfo.txt"]:
             req((root/name).exists(),f"missing full-release provenance: {name}")
         feature_validation = root / "provenance/full_feature_validation.json"
         if feature_validation.exists():
@@ -226,8 +230,8 @@ def main() -> int:
             req("state/annotation_support_registry.tsv" in checksum_set, "checksums do not cover annotation support reasons")
             req("review/confirmation/index.html" in checksum_set, "checksums do not cover the pre-confirmation review")
             req(any(x.startswith("state/cell_ledger.tsv") for x in checksum_set), "checksums do not cover the cell ledger")
-            broad_deg_prefixes=["tables/final_broad_DEG_one_vs_rest_all.tsv","tables/broad_DEG_one_vs_rest_all.tsv"] if config.get("multi_route_completion_required") else ["tables/broad_DEG_one_vs_rest_all.tsv"]
-            subtype_deg_prefixes=["tables/final_subtype_DEG_one_vs_rest_all.tsv","tables/subtype_DEG_one_vs_rest_all.tsv"] if config.get("multi_route_completion_required") else ["tables/subtype_DEG_one_vs_rest_all.tsv"]
+            broad_deg_prefixes=["tables/final_broad_DEG_one_vs_rest_all.tsv","tables/broad_DEG_one_vs_rest_all.tsv"] if workflow_required else ["tables/broad_DEG_one_vs_rest_all.tsv"]
+            subtype_deg_prefixes=["tables/final_subtype_DEG_one_vs_rest_all.tsv","tables/subtype_DEG_one_vs_rest_all.tsv"] if workflow_required else ["tables/subtype_DEG_one_vs_rest_all.tsv"]
             req(any(any(x.startswith(prefix) for prefix in broad_deg_prefixes) for x in checksum_set), "checksums do not cover broad DEG")
             if subtype_required:
                 req(any(any(x.startswith(prefix) for prefix in subtype_deg_prefixes) for x in checksum_set), "checksums do not cover subtype DEG")
@@ -252,8 +256,8 @@ def main() -> int:
             req((root/"tables/spatial_gene_asset_index.tsv").exists(), "missing spatial gene index")
     if report.exists():
         report_text=report.read_text(encoding="utf-8")
-        if args.profile=="full" and (root/"config/project.json").exists() and json.loads((root/"config/project.json").read_text()).get("multi_route_completion_required"):
-            for section in ["id='final'","id='routes'","id='workflow'"]:req(section in report_text,f"report lacks required multi-route section {section}")
+        if args.profile=="full" and workflow_required:
+            for section in ["id='final'","id='routes'","id='workflow'"]:req(section in report_text,f"report lacks required annotation-workflow section {section}")
         parser = Links(); parser.feed(report.read_text(encoding="utf-8"))
         for value in parser.paths:
             req((report.parent / value).resolve().exists(), f"broken report link: {value}")

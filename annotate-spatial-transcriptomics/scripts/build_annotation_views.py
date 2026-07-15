@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Legacy v1.1-v1.4 three-view migration helper; never use for a v1.5 release."""
+"""Legacy v1.1-v1.4 three-view migration helper; never use for a current release."""
 
 from __future__ import annotations
 

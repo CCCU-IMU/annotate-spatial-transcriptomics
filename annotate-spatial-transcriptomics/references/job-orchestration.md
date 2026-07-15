@@ -48,7 +48,7 @@ name. `Ann` is the execution attempt and increments after a preserved failure.
 | P10/P11 | SCT/SCTQC | SCT preprocessing and its validation |
 | P20/P21 | RESGRID/RESEVID | resolution grid and candidate evidence |
 | P30 | BROAD | broad-class evidence/adjudication compute |
-| P40/P41 | POOL/POOLQC | pool reclustering and validation |
+| P40/P41 | COHORT/TARGET | broad-class or targeted cohort reclustering/validation; legacy `POOL/POOLQC` names remain readable |
 | P50/P51 | RCTD/ATLAS | reference-assisted routes |
 | P60 | RARE | legacy job-name compatibility only; do not create a generic rare-cell route |
 | P61 | CONTEXT | open-world lineage audit or triggered Oocyte/context-specific validation |
@@ -57,7 +57,7 @@ name. `Ann` is the execution attempt and increments after a preserved failure.
 | P90/P99 | REPORT/AUDIT | report assembly and release audit |
 
 Examples: `SAMPLE1__P10_SCT__A01`,
-`SAMPLE1__P40_POOL_stromal__A02`, and
+`SAMPLE1__P40_COHORT_stromal__A02`, and
 `SAMPLE1__P81_DOTPLOT_broad__A01`. Names such as `sct_preprocess_v0`,
 `validate_v001`, or a script filename are forbidden because they hide the
 workflow phase. The detailed `run_id` may be longer, but it does not replace

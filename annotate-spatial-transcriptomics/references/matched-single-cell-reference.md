@@ -42,7 +42,7 @@ The matched reference is normally the strongest **external** channel, but it doe
 
 Build depth-matched held-out reference cells only to diagnose reference separability. Final rescue thresholds require disjoint held-out current-query anchors with frozen truth, target membership and an origin manifest. Derive score and margin thresholds per route and candidate broad class from those query-like anchors. Reference self-classification is never an acceptable final calibration target.
 
-For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel after current-query anchors **when the residual-QC Atlas/reference-rescue route is actually reached**. It may provide marker/anti-marker evidence elsewhere, but cell-level transfer is not run routinely on defined broad/fine cells or ordinary biological pools. If the matched artifact is only a dotplot, it remains marker/anti-marker evidence and GSE233801 is the primary public adult-sheep somatic Atlas only for the residual post-QC-anchor holdout. GSE233801 does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
+For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel **only when every broad/targeted cohort is terminal and the final residual-QC reference-rescue step is reached**. It may provide marker/anti-marker evidence elsewhere, but cell-level transfer is not run on defined broad/fine cells. If the matched artifact is only a dotplot, it remains marker/anti-marker evidence and GSE233801 is the primary public adult-sheep somatic Atlas for the complete terminal residual QC membership. QC is not reclustered first. GSE233801 does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
 
 The default crosswalk ceiling is `broad_only_after_calibration`. A reference prediction may return a broad label only when:
 
@@ -51,7 +51,7 @@ The default crosswalk ceiling is `broad_only_after_calibration`. A reference pre
 - at least one independent query/internal-anchor or observed-density spatial channel agrees; and
 - the result does not violate a rare/context-specific tissue gate.
 
-Transferred observations set `fine_anchor_eligible=false`. A fine label requires current-query full-feature evidence, pool-specific stability and morphology; reference agreement is supporting evidence only.
+Transferred observations set `fine_anchor_eligible=false`. A fine label requires current-query full-feature evidence, cohort-specific stability and morphology; reference agreement is supporting evidence only.
 
 ## Reporting
 

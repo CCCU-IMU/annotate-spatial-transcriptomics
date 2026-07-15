@@ -126,6 +126,13 @@ def main() -> int:
         actions.append({"priority": str(len(actions) + 1), "phase": phase, "command": command, "reason": reason})
 
     project = root / "config/project.json"
+    project_config = {}
+    if project.is_file():
+        try:
+            project_config = json.loads(project.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            project_config = {}
+    direct_workflow = project_config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts"}
     context = root / "config/biological_context.json"
     context_validation = root / "provenance/biological_context_validation.json"
     discovery = root / "input_discovery"
@@ -133,7 +140,8 @@ def main() -> int:
     cell_ledger = root / "state/cell_ledger.tsv.gz"
     run_registry = root / "state/run_registry.tsv"
     route_registry = root / "state/route_attempt_registry.tsv"
-    pool_registry = root / "state/pool_registry.tsv"
+    cohort_registry = root / "state/recluster_cohort_registry.tsv"
+    direct_return_registry = root / "state/direct_return_registry.tsv"
     view_registry = root / "state/annotation_view_registry.tsv"
     state_validation = root / "provenance/state_validation.json"
     iteration_plan = root / "provenance/iteration_plan.json"
@@ -157,6 +165,8 @@ def main() -> int:
 
     if not project.exists():
         add("initialize", "discover_inputs.py, then init_annotation_project.py", "project configuration is missing")
+    elif not direct_workflow:
+        add("legacy_migration", "freeze legacy pool state, migrate memberships to versioned cohorts/direct returns, then update routing_model", "current projects cannot complete under the retired persistent-pool controller")
     if not discovery.exists() or not any(discovery.rglob("*")):
         add("discover", "discover_inputs.py", "frozen input discovery inventory is missing")
     if not context.exists():
@@ -165,7 +175,7 @@ def main() -> int:
         add("context", "validate_biological_context.py", "biological context has not passed validation")
 
     if not cluster_ledger.exists() or not cell_ledger.exists():
-        add("broad_annotation", "select clustering and write the initial broad/pool ledgers", "cell- and cluster-level annotation state is incomplete")
+        add("broad_annotation", "select clustering and write direct initial broad/QC decisions", "cell- and cluster-level annotation state is incomplete")
 
     runs = read_tsv(run_registry)
     unfinished = [row for row in runs if row.get("status", "") not in TERMINAL_RUN_STATES]
@@ -209,13 +219,14 @@ def main() -> int:
     # run registry without making the biological snapshot stale. Unfinished
     # jobs are still caught by run_control, and the final manifest/audit still
     # depend on the current run registry.
-    state_dependencies = [cluster_ledger, cell_ledger, pool_registry, route_registry, view_registry, final_census]
+    routing_dependencies = [cohort_registry, direct_return_registry]
+    state_dependencies = [cluster_ledger, cell_ledger, route_registry, view_registry, final_census] + routing_dependencies
     if not user_confirmed or unexpected_post_confirmation:
         state_dependencies.append(run_registry)
     if cluster_ledger.exists() and cell_ledger.exists() and (stale(state_validation, state_dependencies) or json_status(state_validation) != "PASS"):
         add("state_validation", "validate_state.py", "state validation is missing, failed or stale after a writeback")
 
-    planning_dependencies = [cluster_ledger, pool_registry, route_registry, view_registry, state_validation]
+    planning_dependencies = [cluster_ledger, route_registry, view_registry, state_validation] + routing_dependencies
     if cluster_ledger.exists() and (stale(iteration_plan, planning_dependencies) or json_status(iteration_plan) not in {"READY_FOR_COMPLETION_AUDIT", "ITERATION_REQUIRED"}):
         add("iteration_planning", "plan_next_iteration.py", "the next-action plan is missing, invalid or stale")
     queued = read_tsv(queue)
@@ -228,8 +239,8 @@ def main() -> int:
     ):
         add(
             "release_taxonomy_audit",
-            "audit_release_taxonomy.py state/cell_ledger.tsv.gz --profile ACTIVE_BIOLOGICAL_PROFILE --broad-column final_broad_label --status-column final_state --pool-column target_pool --out provenance/release_taxonomy_audit.json",
-            "biological broad classes and retained anatomical/QC/technical states have not passed the current taxonomy/pool audit",
+            "audit_release_taxonomy.py state/cell_ledger.tsv.gz --profile ACTIVE_BIOLOGICAL_PROFILE --broad-column final_broad_label --status-column final_state --cohort-column recluster_cohort_id --out provenance/release_taxonomy_audit.json",
+            "biological broad classes and retained anatomical/QC/technical states have not passed the current taxonomy/cohort audit",
         )
 
     completion_dependencies = planning_dependencies + [iteration_plan, queue, taxonomy_audit]

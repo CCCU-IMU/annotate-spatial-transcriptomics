@@ -29,7 +29,7 @@ def main() -> int:
         if args.scope == "whole_tissue":
             expected = profile["stereopy_cellbin_pped_contract"]["clustering"]["candidate_resolutions"]
         else:
-            expected = profile["pool_reclustering_contract"]["candidate_resolutions"]
+            expected = profile["cohort_reclustering_contract"]["candidate_resolutions"]
         observed = parse_grid(args.resolutions)
         expected = [float(value) for value in expected]
         if observed != expected:

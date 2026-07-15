@@ -87,12 +87,12 @@ needed, which is why a running SCT/PCA job may not encounter the issue yet.
 ## Parameters that remain adaptive
 
 Batch harmonisation does not mean copying biological decisions. The following
-must be selected from each sample or parent pool:
+must be selected from each sample or broad/targeted cohort:
 
 - the final broad-class resolution;
-- pool membership and anchor composition;
-- pool-specific resolution grids and the selected pool resolution;
-- the number of PCs for small/rare pools when fewer than 30 are supported;
+- cohort membership and anchor composition;
+- cohort-specific resolution grids and the selected cohort resolution;
+- the number of PCs for small cohorts when fewer than 30 are supported;
 - biological labels, merges, subtypes and confidence.
 
 Select the lowest-complexity broad resolution that preserves defensible
@@ -104,9 +104,9 @@ fewer than 100 observations. Rare oocyte, immune, endothelial or epithelial
 populations may be small. Record a `small_cluster_review` flag and adjudicate it
 biologically.
 
-## Pool and balanced-anchor profile
+## Broad-class and targeted-cohort profile
 
-Pool reclustering begins again from the parent object's `Spatial` counts. When
+Each cohort reclustering begins again from the parent object's `Spatial` counts. When
 anchors are present, anchors and query are jointly SCT/PCA fitted, while the
 neighbour graph, Leiden clusters, UMAP and DEG are query-only.
 
@@ -115,20 +115,20 @@ Use these defaults:
 - `SCTransform(vst.flavor="v2", method="glmGamPoi")`;
 - `ncells=min(50000, n_query_plus_anchors)`;
 - `conserve.memory=TRUE`, `return.only.var.genes=TRUE`;
-- 1,500 SCT variable features for a pool below 1,000 observations, otherwise
+- 1,500 SCT variable features for a cohort below 1,000 observations, otherwise
   3,000; a balanced-anchor round may use 2,500 below 5,000 joint observations
   and 3,500 otherwise when the richer anchor boundary requires it;
-- at most 30 PCs for ordinary pools, at most 25 for shallow immune pools, and
-  at most 15 for strict oocyte candidates, constrained by pool size and feature
+- at most 30 PCs for ordinary cohorts, at most 25 for shallow immune cohorts, and
+  at most 15 for the Oocyte targeted cohort, constrained by cohort size and feature
   rank;
 - adaptive `k=min(30, max(5, floor(sqrt(n_query))))`; cap strict oocyte
   candidates at 20;
 - Annoy cosine neighbours with 50 trees and Leiden algorithm 4;
 - UMAP cosine with `min.dist=0.3`; `0.2` may be used for strict small oocyte
   candidates;
-- for sheep ovary, run the complete formal grid `0.1,0.2,0.3,0.4,0.6` in every pool and choose the final value from current-pool evidence. Pass `--resolution-contract sheep_ovary`; adapt PCs and k, not the formal resolution candidates. A value below 0.1 is a graph-repair trigger, not an analysis candidate.
+- for sheep ovary, run the complete formal grid `0.1,0.2,0.3,0.4,0.6` in every broad/targeted cohort and choose the final value from current-cohort evidence. Pass `--resolution-contract sheep_ovary`; adapt PCs and k, not the formal resolution candidates. A value below 0.1 is a graph-repair trigger, not an analysis candidate. Final QC is not reclustered.
 
-The portable `scripts/run_seurat_pool_recluster.R` exposes these controls. Its
+The portable `scripts/run_seurat_cohort_recluster.R` exposes these controls. Its
 default SCT route fails closed if `glmGamPoi` is unavailable; silently changing
 the SCT model would break batch comparability.
 
@@ -139,4 +139,4 @@ SCT flavour and method, variable-feature count, SCT fitting sample size, PCA
 components computed/used, neighbour metric and implementation, candidate
 resolutions, seeds, software versions, analysis-set observation IDs and their
 hash. Keep initial QC exclusions in the full ledger; do not relabel them as a
-post-clustering unresolved pool.
+post-clustering biological population.

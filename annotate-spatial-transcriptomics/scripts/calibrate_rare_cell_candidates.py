@@ -67,12 +67,12 @@ def main() -> None:
 
     candidates["strict_seed_calibrated"] = strict_seed.to_numpy()
     candidates["strict_seed_group_expanded"] = seed_group_expanded.to_numpy()
-    candidates["full_candidate_recluster_member"] = True
-    candidates["candidate_pool_role"] = "full_starting_gate_recluster_pool"
+    candidates["full_targeted_cohort_member"] = True
+    candidates["targeted_cohort_role"] = "full_starting_gate_targeted_recluster_cohort"
 
     # Canonical R-first membership: the complete starting gate is reclustered.
     candidates.to_csv(
-        args.out / "rare_candidate_recluster_pool.tsv.gz",
+        args.out / "oocyte_targeted_recluster_cohort.tsv.gz",
         sep="\t",
         index=False,
         compression="gzip",
@@ -80,9 +80,9 @@ def main() -> None:
 
     # Backward-compatible seed-focus artifact.  This is supporting evidence,
     # not the canonical recluster membership or a final rare-cell call.
-    focus_pool = candidates.loc[seed_group_expanded].copy()
-    focus_pool.to_csv(
-        args.out / "calibrated_rare_focus_pool.tsv.gz",
+    focus_support = candidates.loc[seed_group_expanded].copy()
+    focus_support.to_csv(
+        args.out / "calibrated_rare_focus_support.tsv.gz",
         sep="\t",
         index=False,
         compression="gzip",
@@ -91,7 +91,7 @@ def main() -> None:
     summary = {
         "status": "CALIBRATED_TWO_TIER_CANDIDATE_ROUTE",
         "starting_gate": len(candidates),
-        "full_candidate_recluster_pool": len(candidates),
+        "full_targeted_recluster_cohort": len(candidates),
         "spatial_supported": int(spatial_supported.sum()),
         "positive_quantile": args.positive_quantile,
         "contradictory_quantile": args.contradictory_quantile,
@@ -103,11 +103,11 @@ def main() -> None:
         },
         "strict_seeds": int(strict_seed.sum()),
         "strict_seed_groups": len(seed_groups),
-        "strict_seed_group_expanded": len(focus_pool),
-        "canonical_recluster_membership": "rare_candidate_recluster_pool.tsv.gz",
+        "strict_seed_group_expanded": len(focus_support),
+        "canonical_recluster_membership": "oocyte_targeted_recluster_cohort.tsv.gz",
         "warning": (
             "The complete multi-module starting gate is the canonical query-only "
-            "recluster pool. Strict seeds and expanded spatial objects are support, "
+            "targeted recluster cohort. Strict seeds and expanded spatial objects are support, "
             "not the final census or a membership filter. Observations are not "
             "biological-cell counts."
         ),

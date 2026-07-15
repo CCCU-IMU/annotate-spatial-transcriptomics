@@ -36,11 +36,12 @@ def main() -> int:
         "cluster_ledger": root / "state/cluster_decision_ledger.tsv",
         "completion_gate": root / "provenance/completion_gate.json",
         "release_taxonomy_audit": root / "provenance/release_taxonomy_audit.json",
-        "multiroute_audit": root / "provenance/multiroute_audit.json",
+        "annotation_workflow_audit": root / "provenance/direct_lineage_workflow_audit.json",
         "state_validation": root / "provenance/state_validation.json",
         "iteration_plan": root / "provenance/iteration_plan.json",
         "next_action_queue": root / "state/next_action_queue.tsv",
-        "pool_registry": root / "state/pool_registry.tsv",
+        "recluster_cohort_registry": root / "state/recluster_cohort_registry.tsv",
+        "direct_return_registry": root / "state/direct_return_registry.tsv",
         "route_attempt_registry": root / "state/route_attempt_registry.tsv",
         "run_registry": root / "state/run_registry.tsv",
         "final_annotation_census": root / "tables/final_annotation_census.tsv",
@@ -55,7 +56,7 @@ def main() -> int:
 
     completion = json.loads(paths["completion_gate"].read_text(encoding="utf-8"))
     taxonomy = json.loads(paths["release_taxonomy_audit"].read_text(encoding="utf-8"))
-    multiroute = json.loads(paths["multiroute_audit"].read_text(encoding="utf-8"))
+    workflow_audit = json.loads(paths["annotation_workflow_audit"].read_text(encoding="utf-8"))
     state_validation = json.loads(paths["state_validation"].read_text(encoding="utf-8"))
     asset_manifest = json.loads(paths["review_asset_manifest"].read_text(encoding="utf-8"))
     errors: list[str] = []
@@ -63,11 +64,11 @@ def main() -> int:
         errors.append("completion gate is not PASS")
     if taxonomy.get("pass") is not True or taxonomy.get("metadata_sha256") != sha256(paths["cell_ledger"]):
         errors.append("release taxonomy audit is not PASS/current")
-    if multiroute.get("status") != "PASS":
-        errors.append("Route A/B/C/D completion audit is not PASS")
+    if workflow_audit.get("status") != "PASS":
+        errors.append("direct-lineage annotation workflow audit is not PASS")
     if state_validation.get("status") != "PASS":
         errors.append("state validation is not PASS")
-    # The completion gate already owns detailed route/pool/run closure.  The
+    # The completion gate already owns detailed cohort/route/run closure.  The
     # master gate must not make the reviewer repeat that mechanical audit.
     views = read_tsv(paths["annotation_view_registry"])
     if not any(row.get("view") == "final" and row.get("status") == "validated" for row in views):
@@ -94,7 +95,7 @@ def main() -> int:
         "sample_id": project.get("sample_id"),
         "decision_version": project.get("decision_version"),
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "stage_contract": "post_pool_reclustering_post_multiroute_rescue_post_final_writeback_post_completion_gate",
+        "stage_contract": "post_broad_targeted_cohorts_post_residual_qc_rescue_post_final_writeback_post_completion_gate",
         "reviewer_role_required": "main_conversation_agent",
         "comparison_semantics": "Compare biological reasonableness and evidence quality with the validated sheep-ovary R-first reference; exact labels, counts and subtype depth need not match.",
         "required_verdict": "PASS (including PASS with documented concerns) when annotation quality is comparable to the validated reference; otherwise RETURN_FOR_ITERATION.",

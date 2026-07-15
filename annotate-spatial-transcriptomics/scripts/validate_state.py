@@ -45,7 +45,8 @@ def main() -> int:
     state = args.project_root / "state"
     config_path = args.project_root / "config/project.json"
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
-    multi_required = bool(config.get("multi_route_completion_required"))
+    workflow_required = bool(config.get("annotation_workflow_completion_required", config.get("multi_route_completion_required")))
+    direct_workflow = config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts"}
     cell_ledger = args.cell_ledger
     if cell_ledger is None:
         for candidate in (state / "cell_ledger.tsv.gz", state / "cell_ledger.tsv"):
@@ -84,8 +85,15 @@ def main() -> int:
                     require(False, "analysis-scope policy count is invalid", errors)
         except (OSError, json.JSONDecodeError) as exc:
             require(False, f"analysis-scope policy is unreadable: {exc}", errors)
-    required = ["input_snapshot_registry.tsv", "clustering_decision_ledger.tsv", "cluster_decision_ledger.tsv", "pool_registry.tsv", "run_registry.tsv"]
-    if multi_required: required += ["pool_snapshot_registry.tsv", "route_attempt_registry.tsv", "branch_control_board.tsv", "workflow_event_registry.tsv", "annotation_view_registry.tsv", "annotation_support_registry.tsv"]
+    required = ["input_snapshot_registry.tsv", "clustering_decision_ledger.tsv", "cluster_decision_ledger.tsv", "run_registry.tsv"]
+    if direct_workflow:
+        required += ["recluster_cohort_registry.tsv", "direct_return_registry.tsv"]
+    else:
+        required += ["pool_registry.tsv"]
+    if workflow_required:
+        required += ["route_attempt_registry.tsv", "workflow_event_registry.tsv", "annotation_view_registry.tsv", "annotation_support_registry.tsv"]
+        if not direct_workflow:
+            required += ["pool_snapshot_registry.tsv", "branch_control_board.tsv"]
     for f in required: require((state / f).exists(), f"missing registry: {f}", errors)
     configured_sample = str(config.get("sample_id", ""))
     require(bool(configured_sample), "project config sample_id is empty", errors)
@@ -137,7 +145,12 @@ def main() -> int:
                 require(vp.exists(),f"line {i}: passed validation artifact missing",errors)
     if cell_ledger:
         seen = set(); n = 0; it=iter(rows(cell_ledger));first=next(it,None);required_fields={"sample_id","cell_id","decision_id","state","broad_label","fine_label","validation_feature_scope"}
-        if multi_required: required_fields.update({"analysis_scope","source_key","parent_decision_id","pool_snapshot_id","generation","route_attempt_id","state_tags","spatial_tags","qc_tags","candidate_lineages","confidence","fine_anchor_eligible","final_state","final_broad_label","final_fine_label","final_confidence","final_assignment_tier","final_broad_eligible","final_fine_eligible"})
+        if workflow_required:
+            required_fields.update({"analysis_scope","source_key","parent_decision_id","route_attempt_id","state_tags","spatial_tags","qc_tags","candidate_lineages","confidence","fine_anchor_eligible","final_state","final_broad_label","final_fine_label","final_confidence","final_assignment_tier","final_broad_eligible","final_fine_eligible"})
+            if direct_workflow:
+                required_fields.update({"initial_broad_label", "assignment_mode", "recluster_cohort_id", "cross_lineage_target"})
+            else:
+                required_fields.update({"pool_snapshot_id", "generation"})
         fields=set(first or {});missing_fields=required_fields-fields;require(not missing_fields,f"cell ledger missing fields: {sorted(missing_fields)}",errors);oocyte_object_missing=False;analysis_n=0;analysis_ids_seen=set();excluded_n=0
         import itertools
         for i, row in enumerate(itertools.chain([first] if first else [],it), 2):
@@ -149,7 +162,7 @@ def main() -> int:
                 require(row.get("fine_anchor_eligible", "").lower() in {"false", "0", "no"}, f"cell line {i}: broad-only is fine anchor", errors)
             if "decision_id" in fields:require(row.get("decision_id") in active_ids,f"cell line {i}: decision_id is not active",errors)
             if "oocyte" in (row.get("broad_label","")+row.get("fine_label","")).lower() and not row.get("spatial_object_id"):oocyte_object_missing=True
-            if multi_required:
+            if workflow_required:
                 scope=row.get("analysis_scope","");require(scope in {"analysis_set","excluded_initial_qc"},f"cell line {i}: invalid analysis_scope",errors)
                 if scope=="analysis_set":
                     analysis_n+=1
@@ -176,11 +189,11 @@ def main() -> int:
                     require(row.get("final_state") == "excluded_initial_qc", f"cell line {i}: excluded observation leaked into final state", errors)
                     require(not row.get("final_broad_label"), f"cell line {i}: excluded observation has final broad label", errors)
                     require(not row.get("final_fine_label"), f"cell line {i}: excluded observation has final fine label", errors)
-                if row.get("route") in {"depth_matched_atlas_anchor_mapping_fullfeature_rescue","qc_anchor_recluster_broad_rescue","interface_rctd_broad_return"}:
+                if row.get("route") in {"depth_matched_atlas_anchor_mapping_fullfeature_rescue","qc_anchor_recluster_broad_rescue","interface_rctd_broad_return","residual_qc_atlas_broad_rescue"} or row.get("assignment_mode") == "atlas_broad_rescue":
                     require(row.get("fine_anchor_eligible","").lower() in {"false","0","no"},f"cell line {i}: rescue route is a fine anchor",errors)
                     require(not row.get("final_fine_label"),f"cell line {i}: broad-only rescue leaked into final fine annotation",errors)
         require(not oocyte_object_missing,"Oocyte-associated cellbins lack spatial_object_id",errors)
-        if multi_required:
+        if workflow_required:
             if expected_analysis_ids is not None:
                 require(analysis_ids_seen == expected_analysis_ids, "cell-ledger analysis_set differs from frozen analysis-scope membership", errors)
                 try:

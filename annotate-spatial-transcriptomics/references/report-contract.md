@@ -12,17 +12,17 @@
 8. Unresolved, interface and QC policies with counts.
 9. Complete chronological workflow and state provenance.
 10. Software/session information, audit results and checksums.
-11. Biological context/profile/preset, open-world lineage discovery, iteration queue, every pool/run status, triggered Oocyte/context-specific object audits and completion-gate result.
+11. Biological context/profile/preset, open-world lineage discovery, iteration queue, every cohort/direct-return/run status, triggered Oocyte/context-specific object audits and completion-gate result.
 12. Full-feature audit plus label-level full-feature marker validation; clearly distinguish clustering/HVG evidence from final validation evidence and expose the manifest of the LogNormalize validation-only object when the Seurat raw container had `Spatial@data == counts`.
 13. One final census and map. Moderate-or-higher broad assignments supply broad DEG/markers; high-confidence real fine labels supply subtype DEG/markers.
-14. Multi-route dashboard: each mandatory Route A–D input, applicability, anchors/reference, selected parameters, calibrated thresholds, outcome counts, retained rejects and no-repeat status; show optional diagnostic supervised reviews separately and never let them replace a mandatory biological route.
-15. A detailed Chinese workflow at the bottom reconstructed from `workflow_event_registry.tsv`, starting from raw-object loading and including every pool generation, scheduler failure/repair, biological review and atomic writeback. Link to it from the top navigation.
-16. Source ancestry/control board: `source_key → parent decision → pool snapshot → run/resolution/subcluster → route/action → final label/confidence`.
+14. Direct-workflow dashboard: each initial broad class, broad/targeted cohort, direct/cross-lineage return, optional RCTD, terminal residual-QC Atlas input, calibrated thresholds, outcome counts and retained rejects.
+15. A detailed Chinese workflow at the bottom reconstructed from `workflow_event_registry.tsv`, starting from raw-object loading and including every cohort generation/direct return, scheduler failure/repair, biological review and atomic writeback. Link to it from the top navigation.
+16. Source ancestry/control board: `source_key → initial broad decision → cohort/run/resolution/subcluster → direct or assisted action → final label/confidence`.
 17. Two separately labeled top-level censuses: biological broad classes and retained anatomical-interface/QC/technical/pending states. Only the former enters the broad biological tree, DEG and marker dotplots.
 
 The annotation tree must provide expand/collapse/search controls and a direct link from every broad/subtype node to its spatial highlight. Put the reviewed annotated spatial overview immediately above the tree. Keep the detailed Chinese raw-input-to-release workflow at the bottom, with a top navigation entry to it.
 
-If the completion gate is absent or blocked, no master quality approval, confirmation or final report may be built. After it passes, generate one high-contrast broad spatial PNG and one canonical broad marker dotplot PNG, freeze the fully annotated snapshot, and obtain the main conversation Agent's concise biological quality approval. Only then build `review/confirmation/index.html` from the approved result and `state/annotation_support_registry.tsv`. This lightweight, self-contained HTML is the only pre-user-approval report and must not run final DEG or full release assets. Then freeze `provenance/final_annotation_confirmation_request.json`; its hashes bind the current cell/cluster/support ledgers, completion/taxonomy/master-quality records and lightweight review. A biologically complete release report is built only after explicit user approval and every pool remains closed with rationale.
+If the completion gate is absent or blocked, no master quality approval, confirmation or final report may be built. After it passes, generate one high-contrast broad spatial PNG and one canonical broad marker dotplot PNG, freeze the fully annotated snapshot, and obtain the main conversation Agent's concise biological quality approval. Only then build `review/confirmation/index.html` from the approved result and `state/annotation_support_registry.tsv`. This lightweight, self-contained HTML is the only pre-user-approval report and must not run final DEG or full release assets. Then freeze `provenance/final_annotation_confirmation_request.json`; its hashes bind the current cell/cluster/support ledgers, completion/taxonomy/master-quality records and lightweight review. A biologically complete release report is built only after explicit user approval and every cohort/assisted route is terminal with rationale.
 
 ## Mandatory dotplots
 
@@ -38,7 +38,7 @@ Render the label dendrogram on the left. Put marker genes on the x axis and face
 
 The broad-class DEG and both dotplots use the final non-QC/non-interface biological cohort: every cellbin formally returned to a broad class participates. Subtype DEG/dotplots use only high-confidence cells with a real fine label; broad-only rescue is excluded and never receives a synthetic subtype. Every source table declares `analysis_view=final` and its evidence cohort.
 
-An analysis-pool identifier is provenance, not a cell type. Show it in ancestry/route tables, never as a biological tree node unless an independently gated biological label happens to use different, approved wording.
+A cohort identifier is provenance, not a cell type. Show it in ancestry/route tables, never as a biological tree node unless an independently gated biological label happens to use different, approved wording.
 
 ## Asset formats
 

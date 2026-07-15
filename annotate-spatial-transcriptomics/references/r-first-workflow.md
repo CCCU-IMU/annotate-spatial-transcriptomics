@@ -1,107 +1,71 @@
 # Seurat/R-first annotation workflow
 
-Use this path whenever a readable full-feature Seurat RDS is available or the user selects R as the primary framework. The workflow remains method-independent biologically, but Seurat is the computational backbone.
+Use this path whenever a readable full-feature Seurat RDS is available or R is selected as the primary framework. Seurat is the computational backbone; the biological controller is `direct-lineage-controller.md`.
 
-## 1. Freeze and inspect the R object
+## 1. Freeze and inspect the object
 
-Run `scripts/inspect_r_object.R`, `scripts/check_r_runtime.R` and `scripts/audit_feature_scope.R`. Record object hash, Seurat version, assays/layers, raw-count assay, normalized assay, reductions, metadata columns, coordinates, observation IDs and analysis-set membership. Use RNA/Spatial raw counts for absolute detection and anti-marker gates. SCT residuals may drive PCA/clustering but cannot establish marker absence.
+Run `inspect_r_object.R`, `check_r_runtime.R` and `audit_feature_scope.R`. Record object hash, Seurat version, assays/layers, raw-count and normalized layers, reductions, coordinates, observation IDs and analysis-set membership. SCT residuals may drive PCA/clustering but cannot establish marker absence.
 
-Prefer the full-feature Seurat RDS over a reduced/HVG object. If both exist, freeze both roles explicitly: `clustering_object` and `validation_object`. A full feature list does not prove that `Spatial@data` is normalized. Before any Wilcoxon evidence, verify `data != counts`; when it fails, create a separate manifest-bound LogNormalize validation object with `scripts/prepare_seurat_full_feature_validation.R` and leave the SCT clustering object unchanged.
+Prefer the full-feature RDS. A full feature list does not prove `Spatial@data` is normalized. If `data` is absent or identical to `counts`, leave the SCT clustering object immutable and build a manifest-bound full-feature LogNormalize validation object with `prepare_seurat_full_feature_validation.R` before Wilcoxon DEG or marker/anti-marker decisions.
 
-If a matched single-cell Seurat/AnnData object is available, freeze it as a separate `matched_reference_object`; never merge its cells into the query ledger. Read `matched-single-cell-reference.md`, validate its label crosswalk, and use it as the preferred external reference channel after current-query anchors.
+A matched single-cell object is a separate reference and is never merged into the query ledger.
 
 ## 2. Reuse computation without leaking labels
 
-Existing whole-tissue or pool reclustering may be reused when all conditions pass:
-
-1. Its source-object hash or exact observation membership is recoverable.
-2. It used the current analysis set or has an explicit exclusion ledger.
-3. Candidate resolutions, cluster memberships, DEG, UMAP and spatial outputs are complete.
-4. Validation can be repeated on a verified full-feature normalized layer; a raw converted `Spatial@data == counts` object must first use the separate validation-object route.
-5. Historical annotation columns are hidden until new decisions are frozen.
-
-Register reused artifacts as `validated_reuse`, preserve their original path/hash and create a new decision ledger. Never copy their labels or confidence fields.
+Existing whole-tissue or cohort clustering is reusable only when source-object and membership hashes, analysis scope, candidate resolutions, cluster memberships, DEG, UMAP, spatial outputs and full-feature validation are complete. Register it as `validated_reuse`, hide historical annotation columns and create a new decision ledger. Reusing computation never authorizes copying labels.
 
 ## 3. Whole-tissue broad pass
 
-If reusable clustering is unavailable, run SCTransform, PCA and a coarse Seurat grid. For sheep ovary the formal whole-tissue and pool grid is fixed to `0.1,0.2,0.3,0.4,0.6`; selection within it is adaptive. Never lower below 0.1 to compensate for an invalid graph. For other profiles, use their declared grid policy.
+When no valid clustering is reusable, run SCTransform, PCA and an adaptive Seurat resolution grid. Sheep ovary uses the formal grid `0.1,0.2,0.3,0.4,0.6`; never lower below 0.1 to compensate for a defective graph. Other tissues use a declared context-appropriate grid.
 
-Generate one-vs-rest DEG, canonical and data-specific marker summaries, UMAP, whole-section spatial maps and per-cluster highlights for every shortlisted resolution. Select the lowest-complexity candidate that preserves supported broad lineages without state-only fragmentation.
+Generate per-resolution one-vs-rest DEG, canonical and data-specific marker summaries, UMAP, whole-section spatial maps and per-cluster highlights. Select the lowest-complexity resolution preserving supported broad lineages without state-only fragmentation.
 
-## 4. Broad anchors and canonical parent pools
+At that resolution, perform open-world lineage review. Supported clusters receive a moderate-or-higher `initial_broad_label` directly. Low-information, featureless or irreducibly mixed observations enter `qc_holdout`; do not create persistent biological pools.
 
-Freeze only full-gene, cell-level coherent anchors. Follow `taxonomy-and-pool-design.md`: a literature checklist, an analysis pool and a release label are different objects. Create the smallest set of axis-covering review pools needed by the actual uncertainty, rather than one graph-cluster pool or one pool per desired cell type:
+## 4. Broad-class and targeted cohorts
 
-- `follicular_somatic_review`: granulosa, steroidogenic theca and structural follicular-stromal alternatives;
-- `stromal_mesenchymal_mural_review`: generic stroma, progenitor-like mesenchyme, mature smooth muscle, pericyte/mural and structural follicular wall;
-- `vascular_endothelial_mural_review`: blood/lymphatic endothelium, mural, smooth-muscle and vascular-adjacent stromal alternatives;
-- `immune_review` and `epithelial_mesothelial_review` when those lineages remain unresolved;
-- `strict_oocyte_candidate`, local `anatomical_interface_review` and `postcluster_qc_holdout` only when their route definitions apply.
+Create one immutable `broad_class_recluster` cohort for every supported initial broad class. A genuinely underpowered class may remain broad-only only after a recorded `not_applicable_reviewed` decision. Use `run_seurat_cohort_recluster.R` and register its output in `recluster_cohort_registry.tsv`; the older pool-named implementation is migration compatibility only.
 
-Every pool has immutable membership and explicit competing hypotheses. Its name cannot be copied into a final label. Every large direct label must pass cell-level purity and anti-program review. Split heterogeneous source clusters at observation level when necessary.
+Fit normalization/PCA jointly with frozen anchors when they are needed, while constructing graph, clusters, UMAP, DEG and outcome counts from query observations only. Select cohort PCs, k and resolution from the current membership; for sheep ovary run the full formal grid for every broad or targeted cohort.
 
-## 5. R pool controller
+Adjudicate every subcluster as exactly one of:
 
-Use `scripts/run_seurat_pool_recluster.R` with frozen query/anchor memberships. Fit normalization/PCA jointly when anchors are used, but construct graph, clusters, UMAP, DEG and outcome counts from query observations only. For sheep ovary validate the standard normal grid before every pool submission; adapt only the selected resolution, PCs and k.
+- high-confidence shallow fine label;
+- direct return to the parent broad class;
+- direct cross-lineage broad/fine return with source provenance;
+- one decision-relevant `targeted_recluster` cohort;
+- residual QC/technical retention.
 
-Apply the mandatory order:
+Do not create an intermediate target pool. A direct cross-lineage return does not automatically enter the target class's reclustering cohort again.
 
-1. Large usable uncertainty: balanced-anchor Seurat reclustering.
-2. Local mixed interface: targeted reclustering, then calibrated RCTD only if applicable.
-3. Medium/low RCTD or low-information rejects: full QC-pool anchor reclustering, then calibrated atlas/internal-anchor/marker/observed-density spatial consensus.
-4. Rare identity: full-feature positive/negative modules, spatial objects and strict-candidate reclustering.
-5. Irreducible technical or biological uncertainty: explicit retained state.
+## 5. Assistance and residual QC
 
-RCTD is low-priority assistance. Atlas moderate-or-higher may rescue broad-only after independent evidence; neither route creates fine anchors.
+Use a targeted cohort only for a local interpretable mixture, contamination boundary or context-gated identity. RCTD is lower-priority assistance: extreme confidence plus independent marker/anti-marker, resolution and spatial evidence may support fine; high supports broad-only; medium/low enters the final QC holdout.
 
-When a matched single-cell reference exists, use its harmonized broad labels before a generic Atlas for the external-reference channel **only after the complete QC-holdout anchor reclustering has produced a frozen residual-QC child snapshot**, provided stage, donor composition, raw-count availability and source marker programs pass audit. Outside that residual-QC route it is marker/anti-marker evidence, not a routine cell-level classifier. The matched prediction still has a broad-only default ceiling and cannot bypass strict Oocyte, Theca, mural/smooth-muscle or rare-lineage gates.
+After all broad and targeted cohorts are terminal, freeze the complete residual QC membership. Do not recluster it. Apply calibrated Atlas/internal-anchor/marker/observed-density spatial consensus only to this exact membership. Moderate-or-higher returns broad-only with `fine_anchor_eligible=false`; lower confidence remains QC reject.
+
+For sheep ovary without a usable matched count-level reference, GSE233801 is the primary public adult-sheep somatic Atlas for this terminal residual-QC step. It cannot bypass strict Oocyte, Theca or epithelial evidence gates.
 
 ## 6. Ovary stromal-lineage decomposition
 
-Do not close a single `Stromal/perivascular` super-class before testing:
+Before closing a generic stromal parent, independently test generic stromal/fibroblast, mesenchymal-progenitor-like, mature smooth muscle, pericyte/mural, blood/lymphatic endothelial and steroidogenic-theca programs.
 
-- generic ovarian stromal/fibroblast;
-- mesenchymal-progenitor-like;
-- mature smooth muscle;
-- pericyte/mural;
-- blood and lymphatic endothelial;
-- structural/follicular-wall theca versus androgenic steroidogenic theca.
+- Mature Smooth muscle requires a coherent `MYH11/CNN1/ACTG2` plus `TAGLN/ACTA2/MYL9/DES` backbone and compatible tracks.
+- Pericyte/mural requires `RGS5/PDGFRB/CSPG4/NOTCH3/MCAM`-like support and vascular adjacency.
+- Steroidogenic Theca requires a coherent steroidogenic/androgenic program; ECM or `LHCGR` alone is insufficient.
+- ECM-rich `ACTA2/TAGLN` without a mature backbone remains structural/contractile stroma.
+- `Mesenchymal progenitor-like` is separate only when a stable progenitor/fibroblast program and morphology pass; otherwise use `Stromal/mesenchymal`.
 
-Use the tissue profile's program families and anti-programs. A mature Smooth muscle call requires a coherent mature-contractile family such as `MYH11/CNN1/ACTG2` plus `TAGLN/ACTA2/MYL9/DES`, stable pool separation and vessel/follicular-wall morphology. Pericyte requires `RGS5/PDGFRB/CSPG4/NOTCH3/MCAM` with vascular adjacency. ECM-rich `ACTA2/TAGLN` cells without mature contractile backbone remain myofibroblast/structural stroma or follicular wall.
-
-`Mesenchymal` is not automatically separate from ovarian stroma. Define a standalone `Mesenchymal progenitor-like` broad class only when a stable population has coherent `S100A4/PDGFRA/TCF21/NR2F2/CD34/PI16/COL14A1/DPT/CFD`-like progenitor/fibroblast support, lacks mature contractile, endothelial, immune, epithelial, granulosa and steroidogenic programs, and has reproducible morphology. Otherwise retain `Stromal/mesenchymal` as the parent label and record that no independent mesenchymal class was supported.
-
-Release `Theca` only for coherent steroidogenic/androgenic theca. Never use `Theca/follicular wall` as a broad release label: return structural collagen/contractile wall cells to stromal, smooth-muscle, mural or interface review as supported. A negative Mesenchymal or Pericyte audit is valid; do not complete the literature taxonomy by lowering gates.
+Negative audits are valid outcomes and must not be repaired by lowering gates.
 
 ## 7. Shallow subtype policy
 
-Broad classes are the default endpoint for cellbin spatial data. Do not translate every Seurat subcluster into a named biological subtype. Merge subclusters when their separation is driven mainly by depth, LOC/ribosomal/mitochondrial expression, ECM amount, stress, cell cycle, generic contractility or spatial position without an independent functional program.
+Broad classes are the default endpoint for cellbin spatial data. Merge subclusters driven mainly by depth, LOC/ribosomal/mitochondrial expression, ECM amount, stress, cell cycle, generic contractility or spatial position. Keep those characteristics as tags.
 
-For adult sheep ovary, permit only a small evidence-supported functional vocabulary by default:
+Adult sheep ovary permits only evidence-supported shallow functional labels: selected Granulosa states, steroidogenic Theca, blood/lymphatic endothelial, mature Smooth muscle, Pericyte/mural and depth-supported immune divisions. Zero fine labels is valid.
 
-- granulosa: early/undifferentiated, mural/estrogenic, cumulus/oocyte-adjacent, or luteinizing/steroidogenic only when the corresponding multi-gene program and follicular morphology are present;
-- follicular somatic: androgenic steroidogenic `Theca` may be retained; structural/follicular-wall stroma remains under its supported stromal/mural parent or as an interface state;
-- vascular/mural: blood endothelial, lymphatic endothelial, pericyte and mature smooth muscle only when each backbone passes;
-- immune: broad myeloid, lymphoid or plasma categories only when depth supports them;
-- stromal/mesenchymal: keep most variation as state/spatial tags unless a stable lineage-level separation passes the profile gate.
+## 8. Quality and release
 
-The sheep GSE233801 study supports a limited number of granulosa functional subtypes, not arbitrary cluster-by-cluster naming. Developmental sheep atlases contain stage-specific populations that must not be imported into an adult sample without query evidence. A shallower tree with stronger parent labels is preferable to a detailed but weak tree.
+Build one final annotation: broad labels require moderate-or-higher confidence; fine labels require high confidence. Every direct and Atlas-rescued broad observation participates in final broad DEG and dotplots. Atlas broad-only cells and RCTD-only cells cannot seed fine marker discovery.
 
-For sheep ovary, first run `scripts/resolve_workflow_profile.py`. A readable full-feature Seurat RDS makes this R-first workflow the default. A confirmed StereoPy `cellbin_PPed` conversion additionally activates the frozen whole-tissue preprocessing profile in `seurat-cellbin-preprocessing.md`; this specialized profile overrides any more general SCT examples in this document. Resolution and labels remain adaptive.
-
-The 2025 Science human/mouse ovary atlas, 2026 Advanced Science sheep-human reproductive atlas and 2025 AJOG expert review support a stable shallow checklist and stronger negative gates. They do not require every class to appear. In particular, a neural-looking single gene cannot create Neural/Schwann or Neuroendocrine, and graph-derived granulosa states do not automatically become follicle-stage labels. Read `profiles/sheep_ovary_literature_2025_2026.md`.
-
-## 8. Baseline-independent quality gate
-
-When improvement over an earlier R release is requested, predeclare a comparison table before unblinding it. At minimum require:
-
-- granulosa: no loss of multi-gene lineage enrichment or follicular-wall coherence;
-- oocyte: equal or better non-ZP identity/maternal-core purity and lower resident-program leakage;
-- theca: steroidogenic core is not diluted by ECM-only follicular wall;
-- endothelial/immune/epithelial: no severe collapse in supported rare-lineage coverage;
-- stromal: generic stroma, mesenchymal, smooth muscle, pericyte and endothelial alternatives were explicitly audited;
-- uncertainty: every observation is accounted for and large rescued populations expose their direct versus transferred evidence;
-- report: broad and subtype assets, spatial tree navigation, source ancestry and Chinese detailed workflow pass the release audit.
-- subtype restraint: the new tree contains no cluster-renaming-only labels; unsupported historical subtypes are merged while their ECM/contractile/stress/spatial characteristics remain available as state tags.
-
-Unblind the baseline only after the new ledger is frozen. Compare evidence, not label agreement. If the new run fails any priority-lineage gate, reopen the responsible pool and iterate.
+Run `validate_direct_lineage_workflow.py`, state validation, taxonomy audit and completion gate before main-Agent biological quality approval. User confirmation follows the lightweight report; only then generate final DEG, tree dotplots, spatial assets and release HTML.

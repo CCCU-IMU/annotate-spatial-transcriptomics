@@ -1,7 +1,7 @@
 {
-  "profile_id": "ovis_aries_ovary_rfirst_v3",
+  "profile_id": "ovis_aries_ovary_rfirst_v4",
   "profile_role": "workflow_preprocessing",
-  "profile_schema_version": "1.5",
+  "profile_schema_version": "1.6",
   "species_aliases": ["Ovis aries", "sheep", "ovine", "羊", "绵羊"],
   "tissue_aliases": ["ovary", "ovarian", "卵巢"],
   "workflow": {
@@ -11,11 +11,11 @@
     "scanpy_role": "fallback for AnnData-first inputs or an independent corroborating analysis",
     "resolution_rule": "adaptive; select the lowest-complexity broad resolution supported by current-query full-feature markers, anti-markers, stability and spatial morphology"
   },
-  "pool_reclustering_contract": {
+  "cohort_reclustering_contract": {
     "candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
     "minimum_resolution": 0.1,
     "allow_below_minimum": false,
-    "rule": "use the same normal candidate range for every sheep-ovary biological or QC pool; adapt the selected resolution, PCs and k within the current pool evidence but never lower resolution to compensate for a defective graph"
+    "rule": "use the same normal candidate range for every sheep-ovary broad-class or targeted cohort; adapt the selected resolution, PCs and k within current-cohort evidence, never recluster final QC, and never lower resolution to compensate for a defective graph"
   },
   "stereopy_cellbin_pped_contract": {
     "trigger_all": [
@@ -63,8 +63,8 @@
       "cross_species_support"
     ],
     "primary_public_atlas": "GSE233801",
-    "atlas_rescue_scope": "residual_post_qc_anchor_holdout_only",
-    "forbid_full_object_or_biological_pool_atlas_classification": true,
+    "atlas_rescue_scope": "complete_residual_qc_holdout_after_all_broad_and_targeted_cohorts_only",
+    "forbid_full_object_or_nonresidual_atlas_classification": true,
     "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Vascular/endothelial", "Pericyte/mural candidate", "Immune"],
     "primary_public_atlas_exclusions": ["Oocyte", "Theca", "Epithelial/mesothelial"],
     "atlas_rescue_ceiling": "broad_only",
@@ -85,7 +85,7 @@
     "post_completion_master_quality_approval": "required_after_all_routes_and_final_writeback_before_user_confirmation",
     "quality_reference_semantics": "compare biological evidence quality with the validated deidentified R-first case; do not require matching labels or subtype depth",
     "broad_only_rescues_enter_fine_marker_discovery": false,
-    "oocyte_rule": "send the complete multi-module starting candidate pool to adaptive query-only reclustering; use strict marker/anti-program seeds and spatial foci as support rather than a membership filter; release only non-ZP/maternal-enriched, somatic-cleared, morphology-compatible cluster(s) and reroute somatic neighbours with ambient tags",
+    "oocyte_rule": "send the complete multi-module starting candidate cohort to adaptive query-only reclustering; use strict marker/anti-program seeds and spatial foci as support rather than a membership filter; release only non-ZP/maternal-enriched, somatic-cleared, morphology-compatible cluster(s) and return somatic neighbours directly to supported lineages with ambient tags",
     "neural_candidate_rule": "SOX10/S100B/PLP1/MPZ-like glial backbone or a coherent neuronal program plus track-like morphology; DLG2 or another single neuronal gene is insufficient. Candidate discovery is required even when the reference case lacked this class."
   }
 }

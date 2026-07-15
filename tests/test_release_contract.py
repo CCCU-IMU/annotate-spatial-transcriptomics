@@ -137,7 +137,7 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         self.assertIn("single-marker", text)
         self.assertIn("not a quota", text)
         case = (SKILL / "references/profiles/sheep_ovary_rfirst_case_reference.md").read_text()
-        self.assertIn("reusable strategy trace", case)
+        self.assertIn("strategy trace", case)
         self.assertIn("final broad membership", case)
         self.assertNotIn("D055", case)
         self.assertNotIn("/" + "share" + "/" + "org" + "/", case)
@@ -191,15 +191,15 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         self.assertIn("small and primordial oocytes may occur in the ovarian cortex", context)
 
     @unittest.skipUnless(importlib.util.find_spec("pandas"), "pandas runtime unavailable")
-    def test_oocyte_route_reclusters_full_starting_pool_not_only_strict_seeds(self) -> None:
+    def test_oocyte_route_reclusters_full_targeted_cohort_not_only_strict_seeds(self) -> None:
         profile = json.loads((SKILL / "references/profiles/sheep_ovary.json").read_text())
         oocyte = profile["context_specific_identity_rules"]["oocyte"]
-        self.assertFalse(oocyte["spatial_focus_hard_filter_for_candidate_pool"])
-        self.assertIn("all observations", oocyte["candidate_pool_policy"])
+        self.assertFalse(oocyte["spatial_focus_hard_filter_for_targeted_cohort"])
+        self.assertIn("all observations", oocyte["targeted_cohort_policy"])
         self.assertIn("never the final census", oocyte["strict_seed_role"])
         route = (SKILL / "references/profiles/sheep_ovary_oocyte_rfirst_route.md").read_text()
-        self.assertIn("complete starting pool", route)
-        self.assertIn("Strict seeds and spatial foci", route)
+        self.assertIn("complete cohort", route)
+        self.assertIn("Strict seeds/spatial foci", route)
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -245,19 +245,37 @@ class SheepOvaryReleaseContract(unittest.TestCase):
                 text=True,
             )
             summary = json.loads((out / "calibrated_rare_focus_summary.json").read_text())
-            self.assertEqual(summary["full_candidate_recluster_pool"], 12)
+            self.assertEqual(summary["full_targeted_recluster_cohort"], 12)
             self.assertLess(summary["strict_seeds"], 12)
             self.assertEqual(
                 summary["canonical_recluster_membership"],
-                "rare_candidate_recluster_pool.tsv.gz",
+                "oocyte_targeted_recluster_cohort.tsv.gz",
             )
-            with gzip.open(out / "rare_candidate_recluster_pool.tsv.gz", "rt") as handle:
+            with gzip.open(out / "oocyte_targeted_recluster_cohort.tsv.gz", "rt") as handle:
                 rows = list(csv.DictReader(handle, delimiter="\t"))
             self.assertEqual(len(rows), 12)
-            self.assertTrue(all(row["full_candidate_recluster_member"] == "True" for row in rows))
+            self.assertTrue(all(row["full_targeted_cohort_member"] == "True" for row in rows))
 
 
 class CohortOrchestrationContract(unittest.TestCase):
+    def test_new_project_uses_cohorts_and_no_persistent_pool_registries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = Path(temp) / "project"
+            subprocess.run(
+                [sys.executable, str(SCRIPTS / "init_annotation_project.py"), "--sample", "S1", "--input-root", temp, "--project-root", str(project), "--modality", "spatial"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            config = json.loads((project / "config/project.json").read_text())
+            self.assertEqual(config["routing_model"], "direct_cross_lineage_recluster_cohorts")
+            self.assertFalse(config["persistent_biological_pools"])
+            self.assertTrue((project / "state/recluster_cohort_registry.tsv").exists())
+            self.assertTrue((project / "state/direct_return_registry.tsv").exists())
+            self.assertFalse((project / "state/pool_registry.tsv").exists())
+            self.assertFalse((project / "state/pool_snapshot_registry.tsv").exists())
+            self.assertFalse((project / "state/branch_control_board.tsv").exists())
+
     def test_scheduler_names_expose_sample_stage_scope_and_attempt(self) -> None:
         generated = subprocess.run(
             [sys.executable, str(SCRIPTS / "scheduler_job_name.py"), "--sample", "C05297F1", "--stage-code", "40", "--scope", "stromal", "--attempt", "2"],
@@ -265,7 +283,7 @@ class CohortOrchestrationContract(unittest.TestCase):
             capture_output=True,
             text=True,
         ).stdout.strip()
-        self.assertEqual(generated, "C05297F1__P40_POOL_stromal__A02")
+        self.assertEqual(generated, "C05297F1__P40_COHORT_stromal__A02")
         subprocess.run(
             [sys.executable, str(SCRIPTS / "scheduler_job_name.py"), "--validate", generated],
             check=True,

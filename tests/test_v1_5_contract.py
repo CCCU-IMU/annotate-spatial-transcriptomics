@@ -40,8 +40,9 @@ class V150Contract(unittest.TestCase):
             self.assertEqual(resolved["strategy_preset_status"], "ACTIVE")
             self.assertEqual(resolved["strategy_preset_preprocessing_mode"], "fixed_verified_same_batch_contract")
             preset = resolved["strategy_preset"]
-            self.assertIn("route_c_complete_qc_anchor_recluster_then_residual_only_calibrated_atlas", preset["phase_order"])
-            self.assertIn("selected_pool_resolution", preset["always_adaptive"])
+            self.assertIn("residual_qc_direct_calibrated_atlas_without_qc_reclustering", preset["phase_order"])
+            self.assertIn("selected_broad_or_targeted_cohort_resolution", preset["always_adaptive"])
+            self.assertFalse(preset["persistent_biological_pools"])
             self.assertIn("cluster_number_to_label_mapping", preset["forbidden_transfer_from_reference_case"])
             self.assertIn("disabled", preset["generic_rare_cell_route"])
             self.assertIn("candidate_lineage_catalog_sha256", resolved["strategy_preset_bindings"])
@@ -120,7 +121,7 @@ class V150Contract(unittest.TestCase):
         self.assertEqual(workflow["profile_role"], "workflow_preprocessing")
         expected = [0.1, 0.2, 0.3, 0.4, 0.6]
         self.assertEqual(biological["resolution_policy"]["formal_candidate_resolutions"], expected)
-        self.assertEqual(workflow["pool_reclustering_contract"]["candidate_resolutions"], expected)
+        self.assertEqual(workflow["cohort_reclustering_contract"]["candidate_resolutions"], expected)
         good = subprocess.run(
             [sys.executable, str(SCRIPTS / "validate_resolution_grid.py"), "--workflow-profile", str(WORKFLOW), "--scope", "pool", "--resolutions", "0.1,0.2,0.3,0.4,0.6"],
             capture_output=True, text=True,
@@ -141,7 +142,7 @@ class V150Contract(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("expected 'biological_evidence'", result.stdout + result.stderr)
 
-    def test_anchor_route_rejects_ultralow_or_unrecorded_candidate_grid(self) -> None:
+    def test_legacy_anchor_route_rejects_ultralow_or_unrecorded_candidate_grid(self) -> None:
         sys.path.insert(0, str(SCRIPTS))
         try:
             from multiroute_lib import valid_attempt
@@ -169,45 +170,55 @@ class V150Contract(unittest.TestCase):
             self.assertFalse(ok)
             self.assertTrue(any("formal candidate_resolutions" in error for error in errors))
 
-    def test_atlas_is_residual_qc_only_and_requires_qc_anchor_prerequisite(self) -> None:
+    def test_atlas_is_terminal_residual_qc_only_without_qc_reclustering(self) -> None:
         profile = json.loads(BIOLOGICAL.read_text())
         workflow = json.loads(WORKFLOW.read_text())
-        self.assertEqual(profile["multi_route_policy"]["atlas_rescue_scope"], "residual_post_qc_anchor_holdout_only")
-        self.assertTrue(profile["multi_route_policy"]["atlas_for_defined_broad_or_fine_forbidden"])
-        self.assertTrue(workflow["external_reference_policy"]["forbid_full_object_or_biological_pool_atlas_classification"])
-        sys.path.insert(0, str(SCRIPTS))
-        try:
-            from multiroute_lib import valid_attempt
-        finally:
-            sys.path.pop(0)
+        self.assertTrue(profile["annotation_workflow_policy"]["qc_holdout_recluster_forbidden"])
+        self.assertIn("all residual QC holdout", profile["annotation_workflow_policy"]["atlas_scope"])
+        self.assertTrue(workflow["external_reference_policy"]["forbid_full_object_or_nonresidual_atlas_classification"])
+        planner = (SCRIPTS / "plan_next_iteration.py").read_text()
+        validator = (SCRIPTS / "validate_direct_lineage_workflow.py").read_text()
+        self.assertNotIn('required_route": "qc_anchor_recluster', planner)
+        self.assertIn('source_state") != "residual_qc_holdout_after_all_cohorts"', validator)
+        self.assertIn("residual_qc_calibrated_atlas_review", planner)
+
+    def test_direct_lineage_validator_accepts_broad_cohort_and_direct_qc_atlas(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            validation = root / "validation.json"; validation.write_text("{}\n")
+            (root / "state").mkdir(); (root / "config").mkdir(); (root / "provenance").mkdir()
+            (root / "config/project.json").write_text(json.dumps({"routing_model": "direct_cross_lineage_recluster_cohorts", "strategy_preset_requested": "sheep_ovary_same_batch_rfirst"}))
+            (root / "config/biological_context.json").write_text(json.dumps({"species": "Ovis aries", "tissue": "ovary"}))
+            cells = root / "state/cell_ledger.tsv"
+            cells.write_text(
+                "cell_id\tanalysis_scope\tinitial_broad_label\tassignment_mode\trecluster_cohort_id\tcross_lineage_target\tfinal_state\tfinal_broad_label\tfinal_fine_label\tfinal_confidence\tfine_anchor_eligible\n"
+                "c1\tanalysis_set\tGranulosa\tparent_broad_direct\tg1\t\tdefined_broad_only\tGranulosa\t\thigh\tfalse\n"
+                "c2\tanalysis_set\tGranulosa\tparent_broad_direct\tg1\t\tdefined_broad_only\tGranulosa\t\thigh\tfalse\n"
+                "c3\tanalysis_set\t\tatlas_broad_rescue\t\t\tdefined_broad_only\tStromal/mesenchymal\t\tmoderate\tfalse\n"
+            )
+            broad_membership = root / "broad.tsv"; broad_membership.write_text("cell_id\nc1\nc2\n")
+            qc_membership = root / "qc.tsv"; qc_membership.write_text("cell_id\nc3\n")
+            outcome = root / "cohort_outcome.json"; outcome.write_text("{}\n")
+            evidence = root / "return_evidence.json"; evidence.write_text("{}\n")
             calibration = root / "calibration.json"; calibration.write_text("{}\n")
-            membership = root / "residual_qc.tsv"; membership.write_text("cell_id\nq1\n")
-            attempt = {
-                "route_class": "qc_atlas_review", "status": "validated", "applicability": "applicable",
-                "validation_artifact": str(validation), "depth_matched_validation": "true",
-                "observed_density_spatial_prior": "true",
-                "calibration_origin": "query_like_heldout_current_query_anchors",
-                "calibration_manifest": str(calibration), "n_query": "1",
-                "query_membership_artifact": str(membership),
-                "query_membership_sha256": hashlib.sha256(membership.read_bytes()).hexdigest(),
-                "pool_snapshot_id": "residual_qc_pool_v1",
-                "parent_pool_snapshot_id": "complete_qc_pool_v1",
-                "source_state": "qc_holdout_residual_after_anchor",
-            }
-            ok, errors = valid_attempt(root, attempt, profile)
-            self.assertFalse(ok)
-            self.assertTrue(any("prerequisite QC-anchor" in error for error in errors))
-        planner = (SCRIPTS / "plan_next_iteration.py").read_text()
-        self.assertLess(
-            planner.index('"qc_anchor_recluster" in gap_routes'),
-            planner.index('"qc_atlas_review" in gap_routes'),
-        )
-        self.assertIn('required_route":"build_final_annotation"', planner)
+            atlas_validation = root / "atlas_validation.json"; atlas_validation.write_text("{}\n")
+            atlas_outcome = root / "atlas_outcome.json"; atlas_outcome.write_text("{}\n")
+            (root / "state/recluster_cohort_registry.tsv").write_text(
+                "cohort_id\tcohort_type\tsource_broad_label\tmembership_path\tmembership_sha256\tn_observations\tcandidate_resolutions\tselected_resolution\tapplicability\tapplicability_rationale\toutcome_artifact\tstatus\n"
+                f"g1\tbroad_class_recluster\tGranulosa\t{broad_membership}\t{hashlib.sha256(broad_membership.read_bytes()).hexdigest()}\t2\t0.1,0.2,0.3,0.4,0.6\t0.2\tapplicable\tcoherent broad granulosa cohort\t{outcome}\tvalidated_done\n"
+            )
+            (root / "state/direct_return_registry.tsv").write_text(
+                "return_id\tsource_cohort_id\tsource_run_id\tsource_cluster\tmembership_path\tmembership_sha256\tn_observations\ttarget_broad_label\ttarget_fine_label\tconfidence\tassignment_mode\trctd_tier\tindependent_evidence\tevidence_artifact\tfine_anchor_eligible\tstatus\n"
+                f"r1\tg1\trun1\t0\t{broad_membership}\t{hashlib.sha256(broad_membership.read_bytes()).hexdigest()}\t2\tGranulosa\t\thigh\tparent_broad_direct\t\ttrue\t{evidence}\tfalse\tvalidated_done\n"
+            )
+            (root / "state/route_attempt_registry.tsv").write_text(
+                "route_attempt_id\troute_class\tstatus\tapplicability\tapplicability_rationale\tsource_state\treference_id\tcalibration_origin\tdepth_matched_validation\tobserved_density_spatial_prior\tquery_membership_artifact\tquery_membership_sha256\tn_query\tn_defined_broad_only\tn_defined_fine\tn_qc_retained\tfine_anchor_eligible\tcalibration_manifest\tvalidation_artifact\toutcome_artifact\n"
+                f"a1\tresidual_qc_atlas_review\tvalidated_done\tapplicable\tterminal residual QC mapping\tresidual_qc_holdout_after_all_cohorts\tGSE233801\tquery_like_heldout_current_query_anchors\ttrue\ttrue\t{qc_membership}\t{hashlib.sha256(qc_membership.read_bytes()).hexdigest()}\t1\t1\t0\t0\tfalse\t{calibration}\t{atlas_validation}\t{atlas_outcome}\n"
+            )
+            (root / "state/annotation_view_registry.tsv").write_text("view\tstatus\nfinal\tvalidated\n")
+            result = subprocess.run([sys.executable, str(SCRIPTS / "validate_direct_lineage_workflow.py"), str(root)], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_rctd_medium_low_cannot_name_atlas_as_direct_successor(self) -> None:
+    def test_legacy_rctd_medium_low_cannot_name_atlas_as_direct_successor(self) -> None:
         sys.path.insert(0, str(SCRIPTS))
         try:
             from multiroute_lib import valid_attempt
@@ -234,7 +245,7 @@ class V150Contract(unittest.TestCase):
             self.assertFalse(ok)
             self.assertTrue(any("successor_state=qc_holdout" in error for error in errors))
 
-    def test_atlas_query_must_equal_qc_anchor_residual_membership(self) -> None:
+    def test_legacy_atlas_migration_preserves_qc_anchor_residual_membership(self) -> None:
         sys.path.insert(0, str(SCRIPTS))
         try:
             from multiroute_lib import validate_qc_atlas_prerequisite
@@ -417,7 +428,7 @@ class V150Contract(unittest.TestCase):
             cluster_ledger.write_text("decision_id\tsample_id\nD1\tS1\n")
             completion = root / "provenance/completion_gate.json"
             completion.write_text(json.dumps({"status": "PASS"}))
-            (root / "provenance/multiroute_audit.json").write_text(json.dumps({"status": "PASS"}))
+            (root / "provenance/direct_lineage_workflow_audit.json").write_text(json.dumps({"status": "PASS"}))
             (root / "provenance/state_validation.json").write_text(json.dumps({"status": "PASS"}))
             (root / "provenance/iteration_plan.json").write_text(json.dumps({"status": "READY_FOR_COMPLETION_AUDIT"}))
             taxonomy = root / "provenance/release_taxonomy_audit.json"
@@ -432,7 +443,8 @@ class V150Contract(unittest.TestCase):
                 "F1\tS1\tfine\tGranulosa\tMural granulosa\t1\thigh\tIHH;HSD17B1\tlow oocyte core\tstable res0.4\tfollicular layer\tadult sheep ovary\tRoute A\tD1\tevidence.tsv\tvalidated\t\t2026-01-01\n"
             )
             (root / "state/next_action_queue.tsv").write_text("action_id\n")
-            (root / "state/pool_registry.tsv").write_text("pool_id\tstatus\n")
+            (root / "state/recluster_cohort_registry.tsv").write_text("cohort_id\tstatus\n")
+            (root / "state/direct_return_registry.tsv").write_text("return_id\tstatus\n")
             (root / "state/route_attempt_registry.tsv").write_text("route_attempt_id\tstatus\n")
             (root / "state/run_registry.tsv").write_text("run_id\tstatus\n")
             (root / "state/annotation_view_registry.tsv").write_text("view\tstatus\nfinal\tvalidated\n")

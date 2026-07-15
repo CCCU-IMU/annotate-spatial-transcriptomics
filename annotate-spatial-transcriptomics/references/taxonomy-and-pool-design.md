@@ -1,4 +1,4 @@
-# Literature taxonomy, analysis pools and release labels
+# Literature taxonomy, computational cohorts and release labels
 
 Keep three layers separate throughout annotation. They answer different questions and must never be copied into one another.
 
@@ -18,24 +18,17 @@ Cross-species studies may clarify boundaries but do not override the query. Huma
 
 The cross-study adult sheep candidate backbone is therefore `Granulosa`, `Stromal/mesenchymal`, `Vascular/endothelial`, `Immune`, `Epithelial/mesothelial` and strict `Oocyte`. `profiles/sheep_ovary_candidate_lineage_catalog.json` expands the mandatory boundary audit to evidence-, stage- and anatomy-dependent alternatives including steroidogenic Theca/luteal, mature Smooth muscle, Pericyte/mural, Mesenchymal progenitor-like, lymphatic endothelial and neural/glial/neuroendocrine programs. It is non-exhaustive and is still an audit surface, not a requirement that every label appear.
 
-## 2. Analysis parent pools
+## 2. Computational cohorts and QC state
 
-An analysis pool is an intentionally overinclusive, immutable routing container. It groups observations that need the same competing anchors, reclustering strategy or safety audit. A pool may contain several possible biological classes and may include an interface state. Its name must end in `_review`, `_candidate`, `_unresolved` or `_holdout`; it is forbidden to copy a pool name directly into a final biological label.
+New projects do not create persistent biological pools. They use three auditable boundaries:
 
-For ovary, start from the smallest set of axis-covering pools supported by the current uncertainty:
-
-| Analysis pool | Competing programs that must be present in the review | Purpose |
+| Boundary | Membership | Purpose |
 |---|---|---|
-| `follicular_somatic_review` | granulosa, steroidogenic theca, follicular stroma, luteal if stage-supported | Separate follicular somatic lineages without treating every wall cluster as Theca. |
-| `stromal_mesenchymal_mural_review` | generic stroma/fibroblast, S100A4/progenitor-like mesenchyme, mature smooth muscle, pericyte/mural, structural follicular wall | Recover contractile and progenitor-like lineages hidden in the ECM background. |
-| `vascular_endothelial_mural_review` | blood/lymphatic endothelial, pericyte, smooth muscle, vascular-adjacent stroma | Resolve endothelial tracks from surrounding mural/stromal cells. |
-| `immune_review` | myeloid, lymphoid, plasma and granulocyte programs | Establish Immune first; split only when depth and coherent backbones permit. |
-| `epithelial_mesothelial_review` | ovarian-surface epithelial/mesothelial and stromal boundary alternatives | Protect a thin surface program from internal WT1/MUC16/ECM signal. |
-| `strict_oocyte_candidate` | non-ZP oocyte core, maternal/ooplasm and zona modules versus granulosa/stromal anti-programs | Prevent zona-RNA contamination from creating an overbroad Oocyte label. |
-| `anatomical_interface_review` | the two or more locally competing resident programs | Retain genuine local mixtures without pretending they are a new lineage. |
-| `postcluster_qc_holdout` | balanced broad anchors followed by calibrated atlas/internal-anchor rescue | Rescue low-information observations broad-only before technical retention. |
+| `broad_class_recluster` | all observations assigned to one supported initial broad class | Test shallow subtypes and purity within the parent class. |
+| `targeted_recluster` | only observations needed to answer one local mixture, contamination or context-gated question | Resolve that question once; it cannot become a long-lived catch-all. |
+| `qc_holdout` | all final low-information or irreducibly mixed observations after broad/targeted decisions | Exact query boundary for the terminal calibrated Atlas review; it is not reclustered. |
 
-Do not create all pools automatically. Create a pool only when its immutable membership and competing hypotheses are specified. A query may use a combined pool first and split child pools only after anchor evidence appears.
+A cohort is a computational membership, not a biological category. Every subcluster returns directly to a supported broad/fine label, crosses directly to another lineage, enters one targeted question, or remains QC/technical. A cross-lineage return never creates an intermediate target pool and does not automatically trigger another target-lineage reclustering.
 
 ## 3. Release broad classes
 
@@ -80,8 +73,8 @@ Before a broad label is frozen:
 1. Demonstrate at least two independent positive marker families on the full-feature object.
 2. Quantify major anti-program leakage at observation level, not only cluster-average DEG.
 3. Verify spatial morphology when coordinates exist.
-4. Review stability across adjacent whole-tissue or pool resolutions.
-5. For a large heterogeneous label, perform balanced-anchor query-only reclustering before closure.
+4. Review stability across adjacent whole-tissue or cohort resolutions.
+5. For a large heterogeneous label, use its broad-class or targeted query-only cohort before closure.
 6. Record a negative audit for every biologically plausible but unsupported standalone class; never lower its gate merely to match a paper.
 
 If a fine label fails, roll it back to the supported broad parent and retain its ECM, contractile, hypoxic, stress, cycle, ambient or anatomical characteristics as tags. If a broad biological label fails but the population is a genuine interface or irreducible low-information state, retain that state explicitly rather than forcing the closest atlas label.
@@ -92,7 +85,7 @@ The forward test established reusable failure checks:
 
 - A broad `Theca/follicular wall` bucket can absorb mature smooth muscle, generic ECM stroma, granulosa and endothelial cells. Reopen it with separate steroidogenic, contractile, stromal, granulosa and endothelial programs.
 - A strong mature-contractile population with ring/track morphology can be hidden inside Theca or Stroma. The smooth-muscle audit is mandatory even when no initial cluster carries that name.
-- A stromal source pool containing CDH5/PECAM1/CLDN5/PTPRB/ROBO4/MMRN2-positive branching tracks must be returned to vascular review.
+- A stromal cohort containing CDH5/PECAM1/CLDN5/PTPRB/ROBO4/MMRN2-positive branching tracks must return those observations directly to `Vascular/endothelial` after evidence review.
 - Do not create Mesenchymal or Pericyte merely because a reference lists them. A machine-readable negative audit is an acceptable result.
 - Zona or other oocyte-adjacent RNA in granulosa does not establish Oocyte. Report cellbin/spot counts separately from inferred biological objects.
 - A query cluster with vascular-adjacent markers but dominant granulosa lineage support may remain Granulosa with a spatial/state tag; top DEG alone must not switch its lineage.

@@ -4,7 +4,7 @@ Use this contract when the user asks the Agent to complete an annotation project
 
 ## Default authority
 
-Within the supplied input/project scope, autonomously inspect files, choose candidate clusterings and pool-specific resolution grids, submit and monitor compute jobs, inspect logs, repair failed scripts with a new run ID, review biological evidence, write state, and generate the final release. Do not ask the user to approve routine intermediate cluster labels, resolution choices, pool creation, scheduler resubmission or report rendering.
+Within the supplied input/project scope, autonomously inspect files, choose candidate clusterings and cohort-specific resolution grids, submit and monitor compute jobs, inspect logs, repair failed scripts with a new run ID, review biological evidence, write state, and generate the final release. Do not ask the user to approve routine intermediate cluster labels, resolution choices, cohort creation, scheduler resubmission or report rendering.
 
 Pause only when a missing fact would materially change the biological question or require new authority: no usable expression object, unknown species/tissue, an external reference or software installation requiring permission, or a destructive/external action outside the supplied scope. Record assumptions when stage/condition is unknown and prefer conservative labels.
 
@@ -13,7 +13,7 @@ Pause only when a missing fact would materially change the biological question o
 1. Run `autopilot_status.py PROJECT_ROOT` at startup and after every atomic writeback, repaired job, report build or release audit.
 2. Execute the first emitted phase to completion. A biological phase may require Agent judgment and multiple submitted jobs; a file-existing check alone is insufficient.
 3. Validate artifacts before changing the run from `submitted` to `validated_done`.
-4. Run `plan_next_iteration.py` after every biological writeback. Execute the entire queue, including child pools created by the current route.
+4. Run `plan_next_iteration.py` after every biological writeback. Execute the entire queue, including direct returns and targeted cohorts created by the current question.
 5. Re-run state validation and the completion gate after the last **biological-analysis** run registry update. Never trust a PASS artifact older than a biological ledger or registry before confirmation.
 6. Build one final annotation: moderate-or-higher broad labels and high-confidence fine labels. After the biological completion and incident gates pass, generate only the frozen broad spatial and canonical-marker evidence assets. Then freeze `master_quality_review_request.json`. The main conversation Agent—not the sample worker—performs a concise annotation-quality review against the validated R-first reference and records `PASS`, `PASS` with concerns, or `RETURN_FOR_ITERATION`. Completion is already proven by the completion gate; this approval evaluates biological reasonableness and must never be requested after broad annotation alone.
 7. After main-Agent quality approval, build the lightweight confirmation HTML from the support registry and approved evidence, then pause for explicit user approval. Do not generate final DEG, full tree dotplots, per-node/per-gene maps or the release HTML before approval.
@@ -27,7 +27,7 @@ Do not stop because:
 
 - the original graph clusters have tentative labels;
 - the broad annotation fraction is high;
-- one parent-pool reclustering completed;
+- one broad-class cohort completed;
 - RCTD or atlas mapping produced labels;
 - QC holdout shrank but remains unreviewed;
 - a report can be opened;
@@ -38,7 +38,7 @@ These are intermediate states. Continue autonomously while an in-scope safe next
 
 ## Biological judgment contract
 
-Use profiles as priors and safety gates, never as an answer key. Derive global and pool resolution from the current data. Use the lowest stable resolution that preserves coherent compartments; roll back state-only fragmentation. Allow broad-only and retained interface/QC outcomes when fine evidence fails. For rare or contamination-prone identities, require the profile’s multi-module, anti-program, spatial-object and strict-recluster gates even if a reference prediction is confident.
+Use profiles as priors and safety gates, never as an answer key. Derive global and cohort resolution from the current data. Use the lowest stable resolution that preserves coherent compartments; roll back state-only fragmentation. Allow broad-only and retained interface/QC outcomes when fine evidence fails. For contamination-prone identities, require the profile’s multi-module, anti-program, spatial-object and targeted-recluster gates even if a reference prediction is confident.
 
 ## Failure recovery
 
@@ -46,4 +46,4 @@ Preserve failed/cancelled jobs, logs, route attempts and invalid decisions. Repa
 
 ## Final handoff
 
-Return the audited report, single final annotation metadata, cell/cluster ledgers, route/branch/run/incident registries, DEG and figure source tables, environment/session records, manifest, checksums and release audit. Distinguish biological cell counts from spot/cellbin observations in every summary.
+Return the audited report, single final annotation metadata, cell/cluster ledgers, cohort/direct-return/route/run/incident registries, DEG and figure source tables, environment/session records, manifest, checksums and release audit. Distinguish biological cell counts from spot/cellbin observations in every summary.

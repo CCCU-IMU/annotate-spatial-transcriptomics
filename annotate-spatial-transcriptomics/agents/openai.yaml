@@ -1,4 +1,4 @@
 interface:
   display_name: "R-first Iterative Transcriptomics Annotation"
-  short_description: "Evidence-gated R-first annotation and audited reports"
-  default_prompt: "Use $annotate-spatial-transcriptomics to run one complete evidence-gated annotation per sample, publish a single moderate-or-higher broad/high-confidence fine result, and require the main Agent to approve biological quality only after every annotation route and final writeback is complete."
+  short_description: "Direct-lineage cohort annotation and audited reports"
+  default_prompt: "Use $annotate-spatial-transcriptomics to run one complete direct-lineage annotation per sample: adaptive initial broad classes, one reclustering cohort per broad class, direct cross-lineage returns, terminal residual-QC rescue, a single moderate-or-higher broad/high-confidence fine result, then main-Agent quality approval and user confirmation before final assets."

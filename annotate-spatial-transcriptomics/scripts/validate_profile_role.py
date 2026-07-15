@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 REQUIRED = {
-    "biological_evidence": {"lineages", "evidence_gates", "multi_route_policy", "release_taxonomy"},
+    "biological_evidence": {"lineages", "evidence_gates", "annotation_workflow_policy", "release_taxonomy"},
     "workflow_preprocessing": {"workflow", "stereopy_cellbin_pped_contract", "external_reference_policy", "release_policy"},
 }
 

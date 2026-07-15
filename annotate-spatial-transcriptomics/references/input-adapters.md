@@ -30,8 +30,8 @@ Require a unique cell ID and cluster column. Accept optional x/y, UMAP, method, 
 
 Search for state ledgers, completion sentinels, manifests, logs and previous reports. Classify them as current, superseded or historical. Never infer that a `DONE` file means annotation is complete; it may only mean clustering finished.
 
-## Reusable pool runners
+## Reusable cohort runners
 
-Use `scripts/run_seurat_pool_recluster.R` for configurable Seurat SCT or log-normalized pool reclustering, `scripts/run_sce_pool_recluster.R` for SCE/BANKSY-backed pools and `scripts/run_scanpy_pool_recluster.py` for Scanpy. All accept memberships and multiple candidate resolutions; they route zero-count observations to a QC artifact and do not decide the final resolution. BANKSY results can enter through exported cluster tables, while new BANKSY subset analysis should be configured from the current SCE/spatial object rather than copied from a whole-tissue run.
+Use `scripts/run_seurat_cohort_recluster.R` for configurable Seurat SCT or log-normalized cohort reclustering, `scripts/run_sce_cohort_recluster.R` for SCE/BANKSY-backed cohorts and `scripts/run_scanpy_cohort_recluster.py` for Scanpy. Historical `*_pool_recluster.*` filenames remain implementation-level compatibility adapters only. All accept immutable cohort memberships and multiple candidate resolutions; they route zero-count observations to a QC artifact and do not decide the final resolution. BANKSY results can enter through exported cluster tables, while new BANKSY subset analysis should be configured from the current SCE/spatial object rather than copied from a whole-tissue run.
 
 For an existing SingleCellExperiment/BANKSY clustering, use `scripts/run_sce_initial_cluster_evidence.R`. The shared dotplot, annotation-map and spatial-gene scripts accept both Seurat and SCE/SummarizedExperiment objects; for SCE specify assay names when `counts` plus `normcounts`/`logcounts` are not present.

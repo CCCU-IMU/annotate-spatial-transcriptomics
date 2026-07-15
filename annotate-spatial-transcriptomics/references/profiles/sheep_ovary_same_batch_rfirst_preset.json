@@ -20,33 +20,32 @@
     "input_and_expression_audit",
     "fresh_same_batch_preprocessing",
     "adaptive_whole_tissue_resolution",
-    "full_feature_broad_anchor_review",
-    "open_world_literature_informed_lineage_discovery",
-    "failure_mode_pool_construction",
-    "route_a_large_continuous_anchor_recluster",
-    "route_b_local_interface_targeted_review_then_optional_calibrated_rctd",
-    "route_c_complete_qc_anchor_recluster_then_residual_only_calibrated_atlas",
-    "oocyte_specific_contamination_safe_candidate_recluster_when_supported",
+    "clusterwise_open_world_initial_broad_annotation",
+    "initial_low_information_to_qc_holdout_without_pool_creation",
+    "one_adaptive_recluster_cohort_per_supported_broad_class",
+    "subcluster_high_confidence_fine_or_direct_broad_return",
+    "direct_cross_lineage_return_when_another_lineage_is_supported",
+    "targeted_recluster_or_calibrated_rctd_only_for_interpretable_mixture",
+    "irreducible_or_low_information_to_final_qc_holdout",
+    "residual_qc_direct_calibrated_atlas_without_qc_reclustering",
     "final_broad_writeback_and_optional_high_confidence_fine_labels",
     "completion_gate",
     "post_completion_main_agent_quality_approval",
     "lightweight_user_confirmation",
     "final_deg_figures_and_release_report"
   ],
-  "standard_pool_axes": [
-    "follicular_somatic_granulosa_theca_stroma_review",
-    "stromal_mesenchymal_smooth_muscle_mural_review",
-    "vascular_endothelial_mural_review",
-    "immune_or_epithelial_review_when_query_supported",
-    "complete_post_clustering_qc_holdout",
-    "complete_multimodule_oocyte_candidate"
-  ],
-  "standard_pool_axes_are_exhaustive": false,
+  "routing_model": "broad_then_subtype_direct_cross_lineage_then_residual_qc_atlas",
+  "persistent_biological_pools": false,
+  "membership_objects": {
+    "broad_recluster_cohort": "one immutable adaptive reclustering cohort per initial broad class",
+    "targeted_recluster_cohort": "temporary immutable subset only for a decision-relevant interpretable mixture, including Oocyte contamination-safe review",
+    "qc_holdout": "a retained state and final Atlas query boundary, never a biological pool"
+  },
   "open_world_lineage_discovery": {
     "candidate_catalog": "sheep_ovary_candidate_lineage_catalog.json",
     "rule": "Review every catalog boundary in every sample and scan every unexplained multi-gene program for additional lineages. A not-supported decision is valid; absence in the reference case is not negative evidence and the catalog is not exhaustive.",
     "candidate_trigger": "coherent multi-gene program plus anti-marker compatibility and resolution/spatial support",
-    "candidate_action": "create a sample-specific biological pool and use the ordinary evidence/anchor route; rarity alone never triggers or defines a route",
+    "candidate_action": "assign an initial broad class when moderate-or-higher evidence passes; otherwise use QC holdout. Subsequent supported cross-lineage findings return directly to the target without an intermediate pool.",
     "negative_audit_allowed": true
   },
   "fixed_when_same_batch_contract_is_verified": [
@@ -59,8 +58,8 @@
   ],
   "always_adaptive": [
     "selected_whole_tissue_resolution",
-    "selected_pool_resolution",
-    "pool_membership",
+    "selected_broad_or_targeted_cohort_resolution",
+    "recluster_cohort_membership",
     "anchor_membership",
     "biological_labels",
     "optional_subtype_depth",
@@ -73,7 +72,8 @@
     "label_counts_or_proportions",
     "fine_subtype_inventory"
   ],
-  "generic_rare_cell_route": "disabled; use open-world discovery and ordinary lineage validation. Oocyte retains a dedicated contamination-safe route because zona/adjacent signal is a known confounder, not because it is rare.",
+  "persistent_pool_route": "disabled globally for every new project; legacy pool registries remain migration-only provenance",
+  "generic_rare_cell_route": "disabled; Oocyte uses a temporary contamination-safe targeted cohort because zona/adjacent signal is a known confounder, not because it is rare.",
   "quality_endpoint": "moderate-or-higher broad classes plus high-confidence fine labels only",
   "deviation_policy": "Record a preset exception with the affected phase, current-sample evidence, reason and replacement safeguard; never silently skip or reorder a mandatory phase."
 }
