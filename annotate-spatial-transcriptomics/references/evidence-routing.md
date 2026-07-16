@@ -6,6 +6,8 @@ This file is the active contract. Retired routing instructions live under `refer
 
 Use coherent marker families, anti-marker results, full-feature DEG/detection, adjacent-resolution migration, spatial morphology and source/QC composition. A path, status flag or empty table is not biological evidence. Cohort, direct-return and per-label support artifacts must pass their content schemas.
 
+Before initial broad interpretation, freeze a label-blind evidence matrix covering every eligible broad lineage. Record positive and anti-DEG artifacts, multi-family program scores, winner/runner-up margin, contradictions and technical alternatives. Do not load paper labels or select a convenient marker subset until this artifact is immutable.
+
 ## Broad-class reclustering cohort
 
 Every credible initial broad class receives exactly one immutable `broad_class_recluster` cohort, except a formally documented underpowered skip. Run the complete active workflow grid and audit purity, hidden lineages and defensible subtypes.
@@ -32,19 +34,21 @@ Use `question_mode=targeted_mixture` only for an interpretable local mixture wit
 
 Reference/query overlap must be zero. Calibration uses disjoint, query-like held-out current-query anchors; external-reference self-classification is diagnostic only.
 
-## Terminal residual QC consensus
+## Terminal all-cell Atlas concordance
 
-After every broad-class and targeted cohort is terminal, recompute the residual `qc_holdout` membership from the current cell ledger and freeze that exact set once.
+After every broad-class and targeted cohort is terminal, recompute residual `qc_holdout` and freeze it once. Then map the complete analysis set to one calibrated broad-only Atlas.
 
-**Do not recluster terminal residual QC.** Do not create a QC cohort, anchor-recluster successor or other intermediate membership. Run calibrated Atlas, internal-anchor, current-query marker/anti-marker and observed-density/spatial consensus only on the frozen exact set.
+**Do not recluster terminal residual QC.** Use a fixed reusable Atlas transform/index when available. Never compute a dense query-by-reference distance matrix or repeat joint Atlas integration per sample.
 
-Atlas output tiers are `high`, `moderate_only` and `low_reject`. High and moderate_only consensus may return broad-only with `fine_anchor_eligible=false`; low_reject remains QC. Accepted and rejected memberships must be disjoint and exactly partition the Atlas query, and every result must match the cell-ledger writeback cell for cell.
+Atlas output tiers are `high`, `moderate_only` and `low_reject`, with explicit OOD and neighbor-mixture diagnostics. For frozen QC only, high/moderate_only plus current-query marker/anti-marker and an independent internal/spatial channel may return broad-only; low/OOD/ontology-conflicted results remain QC. For defined cells, agreement closes, weak disagreement is logged, and material calibrated disagreement reopens the entire cluster/cohort once. Atlas alone never overwrites a defined label.
+
+Use default material triggers of at least 30 observations and 20% of a cluster unless a profile supplies stricter thresholds. A coherent OOD group receives a rare/unknown exception rather than being forced to the nearest known class. Orthogonal review compares both hypotheses using query full-feature programs, anti-markers, pseudobulk, sample consistency, morphology and technical alternatives. Bind each decision to `atlas_discrepancy_decision.schema.json`; close as retain, supersede, downgrade, QC or `unknown_candidate`.
 
 For sheep ovary without a matched count-level reference, GSE233801 remains the primary public somatic channel only at this terminal step. It cannot serve as its own reference in a held-out benchmark.
 
 ## Retained uncertainty
 
-Retain `qc_holdout`, `qc_reject` or `technical_state` when evidence is insufficient. A large unresolved fraction triggers evidence review, not a quota and not QC reclustering. Annotation rate is never optimized at the expense of evidence.
+Retain `qc_holdout`, `qc_reject`, `unknown_candidate` or `technical_state` when evidence is insufficient or outside reference support. A large unresolved fraction triggers evidence review, not a quota and not QC reclustering. Annotation rate is never optimized at the expense of evidence.
 
 ## Contamination and ambient signal
 

@@ -8,7 +8,7 @@ Validate biological context, discover and hash inputs, freeze the analysis set, 
 
 ## Round 1: whole-tissue broad annotation
 
-Select a broad clustering adaptively. Generate cluster DEG, marker/anti-marker programs, UMAP and spatial maps. Perform open-world lineage review and write a direct `initial_broad_label` for supported clusters. Send only low-information, featureless or irreducibly mixed observations to `qc_holdout`; do not create intermediate biological containers.
+Select a broad clustering adaptively. Before paper context or label interpretation, freeze label-blind positive/anti DEG, all eligible broad-lineage programs, winner/runner-up margin, contradictions and technical flags. Only then perform open-world review and write a supported `initial_broad_label`. Send low-information, contradicted or irreducibly mixed observations to `qc_holdout`.
 
 ## Round 2: broad-class cohorts
 
@@ -20,6 +20,6 @@ Use a temporary targeted cohort only for an interpretable local mixture, contami
 
 ## Round 4: residual QC and closure
 
-After every broad and targeted cohort is terminal, freeze the complete residual QC membership. Do not recluster it. Apply calibrated Atlas/internal-anchor/marker/spatial consensus to that exact membership; moderate-or-higher returns broad-only and low remains QC reject. Materialize one final annotation and run `validate_direct_lineage_workflow.py`.
+After every broad and targeted cohort is terminal, freeze residual QC. Do not recluster it. Run one calibrated broad-only mapping over the complete analysis set. Directly return only multichannel-supported moderate-or-higher QC observations; compare every defined broad label with the same Atlas result. Reopen only material cluster/cohort disagreement or coherent OOD once, using independent query evidence. Materialize one final annotation and run both Atlas-concordance and direct-workflow validators.
 
-Run `plan_next_iteration.py` after every atomic writeback. A non-empty queue blocks completion. Automated scores and reference predictions support decisions but never write labels directly.
+Run `plan_next_iteration.py` after every atomic writeback. A non-empty queue blocks completion. Automated reference predictions may directly fill an empty frozen-QC broad label under the calibrated multichannel gate; they never overwrite a defined label or write fine labels directly.

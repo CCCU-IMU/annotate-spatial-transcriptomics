@@ -21,6 +21,7 @@ RETAINED_STATUSES = {
     "qc_holdout",
     "technical_state",
     "pending_review",
+    "unknown_candidate",
     "excluded_initial_qc",
 }
 NON_BIOLOGICAL_SUFFIXES = ("_review", "_candidate", "_unresolved", "_holdout", "_cohort")

@@ -142,7 +142,7 @@ def main() -> int:
             project_config = json.loads(project.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             project_config = {}
-    direct_workflow = project_config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts"}
+    direct_workflow = project_config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts", "direct_cross_lineage_recluster_cohorts_global_atlas"}
     context = root / "config/biological_context.json"
     context_validation = root / "provenance/biological_context_validation.json"
     discovery = root / "input_discovery"

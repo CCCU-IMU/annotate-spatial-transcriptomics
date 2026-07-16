@@ -42,7 +42,7 @@ The matched reference is normally the strongest **external** channel, but it doe
 
 Build depth-matched held-out reference cells only to diagnose reference separability. Final rescue thresholds require disjoint held-out current-query anchors with frozen truth, target membership and an origin manifest. Derive score and margin thresholds per route and candidate broad class from those query-like anchors. Reference self-classification is never an acceptable final calibration target.
 
-For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel **only when every broad/targeted cohort is terminal and the final residual-QC reference-rescue step is reached**. It may provide marker/anti-marker evidence elsewhere, but cell-level transfer is not run on defined broad/fine cells. If the matched artifact is only a dotplot, it remains marker/anti-marker evidence and GSE233801 is the primary public adult-sheep somatic Atlas for the complete terminal residual QC membership. QC is not reclustered first. GSE233801 does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
+For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel **only after every broad/targeted cohort is terminal and residual QC is frozen**. Run one broad-only mapping over the complete analysis set. Frozen QC is eligible for calibrated multichannel broad rescue; defined broad/fine cells use the same mapping only for concordance challenge. A dotplot-only artifact remains marker evidence and cannot support all-cell mapping. Otherwise GSE233801 is the primary public adult-sheep somatic Atlas. It does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
 
 The default crosswalk ceiling is `broad_only_after_calibration`. A reference prediction may return a broad label only when:
 
@@ -52,6 +52,8 @@ The default crosswalk ceiling is `broad_only_after_calibration`. A reference pre
 - the result does not violate a rare/context-specific tissue gate.
 
 Transferred observations set `fine_anchor_eligible=false`. A fine label requires current-query full-feature evidence, cohort-specific stability and morphology; reference agreement is supporting evidence only.
+
+Treat mapping as open-set. Store maximum support, margin, neighbor composition and OOD status. A coherent low-support or mixed-neighbor cluster is an unknown-lineage hypothesis; never force it to the nearest reference class. Precompute and hash a fixed feature transform, low-dimensional reference representation and approximate-neighbor index for reuse. Query projection and all-cell label comparison are cheap; per-sample reference retraining, dense pairwise distances and whole-object RCTD are forbidden defaults.
 
 ## Reporting
 

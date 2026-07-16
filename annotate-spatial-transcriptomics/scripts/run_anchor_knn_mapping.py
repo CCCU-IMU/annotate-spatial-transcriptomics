@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reference/internal-anchor kNN evidence; never a direct annotation writer."""
+"""Diagnostic/small-reference kNN evidence; not the reusable global-Atlas path."""
 from __future__ import annotations
 
 import argparse
@@ -147,7 +147,10 @@ def main() -> None:
         "n_reference": len(reference),
         "shared_genes": len(genes),
         "labels": classes.tolist(),
-        "warning": "Calibrate thresholds on held-out depth-matched anchors before any broad-only rescue.",
+        "reusable_across_queries": False,
+        "query_reference_joint_retraining": True,
+        "global_atlas_default_eligible": False,
+        "warning": "This script refits SVD per query and is diagnostic/small-reference only. Use a validated fixed Atlas transform/index for all-cell concordance; calibrate thresholds before any QC broad writeback.",
     }
     (args.out / "mapping_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(json.dumps(manifest, indent=2))

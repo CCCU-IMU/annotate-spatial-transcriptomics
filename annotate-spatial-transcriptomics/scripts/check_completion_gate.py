@@ -99,7 +99,7 @@ def main():
     if not profile_path and preset_record:
         bound_profile=str((preset_record.get("strategy_preset_bindings") or {}).get("biological_profile","") or "")
         if bound_profile:profile_path=Path(bound_profile)
-    direct_workflow = project.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts"}
+    direct_workflow = project.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts", "direct_cross_lineage_recluster_cohorts_global_atlas"}
     if not direct_workflow:errors.append("legacy pool-routing project must be migrated to the direct-lineage cohort architecture before completion")
     if profile_path:
         try:profile=load_profile(profile_path,"biological_evidence")
@@ -173,8 +173,8 @@ def main():
     if multi.get("status")!="PASS":errors.append(f"annotation workflow completion is blocked: {len(multi.get('gaps',[]))} gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
     result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"recluster_cohorts":len(cohorts),"direct_returns":len(returns),"persistent_biological_pools":False,"runs":len(runs),"annotation_workflow_status":multi.get("status"),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context}
     completion_path=r/"provenance/completion_gate.json";completion_path.parent.mkdir(parents=True,exist_ok=True);completion_path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
-    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
-    dependencies.extend(path for path in referenced_files(r,cohorts+returns+read(r/"state/route_attempt_registry.tsv")+read(r/"state/annotation_support_registry.tsv")) if path not in dependencies)
+    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
+    dependencies.extend(path for path in referenced_files(r,clusters+cohorts+returns+read(r/"state/route_attempt_registry.tsv")+read(r/"state/annotation_support_registry.tsv")) if path not in dependencies)
     if profile_path and profile_path.is_file() and profile_path not in dependencies:dependencies.append(profile_path)
     build_dependency_manifest(completion_path,dependencies,{"gate":"completion"})
     print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not errors else 2

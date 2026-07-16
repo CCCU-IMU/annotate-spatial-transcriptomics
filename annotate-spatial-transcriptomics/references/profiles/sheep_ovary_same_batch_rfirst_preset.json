@@ -1,6 +1,6 @@
 {
   "preset_id": "sheep_ovary_same_batch_rfirst",
-  "preset_schema_version": "1.0",
+  "preset_schema_version": "1.1",
   "profile_role": "strategy_preset",
   "activation": "explicit_only",
   "purpose": "Reuse the validated deidentified sheep-ovary R-first decision process for same-batch samples without copying sample-specific parameters, cluster labels or outcomes.",
@@ -20,6 +20,7 @@
     "input_and_expression_audit",
     "fresh_same_batch_preprocessing",
     "adaptive_whole_tissue_resolution",
+    "label_blind_all_candidate_broad_evidence_freeze",
     "clusterwise_open_world_initial_broad_annotation",
     "initial_low_information_to_qc_holdout_without_intermediate_cohort",
     "one_complete_grid_broad_class_recluster_cohort_per_supported_broad_class",
@@ -27,19 +28,20 @@
     "direct_cross_lineage_return_when_another_lineage_is_supported",
     "targeted_recluster_or_calibrated_rctd_only_for_interpretable_mixture",
     "irreducible_or_low_information_to_final_qc_holdout",
-    "residual_qc_direct_calibrated_atlas_without_qc_reclustering",
+    "single_global_all_cell_calibrated_atlas_concordance_without_qc_reclustering",
+    "qc_only_direct_broad_writeback_and_defined_label_discrepancy_review",
     "final_broad_writeback_and_optional_high_confidence_fine_labels",
     "completion_gate",
     "post_completion_main_agent_quality_approval",
     "lightweight_user_confirmation",
     "final_deg_figures_and_release_report"
   ],
-  "routing_model": "broad_then_subtype_direct_cross_lineage_then_residual_qc_atlas",
+  "routing_model": "broad_then_subtype_direct_cross_lineage_then_global_all_cell_atlas",
   "persistent_biological_pools": false,
   "membership_objects": {
     "broad_class_recluster cohort": "one immutable cohort per initial broad class; run the complete active grid and allow homogeneous_parent_confirmed",
     "targeted_recluster cohort": "temporary immutable subset only for a decision-relevant interpretable mixture, including Oocyte contamination-safe review",
-    "qc_holdout": "a retained state and final Atlas query boundary, never a biological cohort"
+    "qc_holdout": "a retained state and the only direct Atlas writeback boundary, never a biological cohort"
   },
   "open_world_lineage_discovery": {
     "candidate_catalog": "sheep_ovary_candidate_lineage_catalog.json",

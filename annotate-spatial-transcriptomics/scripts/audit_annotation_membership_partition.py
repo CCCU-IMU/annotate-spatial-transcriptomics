@@ -13,7 +13,7 @@ from validate_direct_return_evidence import validate as validate_direct_return_e
 
 
 RESIDUAL_QC_STATES = {"qc_holdout", "qc_reject"}
-RETAINED_STATES = RESIDUAL_QC_STATES | {"technical_state"}
+RETAINED_STATES = RESIDUAL_QC_STATES | {"technical_state", "unknown_candidate"}
 RETURN_OUTCOMES = {"parent_return", "fine_return", "cross_lineage_return"}
 
 
@@ -175,13 +175,44 @@ def audit(root: Path) -> dict:
     ]) if outcome_memberships else set()
     if not qc_successor_members <= terminal_qc:
         errors.append("one or more QC-successor observations are missing from terminal residual QC provenance")
-    atlas_rows = [row for row in routes if row.get("route_class") == "residual_qc_atlas_review" and row.get("status") in {"validated_done", "not_applicable_reviewed"}]
-    if len(atlas_rows) != 1:
-        errors.append("terminal residual QC must have exactly one terminal Atlas audit")
+    global_atlas_rows = [row for row in routes if row.get("route_class") == "global_atlas_broad_audit" and row.get("status") in {"validated_done", "not_applicable_reviewed"}]
+    residual_atlas_rows = [row for row in routes if row.get("route_class") == "residual_qc_atlas_review" and row.get("status") in {"validated_done", "not_applicable_reviewed"}]
+    project_path = root / "config/project.json"
+    try:
+        project = json.loads(project_path.read_text(encoding="utf-8")) if project_path.is_file() else {}
+    except json.JSONDecodeError:
+        project = {}
+    global_required = project.get("routing_model") == "direct_cross_lineage_recluster_cohorts_global_atlas"
+    if global_required and len(global_atlas_rows) != 1:
+        errors.append("v1.7 workflow requires exactly one terminal global all-cell Atlas audit")
+    if global_atlas_rows and residual_atlas_rows:
+        errors.append("global and legacy residual-QC Atlas controllers cannot both be active")
+    atlas_rows = global_atlas_rows or residual_atlas_rows
+    if not global_required and len(atlas_rows) != 1:
+        errors.append("terminal workflow must have exactly one Atlas audit")
     elif atlas_rows:
         atlas = atlas_rows[0]
-        if not terminal_qc and atlas.get("status") == "not_applicable_reviewed":
+        if atlas.get("status") == "not_applicable_reviewed":
             pass
+        elif atlas.get("route_class") == "global_atlas_broad_audit":
+            query, query_errors = registry_membership(root, atlas, "query_membership")
+            errors.extend(f"global Atlas: {message}" for message in query_errors)
+            if query != analysis_ids:
+                errors.append("global Atlas query is not cell-for-cell identical to the analysis set")
+            frozen_qc, qc_errors = registry_membership(root, atlas, "qc_membership")
+            errors.extend(f"global Atlas QC: {message}" for message in qc_errors)
+            if frozen_qc != terminal_qc:
+                errors.append("global Atlas frozen QC membership differs from terminal residual QC")
+            accepted, accepted_errors = registry_membership(root, atlas, "accepted_membership")
+            rejected, rejected_errors = registry_membership(root, atlas, "rejected_membership")
+            errors.extend(f"global Atlas accepted: {message}" for message in accepted_errors)
+            errors.extend(f"global Atlas rejected: {message}" for message in rejected_errors)
+            if accepted & rejected or accepted | rejected != frozen_qc:
+                errors.append("global Atlas QC accepted and rejected memberships do not partition frozen QC")
+            ledger_accepted = {row["cell_id"] for row in analysis if row.get("assignment_mode") == "atlas_broad_rescue"}
+            ledger_rejected = frozen_qc - ledger_accepted
+            if accepted != ledger_accepted or rejected != ledger_rejected:
+                errors.append("global Atlas QC outcomes disagree with cell-ledger writeback")
         else:
             query, query_errors = registry_membership(root, atlas, "query_membership")
             errors.extend(f"Atlas: {message}" for message in query_errors)
@@ -213,6 +244,7 @@ def audit(root: Path) -> dict:
         "n_cohorts": len(cohorts),
         "n_direct_returns": len(returns),
         "n_terminal_residual_qc": len(terminal_qc),
+        "atlas_controller": "global_all_cell" if global_atlas_rows else "legacy_residual_qc",
         "errors": errors,
     }
     return result

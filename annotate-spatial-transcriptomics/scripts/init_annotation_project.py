@@ -13,10 +13,10 @@ from pathlib import Path
 REGISTRIES = {
     "input_snapshot_registry.tsv": ["snapshot_id", "sample_id", "path", "kind", "size_bytes", "sha256", "status", "created_at"],
     "clustering_decision_ledger.tsv": ["decision_version", "sample_id", "method", "run_id", "parameters", "n_clusters", "quantitative_rank", "marker_review", "spatial_review", "decision", "rationale", "created_at"],
-    "cluster_decision_ledger.tsv": ["decision_version", "decision_id", "sample_id", "source_run_id", "source_cluster", "n_observations", "spatial_object_count", "count_interpretation", "initial_broad_label", "broad_label", "fine_label", "state", "confidence", "evidence_status", "validation_status", "validation_artifact", "validation_feature_scope", "route", "route_run_id", "recluster_cohort_id", "assignment_mode", "cross_lineage_target", "iteration", "fine_anchor_eligible", "next_action", "closure_rationale", "supersedes", "closed", "created_at"],
+    "cluster_decision_ledger.tsv": ["decision_version", "decision_id", "sample_id", "source_run_id", "source_cluster", "n_observations", "spatial_object_count", "count_interpretation", "prelabel_evidence_artifact", "prelabel_evidence_sha256", "prelabel_evidence_frozen", "prelabel_winner", "prelabel_runner_up", "prelabel_winning_margin", "initial_broad_label", "broad_label", "fine_label", "state", "confidence", "evidence_status", "validation_status", "validation_artifact", "validation_feature_scope", "route", "route_run_id", "recluster_cohort_id", "assignment_mode", "cross_lineage_target", "iteration", "fine_anchor_eligible", "next_action", "closure_rationale", "supersedes", "closed", "created_at"],
     "recluster_cohort_registry.tsv": ["cohort_id", "sample_id", "cohort_type", "question_mode", "source_broad_label", "source_run_ids", "source_cluster_ids", "membership_path", "membership_sha256", "n_observations", "purpose", "competing_hypotheses", "candidate_resolutions", "selected_resolution", "terminal_outcome", "homogeneous_parent_confirmed", "applicability", "applicability_rationale", "underpowered_skip_artifact", "underpowered_skip_artifact_sha256", "outcome_artifact", "outcome_artifact_sha256", "status", "supersedes", "created_at", "closed_at"],
     "direct_return_registry.tsv": ["return_id", "sample_id", "source_cohort_id", "source_run_id", "source_cluster", "membership_path", "membership_sha256", "n_observations", "target_broad_label", "target_fine_label", "confidence", "assignment_mode", "rctd_tier", "independent_evidence", "evidence_artifact", "evidence_artifact_sha256", "fine_anchor_eligible", "status", "supersedes", "created_at"],
-    "route_attempt_registry.tsv": ["route_attempt_id", "sample_id", "decision_id", "source_state", "route_class", "failure_mode", "applicability", "applicability_rationale", "reference_id", "n_query", "query_membership_artifact", "query_membership_sha256", "accepted_membership_artifact", "accepted_membership_sha256", "accepted_membership_n_observations", "rejected_membership_artifact", "rejected_membership_sha256", "rejected_membership_n_observations", "atlas_confidence_enum", "depth_matched_validation", "calibration_origin", "calibration_manifest", "observed_density_spatial_prior", "parameters_artifact", "validation_artifact", "outcome_artifact", "n_defined_fine", "n_defined_broad_only", "n_rerouted", "n_qc_retained", "rctd_high_n", "rctd_moderate_n", "rctd_low_n", "rctd_fine_return_n", "rctd_broad_return_n", "independent_fine_evidence", "successor_state", "reroute_membership_artifact", "reroute_membership_sha256", "fine_anchor_eligible", "status", "supersedes", "created_at", "closed_at"],
+    "route_attempt_registry.tsv": ["route_attempt_id", "sample_id", "decision_id", "source_state", "route_class", "failure_mode", "applicability", "applicability_rationale", "reference_id", "n_query", "query_membership_artifact", "query_membership_sha256", "qc_membership_artifact", "qc_membership_sha256", "qc_membership_n_observations", "accepted_membership_artifact", "accepted_membership_sha256", "accepted_membership_n_observations", "rejected_membership_artifact", "rejected_membership_sha256", "rejected_membership_n_observations", "concordance_artifact", "concordance_artifact_sha256", "cluster_concordance_artifact", "cluster_concordance_artifact_sha256", "discrepancy_review_artifact", "discrepancy_review_artifact_sha256", "n_defined_concordant", "n_defined_weak_challenge", "n_defined_discordant", "n_defined_ood", "n_ontology_conflict", "atlas_confidence_enum", "depth_matched_validation", "calibration_origin", "calibration_manifest", "observed_density_spatial_prior", "parameters_artifact", "validation_artifact", "outcome_artifact", "n_defined_fine", "n_defined_broad_only", "n_rerouted", "n_qc_retained", "rctd_high_n", "rctd_moderate_n", "rctd_low_n", "rctd_fine_return_n", "rctd_broad_return_n", "independent_fine_evidence", "successor_state", "reroute_membership_artifact", "reroute_membership_sha256", "fine_anchor_eligible", "status", "supersedes", "created_at", "closed_at"],
     "workflow_event_registry.tsv": ["event_id", "sample_id", "timestamp", "phase", "branch_id", "action", "input_scope", "parameters", "scheduler_job_id", "status", "decision_summary_zh", "artifact", "supersedes_event_id"],
     "annotation_view_registry.tsv": ["view_id", "sample_id", "view", "membership_path", "membership_sha256", "n_observations", "policy", "marker_deg_eligible", "status", "artifact", "created_at"],
     "annotation_support_registry.tsv": ["support_id", "sample_id", "label_level", "broad_label", "fine_label", "n_observations", "confidence", "positive_marker_evidence", "anti_marker_evidence", "full_feature_evidence", "resolution_evidence", "spatial_evidence", "alternative_hypotheses", "literature_context", "route_summary", "source_decision_ids", "validation_artifacts", "support_artifact", "support_artifact_sha256", "status", "supersedes", "created_at"],
@@ -38,7 +38,7 @@ def main() -> int:
         (root / d).mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     config = {
-        "framework_version": "1.6.1", "sample_id": args.sample,
+        "framework_version": "1.7.0", "sample_id": args.sample,
         "input_root": str(args.input_root.resolve()), "project_root": str(root),
         "modality": args.modality, "observation_unit": args.observation_unit,
         "decision_version": "v001", "status": "initialized", "created_at_utc": now,
@@ -52,7 +52,12 @@ def main() -> int:
         "confidence_enum": ["low", "moderate", "high"],
         "atlas_confidence_enum": ["high", "moderate_only", "low_reject"],
         "annotation_workflow_completion_required": True,
-        "routing_model": "direct_cross_lineage_recluster_cohorts",
+        "routing_model": "direct_cross_lineage_recluster_cohorts_global_atlas",
+        "prelabel_evidence_freeze_required": True,
+        "global_atlas_concordance_required_when_reference_applicable": True,
+        "global_atlas_mapping_scope": "complete_analysis_set",
+        "global_atlas_mapping_ceiling": "broad_only",
+        "global_atlas_ood_rejection_required": True,
         "persistent_biological_pools": False,
         "post_completion_master_quality_approval_required": True,
         "preconfirmation_lightweight_review_required": True,
@@ -76,7 +81,7 @@ def main() -> int:
     state_md = root / "state/annotation_state.md"
     if not state_md.exists():
         state_md.write_text(
-            f"# {args.sample} annotation state\n\n- framework: 1.6.1\n- modality: {args.modality}\n"
+            f"# {args.sample} annotation state\n\n- framework: 1.7.0\n- modality: {args.modality}\n"
             f"- observation unit: {args.observation_unit}\n- status: initialized\n- created: {now}\n\n"
             "## Current gate\n\nInput discovery and immutable snapshot are pending.\n",
             encoding="utf-8",

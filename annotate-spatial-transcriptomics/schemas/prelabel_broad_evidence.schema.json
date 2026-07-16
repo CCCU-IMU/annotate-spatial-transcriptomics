@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/prelabel_broad_evidence.schema.json",
+  "title": "Label-blind broad-lineage evidence freeze",
+  "type": "object",
+  "required": [
+    "schema_version", "freeze_id", "source_cluster", "n_observations",
+    "label_blind", "favored_marker_interpretation_loaded", "candidate_catalog_artifact", "candidate_lineages",
+    "lineage_hypotheses", "winner", "runner_up", "winning_margin",
+    "winner_confidence", "positive_deg_artifact", "anti_deg_artifact",
+    "technical_flags", "frozen_before_initial_label"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "freeze_id": {"type": "string", "minLength": 1},
+    "source_cluster": {"type": "string", "minLength": 1},
+    "n_observations": {"type": "integer", "minimum": 1},
+    "label_blind": {"const": true},
+    "favored_marker_interpretation_loaded": {"const": false},
+    "candidate_catalog_artifact": {"$ref": "#/$defs/artifact"},
+    "candidate_lineages": {
+      "type": "array", "minItems": 2, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "lineage_hypotheses": {
+      "type": "array", "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "candidate_id", "candidate_broad_lineage", "eligible", "program_score",
+          "positive_marker_family_count", "positive_marker_families",
+          "anti_program_burden", "contradiction_count", "evidence_artifacts"
+        ],
+        "properties": {
+          "candidate_id": {"type": "string", "minLength": 1},
+          "candidate_broad_lineage": {"type": "string", "minLength": 1},
+          "eligible": {"type": "boolean"},
+          "program_score": {"type": "number"},
+          "positive_marker_family_count": {"type": "integer", "minimum": 0},
+          "positive_marker_families": {
+            "type": "array", "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "anti_program_burden": {"type": "number", "minimum": 0},
+          "contradiction_count": {"type": "integer", "minimum": 0},
+          "evidence_artifacts": {
+            "type": "array", "minItems": 1,
+            "items": {"$ref": "#/$defs/artifact"}
+          }
+        }
+      }
+    },
+    "winner": {"type": "string", "minLength": 1},
+    "runner_up": {"type": "string", "minLength": 1},
+    "winning_margin": {"type": "number"},
+    "winner_confidence": {"enum": ["low", "moderate", "high"]},
+    "positive_deg_artifact": {"$ref": "#/$defs/artifact"},
+    "anti_deg_artifact": {"$ref": "#/$defs/artifact"},
+    "technical_flags": {"type": "object", "minProperties": 1},
+    "frozen_before_initial_label": {"const": true}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

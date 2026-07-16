@@ -15,19 +15,21 @@ Do not optimize a BANKSY, Seurat or Scanpy result to reproduce another method's 
 Comparable annotation quality requires:
 
 1. Exact `full_object`, `analysis_set`, initial-QC and post-clustering-holdout accounting.
-2. Per-class cell/bin-level lineage-core, support and anti-program audits on the full-feature object.
-3. Marker, DEG, source/QC composition and spatial morphology review for every large label and every broad/targeted cohort.
-4. Open-world discovery plus strict context gates for ambient-prone identities; rarity alone is not a class or route. Report spatial objects separately from observation counts.
-5. One reclustering cohort for every supported initial broad class, with an underpowered skip allowed only when recorded.
-6. Tiered low-priority RCTD evidence: canonical high plus independent evidence may support fine, moderate returns broad-only, and low enters the frozen QC holdout rather than Atlas.
-7. Atlas/internal-anchor rescue only for the exact terminal residual QC membership recomputed after every broad/targeted cohort is terminal; QC is frozen once and never reclustered. Calibrated `high` or `moderate_only` Atlas consensus may return broad-only, while `low_reject` remains QC. Already defined broad/fine cells are forbidden Atlas queries. Accepted cells cannot seed fine discovery. Default held-out target-precision tiers are moderate 0.90 and high 0.95; they are not raw per-cell score cutoffs.
-8. A small/local retained interface, or a documented irreducible QC/technical remainder after every applicable route. Large/diffuse retention automatically reopens.
-9. Broad and subtype evidence assets are separate. The subtype tree may be shallow when the data support only broad identities.
-10. A navigable report whose annotation tree, node highlights, DEG, marker dotplots, spatial gene maps, source ancestry and detailed workflow all resolve to audited artifacts.
-11. A subtype parsimony audit showing that every fine label adds a reproducible functional or lineage program beyond its parent; unsupported splits are merged and retained as state tags.
-12. A taxonomy/cohort audit showing that every release label passed its own gate, every unsupported plausible literature class has a negative audit, and no routing/technical state enters biological DEG or marker discovery.
-13. Content-schema validation for every cohort outcome, direct return and broad/fine support record. Artifact existence alone, empty evidence and status-only placeholders fail.
-14. Exact observation-level partition closure from initial broad membership through cohort outcomes, direct/targeted/QC successors, terminal Atlas accepted/rejected writeback and the single final annotation.
+2. Freeze a label-blind, all-candidate broad evidence matrix before initial labels: positive DEG, anti-DEG, winner/runner-up, margin, marker-family coverage, contradictions and technical flags. Paper markers cannot narrow the candidate set after seeing the result.
+3. Per-class cell/bin-level lineage-core, support and anti-program audits on the full-feature object.
+4. Marker, DEG, source/QC composition and spatial morphology review for every large label and every broad/targeted cohort.
+5. Open-world discovery plus strict context gates for ambient-prone identities; rarity alone is not a class or route. Report spatial objects separately from observation counts.
+6. One reclustering cohort for every supported initial broad class, with an underpowered skip allowed only when recorded.
+7. Tiered low-priority RCTD evidence: canonical high plus independent evidence may support fine, moderate returns broad-only, and low enters the frozen QC holdout rather than Atlas.
+8. After terminal QC is frozen, run one calibrated broad-only Atlas mapping over the complete analysis set. `high`/`moderate_only` plus current-query and independent spatial/internal support may directly rescue only QC; `low_reject`, OOD and ontology-conflicted rows do not write back. Defined cells use the mapping only for concordance challenge. Accepted QC returns cannot seed fine discovery. Default held-out precision targets remain 0.90/0.95.
+9. Every material defined-label disagreement and coherent OOD group reopens the complete cluster/cohort exactly once. Atlas alternatives require independent query full-feature evidence to supersede; mixed evidence downgrades or becomes unknown/QC.
+10. A small/local retained interface, or a documented irreducible QC/technical remainder after every applicable route. Large/diffuse retention automatically reopens.
+11. Broad and subtype evidence assets are separate. The subtype tree may be shallow when the data support only broad identities.
+12. A navigable report whose annotation tree, node highlights, DEG, marker dotplots, spatial gene maps, source ancestry and detailed workflow all resolve to audited artifacts.
+13. A subtype parsimony audit showing that every fine label adds a reproducible functional or lineage program beyond its parent; unsupported splits are merged and retained as state tags.
+14. A taxonomy/cohort audit showing that every release label passed its own gate, every unsupported plausible literature class has a negative audit, and no routing/technical state enters biological DEG or marker discovery.
+15. Content-schema validation for every prelabel freeze, cohort outcome, direct return and broad/fine support record. Artifact existence alone, empty evidence and status-only placeholders fail.
+16. Exact observation-level partition closure through global Atlas query coverage, frozen-QC accepted/rejected writeback, defined-label review closure and the final annotation.
 
 ## Large-label purity trigger
 
@@ -35,7 +37,7 @@ A convincing cluster-level DEG does not validate every observation in that clust
 
 ## Unresolved-fraction trigger
 
-Do not impose a universal annotation-rate quota. Instead, treat any large or spatially diffuse interface/QC/pending fraction as a mandatory evidence audit. Broad/targeted cohorts must already be terminal; then freeze terminal residual QC once and apply calibrated Atlas/internal-anchor/marker/spatial consensus without reclustering. Report the denominator and every accepted/rejected outcome.
+Do not impose a universal annotation-rate quota. Treat any large or spatially diffuse interface/QC/pending fraction as a mandatory evidence audit. After broad/targeted cohorts are terminal, freeze residual QC once and run the calibrated all-cell broad concordance pass without QC reclustering. Report the complete mapping denominator, frozen-QC accepted/rejected outcomes, defined-label disagreements and OOD groups separately.
 
 ## Forward-test target
 
@@ -43,4 +45,4 @@ A fresh Agent receives raw inputs, biological context and this Skill, but not th
 
 ## Post-completion main-Agent approval
 
-For every sample, the main conversation Agent performs one biological quality approval only after all broad/targeted cohorts, direct returns, residual-QC rescue, final label materialization and the completion gate have finished. The completion gate proves workflow closure; the approval does not repeat it. Review broad-label reasonableness, marker/anti-marker plus spatial support, context-gated/confounded lineage safety, and whether the result reaches the evidence quality of the validated deidentified reference strategy. Exact label/count agreement and equally deep subtypes are not required. A result may pass with documented concerns; a material biological error returns the same sample worker to targeted iteration. User confirmation and final assets remain blocked until this approval passes.
+For every sample, the main conversation Agent performs one biological quality approval only after all broad/targeted cohorts, direct returns, all-cell Atlas concordance/OOD review, residual-QC writeback, final label materialization and the completion gate have finished. The completion gate proves workflow closure; the approval does not repeat it. Review broad-label reasonableness, marker/anti-marker plus spatial support, context-gated/confounded lineage safety, and whether the result reaches the evidence quality of the validated deidentified reference strategy. Exact label/count agreement and equally deep subtypes are not required. A result may pass with documented concerns; a material biological error returns the same sample worker to targeted iteration. User confirmation and final assets remain blocked until this approval passes.

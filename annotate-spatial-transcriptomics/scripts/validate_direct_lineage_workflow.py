@@ -10,6 +10,7 @@ from pathlib import Path
 from evidence_schema_lib import active_registry_rows, path_at, read_tsv, sha256, write_result
 from validate_cohort_outcome import validate as validate_cohort_outcome
 from validate_direct_return_evidence import validate as validate_direct_return_evidence
+from validate_prelabel_broad_evidence import validate as validate_prelabel_broad_evidence
 from workflow_contract_lib import active_workflow_contract
 
 
@@ -17,7 +18,7 @@ FORMAL_GRID = [0.1, 0.2, 0.3, 0.4, 0.6]
 TERMINAL = {"validated_done", "not_applicable_reviewed"}
 CANONICAL_CONFIDENCE = {"low", "moderate", "high"}
 ATLAS_CONFIDENCE = {"high", "moderate_only", "low_reject"}
-RETAINED = {"qc_holdout", "qc_reject", "technical_state", "excluded_initial_qc"}
+RETAINED = {"qc_holdout", "qc_reject", "technical_state", "unknown_candidate", "excluded_initial_qc"}
 
 
 def truth(value: str) -> bool:
@@ -53,6 +54,12 @@ def audit(root: Path) -> dict:
         gaps.append(gap(code, entity_type, entity_id, action, detail, blocking))
 
     contract = active_workflow_contract(root)
+    project_path = root / "config/project.json"
+    try:
+        project = json.loads(project_path.read_text(encoding="utf-8")) if project_path.is_file() else {}
+    except json.JSONDecodeError:
+        project = {}
+    global_atlas_required = project.get("routing_model") == "direct_cross_lineage_recluster_cohorts_global_atlas"
     cell_path = root / "state/cell_ledger.tsv.gz"
     if not cell_path.exists():
         cell_path = root / "state/cell_ledger.tsv"
@@ -72,6 +79,11 @@ def audit(root: Path) -> dict:
         add("CELL_LEDGER_SCHEMA_INVALID", "analysis_set", "analysis_set", "repair_cell_ledger_schema", "missing fields: " + ", ".join(sorted(required_fields - set(cells[0]))))
     analysis = [row for row in cells if row.get("analysis_scope") == "analysis_set"]
     initial_broad = sorted({row.get("initial_broad_label", "").strip() for row in analysis if row.get("initial_broad_label", "").strip()})
+    if project.get("prelabel_evidence_freeze_required"):
+        prelabel = validate_prelabel_broad_evidence(root, root / "state/cluster_decision_ledger.tsv")
+        write_result(root / "provenance/prelabel_broad_evidence_validation.json", prelabel)
+        for message in prelabel.get("errors", []):
+            add("PRELABEL_EVIDENCE_INVALID", "whole_tissue", "prelabel_broad_evidence", "freeze_label_blind_candidate_matrix_before_initial_labels", message)
     by_broad: dict[str, list[dict[str, str]]] = {}
     for cohort in cohorts:
         cohort_id = cohort.get("cohort_id", "")
@@ -185,28 +197,46 @@ def audit(root: Path) -> dict:
     for route in routes:
         if route.get("route_class") in {"qc_anchor_recluster", "qc_holdout_recluster"}:
             add("TERMINAL_QC_RECLUSTER_FORBIDDEN", "route", route.get("route_attempt_id", ""), "remove_qc_reclustering_and_freeze_terminal_qc", "legacy QC reclustering route is active")
-    atlas = [row for row in routes if row.get("route_class") == "residual_qc_atlas_review" and row.get("status") in TERMINAL]
+    global_atlas = [row for row in routes if row.get("route_class") == "global_atlas_broad_audit" and row.get("status") in TERMINAL]
+    residual_atlas = [row for row in routes if row.get("route_class") == "residual_qc_atlas_review" and row.get("status") in TERMINAL]
+    if global_atlas and residual_atlas:
+        add("ATLAS_CONTROLLER_DUPLICATED", "route", "atlas", "retain_one_atlas_controller", "global and legacy residual-QC Atlas controllers cannot both be active")
+    atlas = global_atlas if global_atlas_required else (global_atlas or residual_atlas)
     if len(atlas) != 1:
-        add("TERMINAL_ATLAS_AUDIT_MISSING", "terminal_residual_qc", "terminal_residual_qc", "run_or_record_zero_query_atlas_consensus", "exactly one terminal Atlas audit is required")
+        action = "run_or_record_global_all_cell_atlas_audit" if global_atlas_required else "run_or_record_atlas_consensus"
+        add("TERMINAL_ATLAS_AUDIT_MISSING", "terminal_residual_qc", "terminal_residual_qc", action, "exactly one terminal Atlas audit is required")
     for route in atlas:
         route_id = route.get("route_attempt_id", "")
         if route.get("applicability") == "not_applicable":
             if len(route.get("applicability_rationale", "").strip()) < 20:
-                add("ATLAS_ZERO_QUERY_RATIONALE_MISSING", "route", route_id, "record_zero_query_terminal_audit", "zero-query Atlas audit lacks rationale")
+                add("ATLAS_NOT_APPLICABLE_RATIONALE_MISSING", "route", route_id, "record_reference_applicability_audit", "not-applicable Atlas audit lacks a substantive rationale")
             continue
-        if route.get("source_state") != "residual_qc_holdout_after_all_cohorts":
-            add("ATLAS_QUERY_NOT_TERMINAL_QC", "route", route_id, "freeze_exact_terminal_residual_qc", "Atlas source is not terminal residual QC")
+        is_global = route.get("route_class") == "global_atlas_broad_audit"
+        expected_source = "analysis_set_after_terminal_qc_freeze" if is_global else "residual_qc_holdout_after_all_cohorts"
+        if route.get("source_state") != expected_source:
+            add("ATLAS_QUERY_SCOPE_INVALID", "route", route_id, "freeze_required_atlas_query_scope", f"Atlas source must be {expected_source}")
         tiers = {value for value in re.split(r"[|,;\s]+", route.get("atlas_confidence_enum", "")) if value}
         if tiers != ATLAS_CONFIDENCE:
             add("ATLAS_CONFIDENCE_ENUM_INVALID", "route", route_id, "use_high_moderate_only_low_reject", f"Atlas confidence enum is {sorted(tiers)}")
         if route.get("calibration_origin") != "query_like_heldout_current_query_anchors":
             add("ATLAS_CALIBRATION_INVALID", "route", route_id, "calibrate_on_disjoint_query_like_anchors", "Atlas calibration origin is invalid")
-        if not truth(route.get("depth_matched_validation", "")) or not truth(route.get("observed_density_spatial_prior", "")):
+        if not truth(route.get("depth_matched_validation", "")) or (not is_global and not truth(route.get("observed_density_spatial_prior", ""))):
             add("ATLAS_CONSENSUS_INCOMPLETE", "route", route_id, "complete_depth_marker_internal_anchor_spatial_consensus", "Atlas lacks required consensus channels")
-        for key in ("calibration_manifest", "validation_artifact", "outcome_artifact"):
+        required_artifacts = ["calibration_manifest", "validation_artifact", "outcome_artifact"]
+        if is_global:
+            required_artifacts.extend(["parameters_artifact", "concordance_artifact", "cluster_concordance_artifact", "discrepancy_review_artifact"])
+        for key in required_artifacts:
             value = route.get(key, "")
             if not value or not path_at(root, value).is_file():
                 add("ATLAS_EVIDENCE_ARTIFACT_MISSING", "route", route_id, "repair_atlas_evidence_bundle", f"missing {key}")
+        if is_global:
+            validation_value = route.get("validation_artifact", "")
+            try:
+                validation = json.loads(path_at(root, validation_value).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                validation = {}
+            if validation.get("status") != "PASS":
+                add("GLOBAL_ATLAS_REVIEW_OPEN", "route", route_id, "close_every_material_disagreement_once", "global Atlas concordance or discrepancy review has not passed")
         if truth(route.get("fine_anchor_eligible", "")):
             add("ATLAS_FINE_ANCHOR_FORBIDDEN", "route", route_id, "set_fine_anchor_false", "Atlas route cannot seed fine discovery")
 
@@ -217,12 +247,13 @@ def audit(root: Path) -> dict:
     return {
         "status": "PASS" if not blocking else "BLOCKED",
         "controller_state": "CONTINUE" if not blocking else "ITERATION_REQUIRED",
-        "workflow_model": "broad_class_recluster_cohort_then_direct_return_then_terminal_residual_qc",
+        "workflow_model": "broad_class_recluster_then_global_all_cell_atlas_concordance" if global_atlas_required else "broad_class_recluster_cohort_then_direct_return_then_terminal_residual_qc",
         "active_workflow_contract": contract,
         "initial_broad_labels": initial_broad,
         "recluster_cohort_n": len(cohorts),
         "direct_return_n": len(returns),
         "atlas_phase_n": len(atlas),
+        "atlas_controller": "global_all_cell" if global_atlas else "legacy_residual_qc",
         "persistent_biological_pools": False,
         "errors": [item["detail"] for item in blocking],
         "gaps": gaps,

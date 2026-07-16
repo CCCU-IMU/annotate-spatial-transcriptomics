@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.0 — 2026-07-16
+
+- Added a mandatory label-blind prelabel broad-evidence freeze with all-candidate positive/anti programs, winner/runner-up margin and contradiction checks to prevent paper-marker anchoring.
+- Replaced the new-project residual-QC-only Atlas controller with one calibrated all-cell broad mapping after terminal QC freeze; only the frozen QC subset can write labels directly.
+- Added deterministic all-cell concordance routing for QC writeback/reject, defined-label agreement, weak challenge, material disagreement, ontology conflict and coherent OOD/unknown candidates.
+- Required one evidence-bound orthogonal review for every material broad disagreement, material ontology conflict or coherent OOD group; Atlas-only overwrite and fine-label transfer fail closed.
+- Added reusable fixed-transform/reference/index guidance and prohibited dense query-by-reference distance matrices, per-sample joint Atlas retraining and whole-object RCTD defaults.
+- Added v1.6.1-to-v1.7.0 migration, new schemas/validators, state fields, completion dependencies, report surfaces and regression tests.
+
 ## 1.6.1 — 2026-07-15
 
 - Removed the last active QC-reclustering prerequisites; Atlas/internal-anchor/marker/spatial consensus now audits only the exact frozen terminal residual-QC partition.

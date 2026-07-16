@@ -1,4 +1,4 @@
 interface:
-  display_name: "R-first Iterative Transcriptomics Annotation"
-  short_description: "Direct-lineage cohort annotation and audited reports"
-  default_prompt: "Use $annotate-spatial-transcriptomics to run one complete direct-lineage annotation per sample: adaptive initial broad classes, one reclustering cohort per broad class, direct cross-lineage returns, terminal residual-QC rescue, a single moderate-or-higher broad/high-confidence fine result, then main-Agent quality approval and user confirmation before final assets."
+  display_name: "Evidence-first Transcriptomics Annotation"
+  short_description: "Evidence-first annotation with all-cell Atlas audit"
+  default_prompt: "Use $annotate-spatial-transcriptomics to annotate each sample from label-blind broad evidence through direct-lineage cohorts, one calibrated all-cell Atlas concordance and OOD audit, QC broad rescue, discrepancy review, and audited release."

@@ -14,7 +14,7 @@ from scheduler_job_name import validate as validate_scheduler_job_name
 from confidence_lib import CANONICAL
 
 
-ALLOWED = {"defined_fine", "defined_broad_only", "interface_review", "qc_holdout", "technical_state", "pending_review", "excluded_initial_qc", "closed_and_frozen"}
+ALLOWED = {"defined_fine", "defined_broad_only", "interface_review", "qc_holdout", "technical_state", "pending_review", "unknown_candidate", "excluded_initial_qc", "closed_and_frozen"}
 CONFIDENCE_RANK = {"low": 0, "moderate": 1, "high": 2}
 
 
@@ -43,7 +43,7 @@ def main() -> int:
     config_path = args.project_root / "config/project.json"
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
     workflow_required = bool(config.get("annotation_workflow_completion_required", config.get("multi_route_completion_required")))
-    direct_workflow = config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts"}
+    direct_workflow = config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts", "direct_cross_lineage_recluster_cohorts_global_atlas"}
     cell_ledger = args.cell_ledger
     if cell_ledger is None:
         for candidate in (state / "cell_ledger.tsv.gz", state / "cell_ledger.tsv"):

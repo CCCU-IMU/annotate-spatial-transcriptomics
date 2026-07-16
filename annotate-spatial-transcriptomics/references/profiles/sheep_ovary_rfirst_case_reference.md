@@ -22,7 +22,7 @@ Local interfaces used targeted reclustering first. RCTD was lower priority: cano
 
 ## 4. Residual QC rescue
 
-After every broad and targeted cohort closed, the complete residual QC membership was frozen once and mapped directly; it was not reclustered. External Atlas, current-query marker/anti-marker and internal-anchor or observed-density spatial channels had to agree under thresholds calibrated on disjoint query-like held-out current-query anchors. `high` and `moderate_only` returns entered final broad memberships with `fine_anchor_eligible=false`; `low_reject` calls remained QC. Atlas self-splitting was never accepted as query calibration.
+After every broad and targeted cohort closed, residual QC was frozen once and was not reclustered. The external Atlas was mapped over the complete analysis set for a single broad concordance audit. Current-query marker/anti-marker and internal-anchor or observed-density spatial channels gated direct QC writeback; `high` and `moderate_only` returns entered final broad membership with `fine_anchor_eligible=false`, while `low_reject`/OOD calls remained QC. Defined broad labels were challenged but never overwritten by Atlas alone. Atlas self-splitting was never accepted as query calibration.
 
 ## 5. Boundary safeguards
 

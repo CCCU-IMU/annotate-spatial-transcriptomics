@@ -52,7 +52,7 @@ def main() -> int:
     project_path = root / "config/project.json"
     project = json.loads(project_path.read_text(encoding="utf-8")) if project_path.is_file() else {}
 
-    if project.get("routing_model", "direct_cross_lineage_recluster_cohorts") not in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts"}:
+    if project.get("routing_model", "direct_cross_lineage_recluster_cohorts") not in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts", "direct_cross_lineage_recluster_cohorts_global_atlas"}:
         raise SystemExit("legacy pool project detected; migrate it before using the current planner")
 
     cluster_rows = active_decisions(read_tsv(root / "state/cluster_decision_ledger.tsv"))

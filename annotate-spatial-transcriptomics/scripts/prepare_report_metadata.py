@@ -18,6 +18,7 @@ RETAINED_LABELS = {
     "qc_holdout": "QC holdout",
     "technical_state": "Technical retained",
     "pending_review": "Pending review",
+    "unknown_candidate": "Unknown candidate",
     "excluded_initial_qc": "Excluded initial QC",
 }
 

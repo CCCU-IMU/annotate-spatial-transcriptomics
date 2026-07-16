@@ -14,10 +14,13 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from validate_atlas_index_manifest import validate as validate_atlas_index_manifest
+
 
 ROUTE_CLASSES = {
     "targeted_rctd_review",
     "residual_qc_atlas_review",
+    "global_atlas_broad_audit",
     "contextual_reference_review",
     "explicit_technical_retention",
 }
@@ -161,6 +164,77 @@ def validate_terminal(root: Path, record: dict) -> list[str]:
                 errors.append("Atlas accepted/rejected memberships do not exactly partition the query")
         except (OSError, ValueError):
             errors.append("unable to validate Atlas membership partition")
+    if route == "global_atlas_broad_audit":
+        if record.get("source_state") != "analysis_set_after_terminal_qc_freeze":
+            errors.append("global Atlas source must be the complete analysis set after terminal QC freeze")
+        if record.get("calibration_origin") != "query_like_heldout_current_query_anchors":
+            errors.append("global Atlas calibration origin is invalid")
+        if not truth(record.get("depth_matched_validation")):
+            errors.append("global Atlas requires depth-matched validation")
+        if record.get("atlas_confidence_enum") != "high|moderate_only|low_reject":
+            errors.append("global Atlas confidence enum must be high|moderate_only|low_reject")
+        if truth(record.get("fine_anchor_eligible")):
+            errors.append("global Atlas mapping cannot become a fine anchor")
+        for field in (
+            "calibration_manifest", "parameters_artifact", "validation_artifact", "outcome_artifact",
+            "concordance_artifact", "cluster_concordance_artifact", "discrepancy_review_artifact",
+        ):
+            value = str(record.get(field, ""))
+            if not value or not path_at(root, value).is_file():
+                errors.append(f"missing {field}")
+        validation_value = str(record.get("validation_artifact", ""))
+        if validation_value and path_at(root, validation_value).is_file():
+            try:
+                validation = json.loads(path_at(root, validation_value).read_text(encoding="utf-8"))
+                if validation.get("status") != "PASS":
+                    errors.append("global Atlas concordance validation did not pass")
+            except (OSError, json.JSONDecodeError):
+                errors.append("global Atlas concordance validation is unreadable")
+        index_value = str(record.get("parameters_artifact", ""))
+        if index_value and path_at(root, index_value).is_file():
+            index_validation = validate_atlas_index_manifest(root, path_at(root, index_value))
+            errors.extend(f"Atlas index: {message}" for message in index_validation.get("errors", []))
+        partitions: dict[str, set[str]] = {}
+        for prefix, count_field in (
+            ("qc_membership", "qc_membership_n_observations"),
+            ("accepted_membership", "accepted_membership_n_observations"),
+            ("rejected_membership", "rejected_membership_n_observations"),
+        ):
+            value = str(record.get(f"{prefix}_artifact", ""))
+            path = path_at(root, value) if value else Path()
+            if not value or not path.is_file():
+                errors.append(f"missing {prefix}_artifact")
+                continue
+            expected_hash = str(record.get(f"{prefix}_sha256", ""))
+            if not expected_hash or sha256(path) != expected_hash:
+                errors.append(f"{prefix}_sha256 mismatch")
+            try:
+                partitions[prefix] = membership_set(path)
+                if len(partitions[prefix]) != int(float(record.get(count_field, 0) or 0)):
+                    errors.append(f"{prefix} count mismatch")
+            except (ValueError, TypeError):
+                errors.append(f"invalid {prefix} membership/count")
+        qc = partitions.get("qc_membership", set())
+        accepted = partitions.get("accepted_membership", set())
+        rejected = partitions.get("rejected_membership", set())
+        if accepted & rejected or accepted | rejected != qc:
+            errors.append("global Atlas QC accepted/rejected memberships do not exactly partition frozen QC")
+        try:
+            n_query = int(float(record.get("n_query", 0) or 0))
+            category_total = sum(int(float(record.get(field, 0) or 0)) for field in (
+                "n_defined_concordant", "n_defined_weak_challenge", "n_defined_discordant",
+                "n_defined_ood", "n_ontology_conflict", "n_defined_broad_only", "n_qc_retained",
+            ))
+            if category_total != n_query:
+                errors.append("global Atlas comparison categories do not partition n_query")
+            if int(float(record.get("n_defined_broad_only", 0) or 0)) != len(accepted):
+                errors.append("global Atlas QC writeback count differs from accepted membership")
+            if int(float(record.get("n_qc_retained", 0) or 0)) != len(rejected):
+                errors.append("global Atlas QC reject count differs from rejected membership")
+            if int(float(record.get("n_defined_fine", 0) or 0)) != 0:
+                errors.append("global Atlas mapping cannot define fine labels")
+        except (ValueError, TypeError):
+            errors.append("invalid global Atlas outcome counts")
     return errors
 
 

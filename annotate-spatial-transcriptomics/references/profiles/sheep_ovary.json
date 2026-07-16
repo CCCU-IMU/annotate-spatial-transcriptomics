@@ -1,9 +1,9 @@
 {
-  "profile_id": "ovis_aries_ovary_v1",
+  "profile_id": "ovis_aries_ovary_v2",
   "species": "Ovis aries",
   "tissue": "ovary",
   "profile_role": "biological_evidence",
-  "profile_schema_version": "1.6",
+  "profile_schema_version": "1.7",
   "reference_scope": {
     "GSE233801": "adult estrus sheep somatic anchors; does not sufficiently define Oocyte, Theca or Epithelial and preserves unknown clusters",
     "iScience_2025_sheep_ovarian_development": "developmental sheep reference with Oocyte, Theca and Epithelial programs; stage and sampling dependent",
@@ -210,7 +210,7 @@
     "rule": "HVG/BANKSY features may select clusters, but final canonical positive/negative marker validation must use a full-feature count/data object; absence from an HVG matrix is not negative expression evidence"
   },
   "annotation_workflow_policy": {
-    "routing_model": "broad_then_subtype_direct_cross_lineage_then_residual_qc_atlas",
+    "routing_model": "broad_then_subtype_direct_cross_lineage_then_global_all_cell_atlas",
     "persistent_biological_pools": false,
     "incident_registry_required": true,
     "initial_broad_annotation": "after selecting the whole-tissue resolution, apply the complete open-world lineage audit directly to every cluster; moderate-or-higher broad calls enter their broad class and low-information or irreducibly mixed clusters enter QC holdout",
@@ -219,8 +219,9 @@
     "cross_lineage_policy": "a source subcluster with coherent evidence for another broad/fine identity returns directly to that target while preserving source run/cluster/cohort provenance; do not create an intermediate cohort or automatically recluster it again",
     "targeted_recluster_policy": "create an immutable temporary cohort only when interpretable competing biological programs and sufficient observations make another computation decision-relevant",
     "qc_holdout_recluster_forbidden": true,
-    "atlas_scope": "all residual QC holdout after every broad-class and targeted adjudication is complete",
-    "atlas_acceptance": "calibrated moderate-or-higher consensus returns broad-only; low confidence remains QC reject",
+    "atlas_scope": "map the complete analysis set once after terminal residual QC is frozen",
+    "atlas_acceptance": "only frozen-QC calibrated moderate-or-higher multichannel consensus returns broad-only; defined labels are challenge-only until orthogonal review; low/OOD remains retained",
+    "atlas_open_set_policy": "coherent OOD groups trigger unknown-lineage review and are never forced to the nearest known class",
     "atlas_fine_labels_forbidden": true,
     "legacy_pool_registries": "migration provenance only; the active controller uses broad_class_recluster cohort, targeted_recluster cohort, direct return and terminal residual QC"
   },

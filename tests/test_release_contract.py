@@ -32,6 +32,9 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         self.assertEqual(profile["external_reference_policy"]["calibration_origin"], "query_like_heldout_current_query_anchors")
         self.assertEqual(profile["external_reference_policy"]["accepted_calibrated_tiers"], ["high", "moderate_only"])
         self.assertEqual(profile["external_reference_policy"]["atlas_rescue_ceiling"], "broad_only")
+        self.assertEqual(profile["external_reference_policy"]["atlas_mapping_scope"], "complete_analysis_set_once_after_terminal_qc_freeze")
+        self.assertEqual(profile["external_reference_policy"]["atlas_direct_writeback_scope"], "complete_residual_qc_holdout_only")
+        self.assertTrue(profile["external_reference_policy"]["open_set_ood_required"])
         self.assertTrue(profile["release_policy"]["all_accepted_broad_rescues_enter_final_deg_and_dotplots"])
 
     def test_sheep_immunoglobulin_aliases_enable_guarded_plasma_route(self) -> None:
@@ -269,7 +272,7 @@ class CohortOrchestrationContract(unittest.TestCase):
                 text=True,
             )
             config = json.loads((project / "config/project.json").read_text())
-            self.assertEqual(config["routing_model"], "direct_cross_lineage_recluster_cohorts")
+            self.assertEqual(config["routing_model"], "direct_cross_lineage_recluster_cohorts_global_atlas")
             self.assertFalse(config["persistent_biological_pools"])
             self.assertTrue((project / "state/recluster_cohort_registry.tsv").exists())
             self.assertTrue((project / "state/direct_return_registry.tsv").exists())

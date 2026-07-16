@@ -1,6 +1,6 @@
 ---
 name: annotate-spatial-transcriptomics
-description: Independently annotate spatial transcriptomics or single-cell RNA-seq with adaptive broad clustering, broad-class and targeted reclustering cohorts, direct cross-lineage returns, calibrated residual-QC Atlas/RCTD assistance, immutable state, shallow high-confidence subtypes and audited interactive reports. Seurat/R-first is preferred for full-feature RDS inputs; AnnData/H5AD, SingleCellExperiment, BANKSY, Scanpy/Leiden and external cluster tables are supported. Use for end-to-end or multi-sample annotation, evidence review, recovery of unresolved observations and release reporting. Never copy parameters or labels from example projects.
+description: Independently annotate spatial transcriptomics or single-cell RNA-seq with label-blind evidence-first broad decisions, adaptive clustering, broad/targeted reclustering, direct cross-lineage returns, calibrated all-cell Atlas concordance plus QC broad rescue, explicit unknown/OOD detection, immutable state, shallow high-confidence subtypes and audited reports. Seurat/R-first is preferred for full-feature RDS inputs; AnnData/H5AD, SingleCellExperiment, BANKSY, Scanpy/Leiden and external cluster tables are supported. Use for end-to-end or multi-sample annotation, evidence review, unknown-cell discovery, recovery of unresolved observations and release reporting. Never copy parameters or labels from example projects.
 ---
 
 # Annotate Spatial Transcriptomics
@@ -14,16 +14,18 @@ Read `references/direct-lineage-controller.md`, `references/iterative-controller
 Execute this order without skipping phases:
 
 1. Discover, inspect and hash inputs; freeze `full_object`, `analysis_set` and `excluded_initial_qc` memberships.
-2. Select a whole-tissue broad clustering adaptively from current DEG, marker/anti-marker, stability, UMAP and spatial evidence.
-3. Review every cluster with an open-world lineage catalog. Assign supported moderate-or-higher initial broad labels directly; send low-information, featureless or irreducibly mixed observations to `qc_holdout`. Do not create an intermediate biological membership.
+2. Select a whole-tissue broad clustering adaptively. Before showing paper labels or a favored marker interpretation, freeze label-blind positive DEG, anti-DEG, technical flags and simultaneous scores for every eligible broad lineage, including winner, runner-up, margin and contradictions. Validate with `validate_prelabel_broad_evidence.py`.
+3. Review every cluster from that frozen open-world matrix. Assign a moderate-or-higher initial broad label only from at least two coherent marker families, a positive winner margin and no unresolved material contradiction; otherwise use `qc_holdout`. Paper markers may explain a frozen result but may not redefine the candidate set after the fact.
 4. Freeze one immutable `broad_class_recluster` cohort for every supported initial broad class and run the complete active-workflow candidate grid. A one-cluster or unsplit result is not penalized: when no stable mixture or real subtype exists, close successfully as `homogeneous_parent_confirmed` and return all observations to the parent. A genuinely underpowered class may remain broad-only only after a hash-bound `not_applicable_reviewed` skip.
 5. Write each subcluster directly as a high-confidence shallow fine label, its supported parent broad class, a supported cross-lineage broad/fine return, one decision-relevant targeted cohort, or QC/technical retention.
 6. Create `targeted_recluster` only for a local interpretable mixture, contamination boundary or context-gated identity. It answers one question and cannot become a long-lived catch-all.
 7. Use RCTD/reference assistance only when applicable. Canonical high plus independent marker/anti-marker, resolution and spatial evidence may support fine; moderate supports broad-only; low enters QC.
-8. After every broad/targeted cohort is terminal, freeze the complete residual `qc_holdout` membership once. Do not recluster it. Apply calibrated Atlas/internal-anchor/marker/spatial consensus only to that exact membership. Moderate-or-higher returns broad-only with `fine_anchor_eligible=false`; lower confidence remains QC reject.
-9. Validate evidence content and exact membership closure. Cohort outcomes, direct returns and per-label supports must pass their schemas and artifact hashes; empty/status-only evidence fails. Run the partition audit before completion, main-Agent review and release.
-10. Materialize one final annotation: moderate-or-higher broad labels, optional high-confidence fine labels, or explicit retained QC/technical state.
-11. Pass direct-workflow, state, taxonomy, completion and main-Agent biological-quality gates; generate the lightweight confirmation HTML; wait for explicit user confirmation; then produce final DEG, figures and release HTML.
+8. After every broad/targeted cohort is terminal, freeze the complete residual `qc_holdout` membership once. Do not recluster it. Run one calibrated broad-only Atlas mapping over the complete `analysis_set`, preferably by projecting into a reusable fixed reference representation/index rather than repeating joint integration.
+9. Compare every mapped observation with the frozen primary state using `build_global_atlas_concordance.py`. A QC observation with moderate-or-higher Atlas tier, current-query marker/anti-marker support, an independent internal-anchor/spatial channel and no OOD/ontology conflict returns broad-only with `fine_anchor_eligible=false`; lower confidence remains QC. Defined broad labels are never overwritten by mapping alone.
+10. Reopen a complete cluster or frozen cohort once when a calibrated alternative differs in a material fraction, a material ontology conflict remains after crosswalk inspection, or a coherent group is out-of-distribution. Use query full-feature positive/anti evidence, pseudobulk, stability, sample consistency, spatial morphology and technical alternatives to retain, supersede, downgrade or mark `Unknown candidate`. Close every trigger with `validate_global_atlas_concordance.py`; do not chase the reference iteratively.
+11. Validate evidence content and exact membership closure. Prelabel freezes, cohort outcomes, direct returns, Atlas concordance/reviews and per-label supports must pass their schemas and hashes; empty/status-only evidence fails.
+12. Materialize one final annotation: moderate-or-higher broad labels, optional high-confidence fine labels, or explicit retained QC/technical/unknown state.
+13. Pass direct-workflow, state, taxonomy, completion and main-Agent biological-quality gates; generate the lightweight confirmation HTML; wait for explicit user confirmation; then produce final DEG, figures and release HTML.
 
 A cohort is a frozen computational query boundary, not a cell type. Direct cross-lineage return preserves source cohort/subcluster/membership/evidence and does not create an intermediate cohort or automatically trigger another target-lineage reclustering.
 
@@ -70,15 +72,15 @@ Run `init_open_world_lineage_audit.py` and `validate_open_world_lineage_audit.py
 
 Oocyte uses one contamination-safe targeted cohort containing the complete multi-module recall set. Strict seeds/spatial foci support identity but do not define cohort membership or final census. Require coherent non-ZP identity plus maternal/ooplasm enrichment, somatic anti-program clearance and compatible object morphology. Cortical/section-edge location is never negative evidence and location alone is never positive evidence. Return pregranulosa/granulosa or stromal clusters directly to those lineages with zona/adjacency tags. Report cellbin count separately from putative object count.
 
-Without a usable matched count-level reference, GSE233801 is the primary public adult-sheep somatic Atlas only for the terminal residual QC membership. It does not classify the full object and cannot rescue Oocyte, Theca or Epithelial/mesothelial automatically. A matched dotplot is marker evidence, not cell-level transfer.
+Without a usable matched count-level reference, GSE233801 is the primary public adult-sheep somatic Atlas for the terminal all-cell broad concordance pass. It may directly rescue only the frozen residual QC membership; for already-defined cells it is a diagnostic challenger. It cannot rescue Oocyte, Theca or Epithelial/mesothelial automatically. A matched dotplot is marker evidence, not cell-level transfer.
 
 ## Atlas and reference calibration
 
-Read `references/matched-single-cell-reference.md`. A count-level matched, stage-compatible reference may be the preferred external channel only in terminal residual QC. Current-query full-feature marker/anti-marker and morphology remain authoritative.
+Read `references/matched-single-cell-reference.md`. A count-level matched, stage-compatible reference may be the preferred external channel only after all broad/targeted cohorts and terminal QC membership are frozen. Map the analysis set once for broad concordance, but permit direct writeback only for frozen QC. Current-query full-feature marker/anti-marker and morphology remain authoritative.
 
 Calibration uses disjoint query-like held-out current-query anchors. External reference self-splitting is diagnostic only. Default target-precision tiers are moderate-or-higher 0.90 and high 0.95; these are calibration targets, not universal per-cell score cutoffs. Report mutually exclusive `high`, `moderate_only`, `low_reject` and require `moderate_or_higher_n = high_n + moderate_only_n`.
 
-Use `adjudicate_multichannel_broad_rescue.py` only on the frozen terminal QC membership. Require marker/anti-marker support plus at least one internal-anchor or observed-density spatial channel. Every accepted return participates in final broad DEG/dotplots but cannot seed fine discovery.
+Use `adjudicate_multichannel_broad_rescue.py` only to decide writeback for frozen terminal QC. Require marker/anti-marker support plus at least one internal-anchor or observed-density spatial channel. Every accepted return participates in final broad DEG/dotplots but cannot seed fine discovery. Precompute the Atlas feature transform, low-dimensional representation and approximate-neighbor index once and validate `atlas_index_manifest.schema.json` with `validate_atlas_index_manifest.py`; never form a full query-by-reference distance matrix or repeat joint Atlas integration per sample. Treat low margin, mixed neighbors and coherent OOD programs as unknown/review signals, not nearest-class assignments.
 
 ## State, autonomy and multiple samples
 
@@ -93,7 +95,7 @@ For multi-sample work, read `references/multi-sample-agent-orchestration.md`. Th
 Before confirmation:
 
 1. run `build_final_annotation.py`;
-2. run `audit_release_taxonomy.py`, `validate_direct_lineage_workflow.py`, `validate_annotation_support_registry.py` and `audit_annotation_membership_partition.py`;
+2. run `validate_prelabel_broad_evidence.py`, `validate_global_atlas_concordance.py`, `audit_release_taxonomy.py`, `validate_direct_lineage_workflow.py`, `validate_annotation_support_registry.py` and `audit_annotation_membership_partition.py`;
 3. run `validate_state.py`, `plan_next_iteration.py` and `check_completion_gate.py`;
 4. populate `annotation_support_registry.tsv` and build frozen lightweight broad spatial/canonical-marker assets;
 5. request and record one main-Agent biological quality approval only after all annotation phases finish;

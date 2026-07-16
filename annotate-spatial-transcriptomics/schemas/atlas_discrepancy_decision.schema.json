@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/atlas_discrepancy_decision.schema.json",
+  "title": "Orthogonal query-evidence Atlas discrepancy decision",
+  "type": "object",
+  "required": [
+    "schema_version", "review_id", "review_scope", "primary_hypothesis",
+    "atlas_hypothesis", "outcome", "query_full_feature_evidence",
+    "positive_marker_comparison", "anti_marker_comparison", "pseudobulk_comparison",
+    "spatial_or_sample_consistency", "technical_alternatives", "atlas_only",
+    "rationale", "evidence_artifacts"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "review_id": {"type": "string", "minLength": 1},
+    "review_scope": {"enum": ["complete_cluster", "complete_frozen_cohort"]},
+    "primary_hypothesis": {"type": "string", "minLength": 1},
+    "atlas_hypothesis": {"type": "string"},
+    "outcome": {"enum": ["retain_primary", "supersede_broad", "downgrade_to_broad", "return_to_qc", "unknown_candidate"]},
+    "query_full_feature_evidence": {"type": "object", "minProperties": 1},
+    "positive_marker_comparison": {"type": "object", "minProperties": 1},
+    "anti_marker_comparison": {"type": "object", "minProperties": 1},
+    "pseudobulk_comparison": {"type": "object", "minProperties": 1},
+    "spatial_or_sample_consistency": {"type": "object", "minProperties": 1},
+    "technical_alternatives": {"type": "object", "minProperties": 1},
+    "atlas_only": {"const": false},
+    "rationale": {"type": "string", "minLength": 20},
+    "evidence_artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifact"}}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

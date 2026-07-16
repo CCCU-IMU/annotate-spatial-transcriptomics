@@ -1,7 +1,7 @@
 {
-  "profile_id": "ovis_aries_ovary_rfirst_v4",
+  "profile_id": "ovis_aries_ovary_rfirst_v5",
   "profile_role": "workflow_preprocessing",
-  "profile_schema_version": "1.6",
+  "profile_schema_version": "1.7",
   "species_aliases": ["Ovis aries", "sheep", "ovine", "羊", "绵羊"],
   "tissue_aliases": ["ovary", "ovarian", "卵巢"],
   "workflow": {
@@ -64,8 +64,11 @@
       "cross_species_support"
     ],
     "primary_public_atlas": "GSE233801",
-    "atlas_rescue_scope": "complete_residual_qc_holdout_after_all_broad_and_targeted_cohorts_only",
-    "forbid_full_object_or_nonresidual_atlas_classification": true,
+    "atlas_mapping_scope": "complete_analysis_set_once_after_terminal_qc_freeze",
+    "atlas_direct_writeback_scope": "complete_residual_qc_holdout_only",
+    "defined_label_atlas_policy": "concordance_challenge_only_until_orthogonal_query_evidence_review",
+    "open_set_ood_required": true,
+    "reusable_fixed_reference_index_required": true,
     "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Vascular/endothelial", "Pericyte/mural candidate", "Immune"],
     "primary_public_atlas_exclusions": ["Oocyte", "Theca", "Epithelial/mesothelial"],
     "atlas_rescue_ceiling": "broad_only",

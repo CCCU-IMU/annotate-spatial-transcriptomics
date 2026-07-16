@@ -42,7 +42,7 @@ Do not create an intermediate cohort. A direct cross-lineage return does not aut
 
 Use a targeted cohort only for a local interpretable mixture, contamination boundary or context-gated identity. RCTD is lower-priority assistance: canonical high confidence plus independent marker/anti-marker, resolution and spatial evidence may support fine; moderate supports broad-only; low enters the final QC holdout.
 
-After all broad and targeted cohorts are terminal, freeze the complete residual QC membership. Do not recluster it. Apply calibrated Atlas/internal-anchor/marker/observed-density spatial consensus only to this exact membership. Moderate-or-higher returns broad-only with `fine_anchor_eligible=false`; lower confidence remains QC reject.
+After all broad and targeted cohorts are terminal, freeze residual QC. Do not recluster it. Run one calibrated broad-only Atlas mapping over the complete analysis set. Apply marker/internal-anchor/observed-density consensus only when writing back the frozen-QC subset; compare defined labels against the same mapping and reopen only material broad disagreement or coherent OOD once. Moderate-or-higher QC returns are broad-only with `fine_anchor_eligible=false`; lower confidence remains QC reject.
 
 For sheep ovary without a usable matched count-level reference, GSE233801 is the primary public adult-sheep somatic Atlas for this terminal residual-QC step. It cannot bypass strict Oocyte, Theca or epithelial evidence gates.
 

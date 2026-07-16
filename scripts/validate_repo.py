@@ -53,6 +53,7 @@ def main() -> int:
         SKILL / "scripts" / "migrate_project_v1_3_to_v1_4.py",
         SKILL / "scripts" / "migrate_project_v1_4_to_v1_5.py",
         SKILL / "scripts" / "migrate_project_v1_6_0_to_v1_6_1.py",
+        SKILL / "scripts" / "migrate_project_v1_6_1_to_v1_7_0.py",
         SKILL / "scripts" / "build_final_annotation.py",
         SKILL / "scripts" / "validate_profile_role.py",
         SKILL / "scripts" / "validate_resolution_grid.py",
@@ -60,6 +61,10 @@ def main() -> int:
         SKILL / "scripts" / "validate_cohort_outcome.py",
         SKILL / "scripts" / "validate_direct_return_evidence.py",
         SKILL / "scripts" / "validate_annotation_support_registry.py",
+        SKILL / "scripts" / "validate_prelabel_broad_evidence.py",
+        SKILL / "scripts" / "build_global_atlas_concordance.py",
+        SKILL / "scripts" / "validate_global_atlas_concordance.py",
+        SKILL / "scripts" / "validate_atlas_index_manifest.py",
         SKILL / "scripts" / "audit_annotation_membership_partition.py",
         SKILL / "scripts" / "controller_step.py",
         SKILL / "scripts" / "validate_benchmark_isolation.py",
@@ -67,6 +72,9 @@ def main() -> int:
         SKILL / "schemas" / "cohort_outcome.schema.json",
         SKILL / "schemas" / "direct_return_evidence.schema.json",
         SKILL / "schemas" / "annotation_support.schema.json",
+        SKILL / "schemas" / "prelabel_broad_evidence.schema.json",
+        SKILL / "schemas" / "atlas_index_manifest.schema.json",
+        SKILL / "schemas" / "atlas_discrepancy_decision.schema.json",
         SKILL / "scripts" / "validate_direct_lineage_workflow.py",
         SKILL / "scripts" / "register_recluster_cohort.py",
         SKILL / "scripts" / "register_direct_return.py",
@@ -128,6 +136,8 @@ def main() -> int:
         problems.append("missing release-contract regression tests")
     if not (ROOT / "tests/test_v1_6_contract.py").is_file():
         problems.append("missing v1.6 active-contract regression tests")
+    if not (ROOT / "tests/test_v1_7_contract.py").is_file():
+        problems.append("missing v1.7 active-contract regression tests")
     if not (ROOT / "tests/test_legacy_migration_contract.py").is_file():
         problems.append("missing legacy migration regression tests")
 
