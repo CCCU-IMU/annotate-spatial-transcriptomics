@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Calibrate strict rare-cell seeds without shrinking the full candidate pool."""
+"""Calibrate strict rare-cell seeds without shrinking the full candidate set."""
 from __future__ import annotations
 
 import argparse

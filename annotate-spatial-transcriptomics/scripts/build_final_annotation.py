@@ -13,13 +13,9 @@ import tempfile
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from confidence_lib import RANK, canonical
 
 
-RANK = {
-    "low": 0, "low_confidence": 0, "medium_low": 0,
-    "moderate": 1, "moderate_only": 1, "medium": 1, "medium_high": 1, "moderate_high": 1,
-    "high": 2, "high_confidence": 2, "very_high": 2,
-}
 BIOLOGICAL = {"defined_fine", "defined_broad_only"}
 
 
@@ -27,9 +23,11 @@ def truth(value: str) -> bool:
     return str(value).strip().lower() in {"true", "1", "yes", "y", "pass", "passed"}
 
 
-def confidence(value: str) -> tuple[str, int]:
-    normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
-    return normalized, RANK.get(normalized, -1)
+def confidence(value: str, migration_mode: bool = False) -> tuple[str, int]:
+    if not str(value or "").strip():
+        return "", -1
+    normalized = canonical(value, migration_mode=migration_mode)
+    return normalized, RANK[normalized]
 
 
 def open_table(path: Path, mode: str):
@@ -53,6 +51,7 @@ def main() -> int:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--sample", required=True)
     parser.add_argument("--version", default="v001")
+    parser.add_argument("--migration-mode", action="store_true", help="read legacy confidence aliases and immediately write canonical values")
     args = parser.parse_args()
     final_fields = [
         "analysis_scope", "final_state", "final_broad_label", "final_fine_label", "final_confidence",
@@ -78,12 +77,11 @@ def main() -> int:
                 scope = row.get("analysis_scope") or ("excluded_initial_qc" if row.get("state") == "excluded_initial_qc" else "analysis_set")
                 row["analysis_scope"] = scope
                 state = row.get("state", "")
-                broad_confidence, broad_rank = confidence(row.get("broad_confidence") or row.get("confidence", ""))
-                fine_confidence, fine_rank = confidence(row.get("fine_confidence") or row.get("confidence", ""))
-                route_text = " ".join([row.get("route", ""), row.get("evidence_status", "")]).lower()
-                legacy_mapping_tier = any(token in route_text for token in ["atlas", "calibrated", "mapping"]) and broad_confidence in {"medium_high", "moderate_high"}
-                if legacy_mapping_tier:
-                    broad_rank = -1
+                try:
+                    broad_confidence, broad_rank = confidence(row.get("broad_confidence") or row.get("confidence", ""), args.migration_mode)
+                    fine_confidence, fine_rank = confidence(row.get("fine_confidence") or row.get("confidence", ""), args.migration_mode)
+                except ValueError as exc:
+                    raise SystemExit(f"cell {row.get('cell_id','')}: {exc}")
                 if scope != "analysis_set":
                     final_state, broad, fine, tier = "excluded_initial_qc", "", "", "excluded"
                 elif state in BIOLOGICAL and row.get("broad_label") and broad_rank >= 1:

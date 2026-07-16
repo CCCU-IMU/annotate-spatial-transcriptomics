@@ -11,14 +11,11 @@ import json
 import re
 from pathlib import Path
 from scheduler_job_name import validate as validate_scheduler_job_name
+from confidence_lib import CANONICAL
 
 
 ALLOWED = {"defined_fine", "defined_broad_only", "interface_review", "qc_holdout", "technical_state", "pending_review", "excluded_initial_qc", "closed_and_frozen"}
-CONFIDENCE_RANK = {
-    "low": 0, "low_confidence": 0, "medium_low": 0,
-    "moderate": 1, "moderate_only": 1, "medium": 1, "medium_high": 1, "moderate_high": 1,
-    "high": 2, "high_confidence": 2, "very_high": 2,
-}
+CONFIDENCE_RANK = {"low": 0, "moderate": 1, "high": 2}
 
 
 def rows(path: Path):
@@ -104,6 +101,24 @@ def main() -> int:
         for line, row in enumerate(rows(registry_path), 2):
             if "sample_id" in row:
                 require(row.get("sample_id") == configured_sample, f"{filename} line {line}: cross-sample row detected", errors)
+    for filename, id_field in (
+        ("recluster_cohort_registry.tsv", "cohort_id"),
+        ("direct_return_registry.tsv", "return_id"),
+        ("route_attempt_registry.tsv", "route_attempt_id"),
+        ("annotation_support_registry.tsv", "support_id"),
+    ):
+        path = state / filename
+        if not path.exists():
+            continue
+        registry_rows = list(rows(path)); identifiers = [row.get(id_field, "").strip() for row in registry_rows]
+        require("" not in identifiers, f"{filename}: empty {id_field}", errors)
+        require(len(identifiers) == len(set(identifiers)), f"{filename}: duplicate {id_field}", errors)
+        known = set(identifiers); replaced = set()
+        for line, row in enumerate(registry_rows, 2):
+            for prior in (value for value in re.split(r"[|,;\s]+", row.get("supersedes", "")) if value):
+                require(prior in known and prior != row.get(id_field), f"{filename} line {line}: invalid supersedes target {prior}", errors)
+                require(prior not in replaced, f"{filename} line {line}: prior record superseded more than once: {prior}", errors)
+                replaced.add(prior)
     run_path = state / "run_registry.tsv"
     if run_path.exists():
         run_rows = list(rows(run_path))
@@ -139,6 +154,8 @@ def main() -> int:
                 require(bool(row.get("broad_label") and row.get("fine_label")), f"line {i}: fine label lacks hierarchy", errors)
             if row.get("state") == "defined_broad_only":
                 require(row.get("fine_anchor_eligible", "").lower() in {"false", "0", "no"}, f"line {i}: broad-only is fine anchor", errors)
+            if row.get("confidence"):
+                require(row.get("confidence", "").strip().lower() in CANONICAL, f"line {i}: noncanonical confidence in new project", errors)
             if rid not in superseded and row.get("closed","").lower() in {"true","1","yes"}:require(bool(row.get("closure_rationale")),f"line {i}: active closed decision lacks closure rationale",errors)
             if rid not in superseded and row.get("validation_status")=="passed":
                 vp=Path(row.get("validation_artifact",""));vp=vp if vp.is_absolute() else args.project_root/vp
@@ -158,6 +175,8 @@ def main() -> int:
             require(row.get("sample_id") == configured_sample, f"cell ledger line {i}: cross-sample row detected", errors)
             require(key not in seen, f"cell ledger duplicate at line {i}: {key}", errors); seen.add(key)
             require(row.get("state") in ALLOWED, f"cell ledger line {i}: invalid state", errors)
+            if row.get("confidence"):
+                require(row.get("confidence", "").strip().lower() in CANONICAL, f"cell line {i}: noncanonical confidence in new project", errors)
             if row.get("state") == "defined_broad_only":
                 require(row.get("fine_anchor_eligible", "").lower() in {"false", "0", "no"}, f"cell line {i}: broad-only is fine anchor", errors)
             if "decision_id" in fields:require(row.get("decision_id") in active_ids,f"cell line {i}: decision_id is not active",errors)

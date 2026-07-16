@@ -8,6 +8,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+from dependency_manifest import build as build_dependency_manifest
 
 
 DEFAULT_ROOTS = (
@@ -20,6 +21,9 @@ EXCLUDED = {
     # The audit is written after the manifest validates its inputs, so hashing
     # it would create a circular dependency.
     "provenance/release_audit.json",
+    "provenance/release_audit.json.deps.json",
+    "provenance/release_manifest.tsv.deps.json",
+    "provenance/checksums.sha256.deps.json",
     # The autonomous controller is intentionally run after the release audit
     # to prove that the project is terminal.  Its status/next-action outputs
     # are operational sentinels, not immutable biological release evidence.
@@ -75,6 +79,8 @@ def main() -> int:
             handle.write(f"{value}  {relative}\n")
     manifest_tmp.replace(manifest)
     checksum_tmp.replace(checksums)
+    build_dependency_manifest(manifest, paths, {"asset_class": "release_manifest"})
+    build_dependency_manifest(checksums, paths, {"asset_class": "release_checksums"})
     result = {
         "status": "PASS",
         "files": len(rows),

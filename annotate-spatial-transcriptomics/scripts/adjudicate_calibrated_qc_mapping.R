@@ -50,7 +50,7 @@ if (!all(required_mapping_cols %in% names(mp))) {
   stop("Legacy/combined mapping tiers are forbidden. Use calibrate_tiered_mapping_thresholds.py and provide high/moderate/low tiers.")
 }
 if (any(tolower(as.character(mp$fine_anchor_eligible)) %in% c("true", "1", "yes"))) stop("Atlas mapping cannot create fine anchors")
-if (any(as.character(mp$mapping_tier) %in% c("high", "moderate") & !tolower(as.character(mp$meets_moderate_or_higher)) %in% c("true", "1", "yes"))) stop("accepted tier violates moderate-or-higher invariant")
+if (any(as.character(mp$mapping_tier) %in% c("high", "moderate_only") & !tolower(as.character(mp$meets_moderate_or_higher)) %in% c("true", "1", "yes"))) stop("accepted tier violates moderate-or-higher invariant")
 mp[[cc]] <- as.character(mp[[cc]]); cl[[cc]] <- as.character(cl[[cc]])
 if (uniqueN(mp[[cc]]) != nrow(mp) || uniqueN(cl[[cc]]) != nrow(cl)) stop("duplicate query IDs")
 if (!all(mp[[cc]] %in% cl[[cc]]) || !all(mp[[cc]] %in% colnames(obj))) stop("query boundary mismatch")
@@ -96,7 +96,7 @@ md <- obj@meta.data; xy_cols <- if (all(c("x", "y") %in% names(md))) c("x", "y")
 all_xy <- as.matrix(md[, xy_cols]); rownames(all_xy) <- colnames(obj)
 led[, cell_id := as.character(cell_id)]
 closed_ok <- tolower(as.character(led$closed)) %in% c("true", "1")
-ref <- led[!cell_id %in% ids & state %in% c("defined_fine", "defined_broad_only") & confidence %in% c("high", "medium") & closed_ok & nzchar(as.character(broad_label))]
+ref <- led[!cell_id %in% ids & state %in% c("defined_fine", "defined_broad_only") & confidence %in% c("high", "moderate") & closed_ok & nzchar(as.character(broad_label))]
 ref <- ref[!duplicated(cell_id) & cell_id %in% rownames(all_xy)]
 ref[, broad_canonical := canon(broad_label)]
 if (nrow(ref) < k) stop("insufficient spatial reference observations")
@@ -113,12 +113,12 @@ for (i in seq_len(nrow(mp))) {
   mp$spatial_same_label_fraction[i] <- sum(same) / max(1L, sum(within[i, ]))
 }
 mp[, observed_density_spatial_consistent := spatial_neighbors_within_radius >= 5L & spatial_same_label_n >= 3L & spatial_same_label_fraction >= spatial_fraction]
-mp[, calibrated_call := mapping_tier %in% c("high", "moderate") & tolower(as.character(meets_moderate_or_higher)) %in% c("true", "1", "yes")]
+mp[, calibrated_call := mapping_tier %in% c("high", "moderate_only") & tolower(as.character(meets_moderate_or_higher)) %in% c("true", "1", "yes")]
 mp[, validated_broad_return := calibrated_call & fullfeature_program_consistent & cluster_context_consistent & observed_density_spatial_consistent]
 mp[, `:=`(
   final_broad_label = ifelse(validated_broad_return, predicted_label_canonical, NA_character_),
   final_state = ifelse(validated_broad_return, "defined_broad_only", "qc_holdout"),
-  final_confidence = ifelse(validated_broad_return & mapping_tier == "high", "high", ifelse(validated_broad_return, "medium", "low")),
+  final_confidence = ifelse(validated_broad_return & mapping_tier == "high", "high", ifelse(validated_broad_return, "moderate", "low")),
   final_action = ifelse(validated_broad_return, "terminal_residual_qc_atlas_broad_rescue", "retain_terminal_qc_reject"),
   fine_anchor_eligible = FALSE, x = qxy[cell_id, 1], y = qxy[cell_id, 2]
 )]
@@ -129,7 +129,7 @@ fwrite(sumtab, file.path(outdir, "tables", "qc_atlas_adjudication_summary.tsv"),
 fwrite(context, file.path(outdir, "tables", "cluster_program_context.tsv"), sep = "\t")
 plot_dt <- mp[, .(x, y, plot_label = ifelse(validated_broad_return, final_broad_label, "QC holdout"))]
 pal <- c(Stromal = "#4DAF4A", `Immune/plasma` = "#E41A1C", `QC holdout` = "#D0D0D0")
-p <- ggplot(plot_dt, aes(x, y, colour = plot_label)) + geom_point(size = 0.08) + scale_colour_manual(values = pal, na.value = "#984EA3") + scale_y_reverse() + coord_equal() + theme_void() + labs(title = "Post-recluster calibrated QC atlas adjudication", colour = NULL)
+p <- ggplot(plot_dt, aes(x, y, colour = plot_label)) + geom_point(size = 0.08) + scale_colour_manual(values = pal, na.value = "#984EA3") + scale_y_reverse() + coord_equal() + theme_void() + labs(title = "Terminal residual QC calibrated Atlas adjudication", colour = NULL)
 ggsave(file.path(outdir, "figures", "qc_atlas_adjudication.png"), p, width = 9, height = 8, dpi = 360, bg = "white")
 ggsave(file.path(outdir, "figures", "qc_atlas_adjudication.pdf"), p, width = 9, height = 8, device = cairo_pdf, bg = "white")
 manifest <- list(status = "PASS", n_query = nrow(mp), n_validated_broad_return = sum(mp$validated_broad_return), n_qc_retained = sum(!mp$validated_broad_return),

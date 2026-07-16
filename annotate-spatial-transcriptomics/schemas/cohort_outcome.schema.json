@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/cohort_outcome.schema.json",
+  "title": "Cohort outcome evidence",
+  "type": "object",
+  "required": [
+    "schema_version", "cohort_id", "cohort_type", "question_mode", "query_membership",
+    "candidate_grid", "resolutions", "selected_resolution", "marker_evidence",
+    "adjacent_stability", "spatial_morphology", "source_qc_composition",
+    "selected_resolution_rationale", "rejected_alternatives", "subcluster_outcomes",
+    "terminal_outcome", "homogeneous_parent_confirmed"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "cohort_id": {"type": "string", "minLength": 1},
+    "cohort_type": {"enum": ["broad_class_recluster", "targeted_recluster", "oocyte_targeted_recluster"]},
+    "question_mode": {"enum": ["broad_purity_audit", "targeted_mixture"]},
+    "query_membership": {"$ref": "#/$defs/membership"},
+    "candidate_grid": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "number"}},
+    "resolutions": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/resolution"}},
+    "selected_resolution": {"type": "number"},
+    "marker_evidence": {"$ref": "#/$defs/markerEvidence"},
+    "adjacent_stability": {"type": "array", "items": {"type": "object", "required": ["left", "right", "metric", "value"]}},
+    "spatial_morphology": {"type": "object", "minProperties": 1},
+    "source_qc_composition": {"type": "object", "minProperties": 1},
+    "selected_resolution_rationale": {"type": "string", "minLength": 20},
+    "rejected_alternatives": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["resolution", "reason"]}},
+    "subcluster_outcomes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/subclusterOutcome"}},
+    "terminal_outcome": {"enum": ["homogeneous_parent_confirmed", "subclusters_adjudicated"]},
+    "homogeneous_parent_confirmed": {"type": "boolean"}
+  },
+  "$defs": {
+    "membership": {
+      "type": "object",
+      "required": ["path", "sha256", "n_observations"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "n_observations": {"type": "integer", "minimum": 1}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "resolution": {
+      "type": "object",
+      "required": ["resolution", "membership", "cluster_count", "evidence_index"],
+      "properties": {
+        "resolution": {"type": "number"},
+        "membership": {"$ref": "#/$defs/membership"},
+        "cluster_count": {"type": "integer", "minimum": 1},
+        "evidence_index": {"$ref": "#/$defs/artifact"}
+      }
+    },
+    "markerEvidence": {
+      "type": "object",
+      "required": ["positive_marker_families", "anti_marker_results", "full_feature_scope"],
+      "properties": {
+        "positive_marker_families": {"type": "array", "minItems": 1},
+        "anti_marker_results": {"type": "object", "minProperties": 1},
+        "full_feature_scope": {
+          "type": "object",
+          "required": ["status", "feature_space", "artifact"],
+          "properties": {
+            "status": {"const": "PASS"},
+            "feature_space": {"const": "full_feature"},
+            "artifact": {"$ref": "#/$defs/artifact"}
+          }
+        }
+      }
+    },
+    "subclusterOutcome": {
+      "type": "object",
+      "required": ["subcluster_id", "outcome", "membership"],
+      "properties": {
+        "subcluster_id": {"type": "string", "minLength": 1},
+        "outcome": {"enum": ["parent_return", "fine_return", "cross_lineage_return", "targeted_successor", "qc_successor"]},
+        "membership": {"$ref": "#/$defs/membership"},
+        "target_broad_label": {"type": "string"},
+        "target_fine_label": {"type": "string"},
+        "target_cohort_id": {"type": "string"}
+      }
+    }
+  }
+}

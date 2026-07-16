@@ -16,7 +16,7 @@ After explicit final-annotation confirmation, continue registering DEG, map, dot
 
 Never start a downstream job while its upstream run is `submitted` or `running`. Large ledgers/metadata are written to a same-filesystem temporary path, checked for decompression, row count, unique IDs and schema, then atomically renamed. A filename appearing is not a completion signal; use `validated_done` plus the artifact checks. Scheduler arrays/parallel jobs may share read-only inputs but never the same output file.
 
-Reference-assisted jobs must validate zero query/reference observation overlap immediately before submission or at job start. Do not assume an anchor table remains independent after a child pool is formed. Use `filter_reference_query_overlap.py` to freeze the repaired reference and its before/excluded/after label counts. Preserve the failed job, route and branch; submit the repaired execution with new IDs.
+Reference-assisted jobs must validate zero query/reference observation overlap immediately before submission or at job start. Do not assume an anchor table remains independent after a targeted cohort or terminal-QC query is frozen. Use `filter_reference_query_overlap.py` to freeze the repaired reference and its before/excluded/after label counts. Preserve the failed job and route; submit the repaired execution with new IDs.
 
 Resource choices follow object size and algorithm. More cores do not necessarily accelerate sparse R/Seurat steps. Record requested and observed resources. Do not leave memory unspecified unless the scheduler/site contract explicitly grants the intended allocation.
 
@@ -39,7 +39,7 @@ The Agent may repair software/path/read-format problems autonomously inside the 
 Every submitted job uses `SAMPLE__Pnn_STAGE[_SCOPE]__Ann`, generated and
 validated by `scripts/scheduler_job_name.py` (default maximum 48 characters).
 Put sample and stage first so they remain visible when a scheduler UI truncates
-the right edge. `SCOPE` is a short pool/release target, not an arbitrary script
+the right edge. `SCOPE` is a short cohort/release target, not an arbitrary script
 name. `Ann` is the execution attempt and increments after a preserved failure.
 
 | Code | Scheduler stage | Meaning |
@@ -48,7 +48,7 @@ name. `Ann` is the execution attempt and increments after a preserved failure.
 | P10/P11 | SCT/SCTQC | SCT preprocessing and its validation |
 | P20/P21 | RESGRID/RESEVID | resolution grid and candidate evidence |
 | P30 | BROAD | broad-class evidence/adjudication compute |
-| P40/P41 | COHORT/TARGET | broad-class or targeted cohort reclustering/validation; legacy `POOL/POOLQC` names remain readable |
+| P40/P41 | COHORT/TARGET | broad-class or targeted cohort reclustering/validation |
 | P50/P51 | RCTD/ATLAS | reference-assisted routes |
 | P60 | RARE | legacy job-name compatibility only; do not create a generic rare-cell route |
 | P61 | CONTEXT | open-world lineage audit or triggered Oocyte/context-specific validation |

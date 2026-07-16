@@ -8,7 +8,7 @@ Record whether each object is full-feature, HVG-only or targeted. Run `scripts/a
 
 ## Seurat
 
-When a readable full-feature Seurat RDS is available, prefer it as the primary computational object unless the user chooses another backbone or the object fails validation. Prefer RNA/Spatial raw counts for DEG and absolute detection. Record active assay, layer names, object dimensions, reductions and metadata columns. Do not assume SCT residuals are suitable for absolute marker detection. Read `r-first-workflow.md` before using existing Seurat clustering or pool artifacts.
+When a readable full-feature Seurat RDS is available, prefer it as the primary computational object unless the user chooses another backbone or the object fails validation. Prefer RNA/Spatial raw counts for DEG and absolute detection. Record active assay, layer names, object dimensions, reductions and metadata columns. Do not assume SCT residuals are suitable for absolute marker detection. Read `r-first-workflow.md` before using existing Seurat clustering or cohort artifacts.
 
 For a StereoPy `cellbin_PPed` batch-converted RDS, read `seurat-cellbin-preprocessing.md`. The converter may preserve StereoPy reductions but does not thereby create an SCT-processed Seurat object. Use the `Spatial` count layer and generate a fresh SCT/PCA/neighbour/UMAP result with `scripts/run_seurat_sct_preprocess.R`; require its manifest before calling preprocessing comparable across the batch.
 
@@ -32,6 +32,6 @@ Search for state ledgers, completion sentinels, manifests, logs and previous rep
 
 ## Reusable cohort runners
 
-Use `scripts/run_seurat_cohort_recluster.R` for configurable Seurat SCT or log-normalized cohort reclustering, `scripts/run_sce_cohort_recluster.R` for SCE/BANKSY-backed cohorts and `scripts/run_scanpy_cohort_recluster.py` for Scanpy. Historical `*_pool_recluster.*` filenames remain implementation-level compatibility adapters only. All accept immutable cohort memberships and multiple candidate resolutions; they route zero-count observations to a QC artifact and do not decide the final resolution. BANKSY results can enter through exported cluster tables, while new BANKSY subset analysis should be configured from the current SCE/spatial object rather than copied from a whole-tissue run.
+Use `scripts/run_seurat_cohort_recluster.R` for configurable Seurat SCT or log-normalized cohort reclustering, `scripts/run_sce_cohort_recluster.R` for SCE/BANKSY-backed cohorts and `scripts/run_scanpy_cohort_recluster.py` for Scanpy. All accept immutable cohort memberships and multiple candidate resolutions; they route zero-count observations to a QC artifact and do not decide the final resolution. BANKSY results can enter through exported cluster tables, while new BANKSY subset analysis should be configured from the current SCE/spatial object rather than copied from a whole-tissue run.
 
 For an existing SingleCellExperiment/BANKSY clustering, use `scripts/run_sce_initial_cluster_evidence.R`. The shared dotplot, annotation-map and spatial-gene scripts accept both Seurat and SCE/SummarizedExperiment objects; for SCE specify assay names when `counts` plus `normcounts`/`logcounts` are not present.

@@ -55,7 +55,7 @@ def main() -> int:
     data["fine_marker_discovery_eligible"] = data.final_fine_eligible
     anchor_confidence = data["final_fine_confidence"] if "final_fine_confidence" in data else data.final_confidence
     data["anchor_reference_eligible"] = (
-        anchor_confidence.isin({"high", "high_confidence", "very_high"})
+        anchor_confidence.eq("high")
         & data.fine_anchor_eligible.astype(str).str.lower().isin({"true", "1", "yes"})
     ).map({True: "true", False: "false"})
     args.out.parent.mkdir(parents=True, exist_ok=True)

@@ -1,42 +1,23 @@
 #!/usr/bin/env python3
-"""Validate the default pool-free broad→subtype→QC-Atlas workflow."""
-
+"""Validate the active broad-cohort → direct-return → terminal-QC workflow."""
 from __future__ import annotations
 
-import csv
-import gzip
-import hashlib
+import argparse
 import json
 import re
 from pathlib import Path
 
+from evidence_schema_lib import active_registry_rows, path_at, read_tsv, sha256, write_result
+from validate_cohort_outcome import validate as validate_cohort_outcome
+from validate_direct_return_evidence import validate as validate_direct_return_evidence
+from workflow_contract_lib import active_workflow_contract
 
-GRID = [0.1, 0.2, 0.3, 0.4, 0.6]
+
+FORMAL_GRID = [0.1, 0.2, 0.3, 0.4, 0.6]
 TERMINAL = {"validated_done", "not_applicable_reviewed"}
-MODERATE = {"moderate", "moderate_only", "moderate_high", "medium", "medium_high", "high", "high_confidence", "very_high"}
-HIGH = {"high", "high_confidence", "very_high"}
+CANONICAL_CONFIDENCE = {"low", "moderate", "high"}
+ATLAS_CONFIDENCE = {"high", "moderate_only", "low_reject"}
 RETAINED = {"qc_holdout", "qc_reject", "technical_state", "excluded_initial_qc"}
-
-
-def read_tsv(path: Path) -> list[dict[str, str]]:
-    if not path.is_file():
-        return []
-    opener = gzip.open if path.suffix == ".gz" else open
-    with opener(path, "rt", newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle, delimiter="\t"))
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(8 * 1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def path_at(root: Path, value: str) -> Path:
-    path = Path(value)
-    return path if path.is_absolute() else root / path
 
 
 def truth(value: str) -> bool:
@@ -54,192 +35,215 @@ def resolutions(value: str) -> list[float]:
         return []
 
 
-def validate_membership(root: Path, row: dict[str, str], prefix: str = "membership") -> list[str]:
-    errors: list[str] = []
-    value = row.get(f"{prefix}_path", "") or row.get(f"{prefix}_artifact", "")
-    expected = row.get(f"{prefix}_sha256", "")
-    path = path_at(root, value) if value else Path()
-    if not value or not path.is_file():
-        return [f"missing {prefix} artifact"]
-    if not expected or sha256(path) != expected:
-        errors.append(f"stale {prefix} SHA256")
-    members = read_tsv(path)
-    ids = [row.get("cell_id", "") for row in members]
-    if not members or "cell_id" not in members[0] or "" in ids or len(ids) != len(set(ids)):
-        errors.append(f"{prefix} is not a unique nonempty cell_id table")
-    try:
-        expected_n = int(float(row.get("n_observations", row.get("n_query", 0)) or 0))
-        if expected_n != len(ids):
-            errors.append(f"{prefix} count differs from registry")
-    except ValueError:
-        errors.append(f"invalid {prefix} count")
-    return errors
+def gap(code: str, entity_type: str, entity_id: str, required_action: str, detail: str, blocking: bool = True) -> dict:
+    return {
+        "code": code,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "required_action": required_action,
+        "blocking": blocking,
+        "detail": detail,
+    }
 
 
 def audit(root: Path) -> dict:
-    errors: list[str] = []
-    project_path = root / "config/project.json"
-    context_path = root / "config/biological_context.json"
-    project = json.loads(project_path.read_text(encoding="utf-8")) if project_path.is_file() else {}
-    context = json.loads(context_path.read_text(encoding="utf-8")) if context_path.is_file() else {}
-    species = str(context.get("species", "")).lower()
-    tissue = str(context.get("tissue", "")).lower()
-    sheep_ovary = (
-        project.get("strategy_preset_requested") == "sheep_ovary_same_batch_rfirst"
-        or (any(token in species for token in ("sheep", "ovis", "ovine", "羊")) and any(token in tissue for token in ("ovary", "ovarian", "卵巢")))
-    )
+    gaps: list[dict] = []
+
+    def add(code: str, entity_type: str, entity_id: str, action: str, detail: str, blocking: bool = True) -> None:
+        gaps.append(gap(code, entity_type, entity_id, action, detail, blocking))
+
+    contract = active_workflow_contract(root)
     cell_path = root / "state/cell_ledger.tsv.gz"
     if not cell_path.exists():
         cell_path = root / "state/cell_ledger.tsv"
     cells = read_tsv(cell_path)
-    cohorts = read_tsv(root / "state/recluster_cohort_registry.tsv")
-    returns = read_tsv(root / "state/direct_return_registry.tsv")
-    routes = read_tsv(root / "state/route_attempt_registry.tsv")
+    cohorts = active_registry_rows(read_tsv(root / "state/recluster_cohort_registry.tsv"), "cohort_id")
+    returns = active_registry_rows(read_tsv(root / "state/direct_return_registry.tsv"), "return_id")
+    routes = active_registry_rows(read_tsv(root / "state/route_attempt_registry.tsv"), "route_attempt_id")
     views = read_tsv(root / "state/annotation_view_registry.tsv")
     if not cells:
-        errors.append("cell ledger is missing or empty")
-    required_cell_fields = {
+        add("CELL_LEDGER_MISSING", "analysis_set", "analysis_set", "write_or_repair_cell_ledger", "cell ledger is missing or empty")
+    required_fields = {
         "cell_id", "analysis_scope", "initial_broad_label", "assignment_mode", "final_state",
-        "final_broad_label", "final_fine_label", "fine_anchor_eligible", "recluster_cohort_id", "cross_lineage_target",
+        "final_broad_label", "final_fine_label", "final_confidence", "fine_anchor_eligible",
+        "recluster_cohort_id", "cross_lineage_target",
     }
-    if cells and not required_cell_fields.issubset(cells[0]):
-        errors.append("cell ledger lacks direct-workflow fields: " + ", ".join(sorted(required_cell_fields - set(cells[0]))))
+    if cells and not required_fields.issubset(cells[0]):
+        add("CELL_LEDGER_SCHEMA_INVALID", "analysis_set", "analysis_set", "repair_cell_ledger_schema", "missing fields: " + ", ".join(sorted(required_fields - set(cells[0]))))
     analysis = [row for row in cells if row.get("analysis_scope") == "analysis_set"]
     initial_broad = sorted({row.get("initial_broad_label", "").strip() for row in analysis if row.get("initial_broad_label", "").strip()})
     by_broad: dict[str, list[dict[str, str]]] = {}
-    for row in cohorts:
-        if row.get("cohort_type") == "broad_class_recluster":
-            by_broad.setdefault(row.get("source_broad_label", ""), []).append(row)
-        if row.get("cohort_type") not in {"broad_class_recluster", "targeted_recluster", "oocyte_targeted_recluster"}:
-            errors.append(f"unknown recluster cohort type: {row.get('cohort_id','')}")
-        if row.get("status") not in TERMINAL:
-            errors.append(f"recluster cohort is nonterminal: {row.get('cohort_id','')}")
-        if row.get("status") == "not_applicable_reviewed":
-            if len(row.get("applicability_rationale", "").strip()) < 20:
-                errors.append(f"small/nonreclustered broad class lacks rationale: {row.get('cohort_id','')}")
+    for cohort in cohorts:
+        cohort_id = cohort.get("cohort_id", "")
+        cohort_type = cohort.get("cohort_type", "")
+        if cohort_type == "broad_class_recluster":
+            by_broad.setdefault(cohort.get("source_broad_label", ""), []).append(cohort)
+            if cohort.get("question_mode") != "broad_purity_audit":
+                add("BROAD_COHORT_QUESTION_MODE_INVALID", "cohort", cohort_id, "set_broad_purity_audit", "broad-class cohort must not be forced to split")
+        elif cohort_type in {"targeted_recluster", "oocyte_targeted_recluster"}:
+            if cohort.get("question_mode") != "targeted_mixture":
+                add("TARGETED_COHORT_QUESTION_MODE_INVALID", "cohort", cohort_id, "set_targeted_mixture", "targeted cohort must state competing hypotheses")
         else:
-            errors.extend(f"cohort {row.get('cohort_id','')}: {item}" for item in validate_membership(root, row))
-            candidate_grid = resolutions(row.get("candidate_resolutions", ""))
-            if sheep_ovary and candidate_grid != GRID:
-                errors.append(f"cohort {row.get('cohort_id','')} does not use the formal sheep-ovary resolution grid")
-            if not sheep_ovary and not candidate_grid:
-                errors.append(f"cohort {row.get('cohort_id','')} lacks a candidate resolution grid")
-            try:
-                if float(row.get("selected_resolution", "")) not in candidate_grid:
-                    errors.append(f"cohort {row.get('cohort_id','')} selected resolution outside its candidate grid")
-            except ValueError:
-                errors.append(f"cohort {row.get('cohort_id','')} lacks a selected resolution")
-            outcome = path_at(root, row.get("outcome_artifact", "")) if row.get("outcome_artifact") else Path()
-            if not outcome.is_file():
-                errors.append(f"cohort {row.get('cohort_id','')} lacks a validated outcome artifact")
+            add("COHORT_TYPE_INVALID", "cohort", cohort_id, "repair_cohort_registry", f"unknown cohort type {cohort_type!r}")
+        if "qc" in cohort_type.lower() or cohort.get("source_broad_label", "").strip().lower() in {"qc", "qc_holdout", "qc_reject"}:
+            add("TERMINAL_QC_RECLUSTER_FORBIDDEN", "cohort", cohort_id, "remove_qc_reclustering_and_freeze_terminal_qc", "terminal residual QC must never be a reclustering cohort")
+        if cohort.get("status") not in TERMINAL:
+            add("COHORT_NONTERMINAL", "cohort", cohort_id, "finish_or_repair_cohort", "cohort is not terminal")
+            continue
+        if cohort.get("status") == "not_applicable_reviewed":
+            skip_value = cohort.get("underpowered_skip_artifact", "")
+            skip_path = path_at(root, skip_value) if skip_value else Path()
+            if len(cohort.get("applicability_rationale", "").strip()) < 20 or not skip_path.is_file() or not cohort.get("underpowered_skip_artifact_sha256") or sha256(skip_path) != cohort.get("underpowered_skip_artifact_sha256"):
+                add("UNDERPOWERED_SKIP_EVIDENCE_INVALID", "cohort", cohort_id, "record_hash_bound_underpowered_skip", "reviewed skip lacks substantive, current evidence")
+            continue
+        candidate_grid = resolutions(cohort.get("candidate_resolutions", ""))
+        expected_cohort_grid = [float(value) for value in contract.get("cohort_resolution_grid", [])]
+        if expected_cohort_grid and candidate_grid != expected_cohort_grid:
+            add("FORMAL_GRID_INCOMPLETE" if contract["same_batch_stereopy_cellbin_rfirst"] else "ACTIVE_GRID_INCOMPLETE", "cohort", cohort_id, "run_complete_active_contract_grid", f"cohort grid must equal the active workflow grid {expected_cohort_grid}")
+        elif not candidate_grid:
+            add("CANDIDATE_GRID_MISSING", "cohort", cohort_id, "run_workflow_profile_grid", "cohort lacks a candidate resolution grid")
+        try:
+            selected = float(cohort.get("selected_resolution", ""))
+        except ValueError:
+            selected = None
+        if selected is None or selected not in candidate_grid:
+            add("SELECTED_RESOLUTION_INVALID", "cohort", cohort_id, "select_integrated_evidence_optimum", "selected resolution is missing or outside the complete grid")
+        terminal_outcome = cohort.get("terminal_outcome", "")
+        if terminal_outcome not in {"homogeneous_parent_confirmed", "subclusters_adjudicated"}:
+            add("COHORT_TERMINAL_OUTCOME_MISSING", "cohort", cohort_id, "adjudicate_cohort_terminal_outcome", "cohort lacks a formal biological endpoint")
+        if terminal_outcome == "homogeneous_parent_confirmed" and cohort.get("question_mode") != "broad_purity_audit":
+            add("HOMOGENEOUS_ENDPOINT_INVALID", "cohort", cohort_id, "repair_terminal_outcome", "homogeneous parent is only a broad-purity endpoint")
+        outcome_value = cohort.get("outcome_artifact", "")
+        outcome_path = path_at(root, outcome_value) if outcome_value else Path()
+        if not outcome_path.is_file():
+            add("COHORT_OUTCOME_MISSING", "cohort", cohort_id, "create_evidence_complete_cohort_outcome", "cohort outcome artifact is missing")
+        else:
+            validation = validate_cohort_outcome(root, outcome_path, root / "state/recluster_cohort_registry.tsv")
+            for message in validation.get("errors", []):
+                add("COHORT_OUTCOME_SCHEMA_INVALID", "cohort", cohort_id, "repair_cohort_outcome_evidence", message)
+
     for label in initial_broad:
         terminal = [row for row in by_broad.get(label, []) if row.get("status") in TERMINAL]
-        if not terminal:
-            errors.append(f"initial broad class lacks a terminal recluster/skip audit: {label}")
-    for row in returns:
-        rid = row.get("return_id", "")
-        if row.get("status") != "validated_done":
-            errors.append(f"direct return is nonterminal: {rid}")
-        errors.extend(f"direct return {rid}: {item}" for item in validate_membership(root, row))
-        if not row.get("target_broad_label", "").strip():
-            errors.append(f"direct return lacks target broad label: {rid}")
-        conf = confidence(row.get("confidence", ""))
-        fine = row.get("target_fine_label", "").strip()
-        mode = row.get("assignment_mode", "")
-        if conf not in MODERATE:
-            errors.append(f"direct broad return is below moderate confidence: {rid}")
-        if fine and conf not in HIGH:
-            errors.append(f"direct fine return is below high confidence: {rid}")
-        evidence = path_at(root, row.get("evidence_artifact", "")) if row.get("evidence_artifact") else Path()
-        if not evidence.is_file():
-            errors.append(f"direct return lacks evidence artifact: {rid}")
-        if mode == "rctd_assisted":
-            if fine and (row.get("rctd_tier") != "extreme" or not truth(row.get("independent_evidence", ""))):
-                errors.append(f"RCTD-assisted fine return lacks extreme tier plus independent evidence: {rid}")
-            if not fine and row.get("rctd_tier") not in {"extreme", "high"}:
-                errors.append(f"RCTD broad return is below high tier: {rid}")
-            if truth(row.get("fine_anchor_eligible", "")):
-                errors.append(f"RCTD-assisted return cannot become a fine anchor: {rid}")
-    for index, row in enumerate(analysis, 2):
-        broad = row.get("final_broad_label", "").strip()
-        fine = row.get("final_fine_label", "").strip()
-        broad_conf = confidence(row.get("final_broad_confidence") or row.get("final_confidence", ""))
-        fine_conf = confidence(row.get("final_fine_confidence") or row.get("final_confidence", ""))
-        if broad and broad_conf not in MODERATE:
-            errors.append(f"cell row {index} broad label is below moderate confidence")
-        if fine and (not broad or fine_conf not in HIGH or not truth(row.get("fine_anchor_eligible", ""))):
-            errors.append(f"cell row {index} fine label lacks a high-confidence eligible parent")
-        if row.get("assignment_mode") == "atlas_broad_rescue":
-            if fine or truth(row.get("fine_anchor_eligible", "")):
-                errors.append(f"cell row {index} Atlas rescue leaked into a fine label/anchor")
-        if not broad and row.get("final_state") not in RETAINED:
-            errors.append(f"cell row {index} has neither a biological broad label nor an explicit retained state")
-    atlas = [row for row in routes if row.get("route_class") == "residual_qc_atlas_review"]
-    active_atlas = [row for row in atlas if row.get("status") in TERMINAL]
-    if not active_atlas:
-        errors.append("residual QC Atlas phase lacks an applicable or zero-query terminal audit")
-    for row in active_atlas:
-        aid = row.get("route_attempt_id", "")
-        if row.get("applicability") == "not_applicable":
-            if row.get("status") != "not_applicable_reviewed" or len(row.get("applicability_rationale", "").strip()) < 20:
-                errors.append(f"zero-QC Atlas audit lacks rationale: {aid}")
-            continue
-        if row.get("source_state") != "residual_qc_holdout_after_all_cohorts":
-            errors.append(f"Atlas source is not final residual QC: {aid}")
-        reference_id = row.get("reference_id", "")
-        if sheep_ovary and reference_id != "GSE233801" and not reference_id.startswith("matched_count_level:"):
-            errors.append(f"Atlas reference is not the declared sheep priority/matched reference: {aid}")
-        if not sheep_ovary and not reference_id:
-            errors.append(f"Atlas route lacks a declared reference: {aid}")
-        if row.get("calibration_origin") != "query_like_heldout_current_query_anchors":
-            errors.append(f"Atlas calibration origin is invalid: {aid}")
-        if not truth(row.get("depth_matched_validation", "")) or not truth(row.get("observed_density_spatial_prior", "")):
-            errors.append(f"Atlas lacks depth/spatial validation: {aid}")
-        errors.extend(f"Atlas {aid}: {item}" for item in validate_membership(root, row, "query_membership"))
+        if len(terminal) != 1:
+            add("INITIAL_BROAD_COHORT_MISSING", "broad_label", label, "run_one_broad_class_recluster_or_formal_underpowered_skip", "each initial broad class requires exactly one terminal cohort")
+
+    if contract["same_batch_stereopy_cellbin_rfirst"]:
+        whole_grid_path = root / "provenance/whole_tissue_resolution_grid_validation.json"
         try:
-            n_query = int(float(row.get("n_query", 0) or 0))
-            n_broad = int(float(row.get("n_defined_broad_only", 0) or 0))
-            n_qc = int(float(row.get("n_qc_retained", 0) or 0))
-            if n_broad + n_qc != n_query or int(float(row.get("n_defined_fine", 0) or 0)) != 0:
-                errors.append(f"Atlas broad-return/QC outcomes do not partition the query: {aid}")
-        except ValueError:
-            errors.append(f"Atlas route counts are invalid: {aid}")
-        if truth(row.get("fine_anchor_eligible", "")):
-            errors.append(f"Atlas route is fine-anchor eligible: {aid}")
+            whole_grid = json.loads(whole_grid_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            whole_grid = {}
+        embedded = whole_grid.get("active_workflow_contract", {}) if isinstance(whole_grid.get("active_workflow_contract"), dict) else {}
+        if (
+            whole_grid.get("status") != "PASS"
+            or whole_grid.get("scope") != "whole_tissue"
+            or whole_grid.get("candidate_resolutions") != FORMAL_GRID
+            or embedded.get("workflow_profile_sha256") != contract.get("workflow_profile_sha256")
+            or embedded.get("strategy_preset_id") != contract.get("strategy_preset_id")
+        ):
+            add("WHOLE_TISSUE_GRID_AUDIT_MISSING", "whole_tissue", "whole_tissue", "validate_complete_active_workflow_grid", "verified same-batch StereoPy cellbin project lacks a current whole-tissue 0.1,0.2,0.3,0.4,0.6 grid audit")
+
+    for direct in returns:
+        return_id = direct.get("return_id", "")
+        if direct.get("status") != "validated_done":
+            add("DIRECT_RETURN_NONTERMINAL", "direct_return", return_id, "finish_or_repair_direct_return", "direct return is nonterminal")
+        conf = confidence(direct.get("confidence", ""))
+        fine = direct.get("target_fine_label", "").strip()
+        if conf not in {"moderate", "high"}:
+            add("CONFIDENCE_NONCANONICAL", "direct_return", return_id, "migrate_confidence_to_canonical_enum", f"new direct return confidence is {conf!r}")
+        if fine and (conf != "high" or not truth(direct.get("fine_anchor_eligible", ""))):
+            add("FINE_RETURN_EVIDENCE_INSUFFICIENT", "direct_return", return_id, "return_broad_only_or_supply_high_fine_evidence", "fine return must be high and fine-anchor eligible")
+        evidence_value = direct.get("evidence_artifact", "")
+        evidence_path = path_at(root, evidence_value) if evidence_value else Path()
+        if not evidence_path.is_file():
+            add("DIRECT_RETURN_EVIDENCE_MISSING", "direct_return", return_id, "create_direct_return_evidence", "evidence artifact is missing")
+        else:
+            validation = validate_direct_return_evidence(root, evidence_path, root / "state/direct_return_registry.tsv")
+            for message in validation.get("errors", []):
+                add("DIRECT_RETURN_EVIDENCE_SCHEMA_INVALID", "direct_return", return_id, "repair_direct_return_evidence", message)
+        if direct.get("assignment_mode") == "rctd_assisted":
+            if fine and (direct.get("rctd_tier") != "high" or not truth(direct.get("independent_evidence", ""))):
+                add("RCTD_FINE_GATE_FAILED", "direct_return", return_id, "return_broad_or_qc", "RCTD fine requires canonical high plus independent evidence")
+            if not fine and direct.get("rctd_tier") not in {"high", "moderate"}:
+                add("RCTD_BROAD_GATE_FAILED", "direct_return", return_id, "route_to_terminal_qc", "RCTD broad return is below canonical moderate")
+
+    for row_index, cell in enumerate(analysis, 2):
+        broad = cell.get("final_broad_label", "").strip()
+        fine = cell.get("final_fine_label", "").strip()
+        conf = confidence(cell.get("final_confidence", ""))
+        if conf and conf not in CANONICAL_CONFIDENCE:
+            add("CONFIDENCE_NONCANONICAL", "cell", cell.get("cell_id", str(row_index)), "migrate_confidence_to_canonical_enum", f"cell confidence is {conf!r}")
+        if broad and conf not in {"moderate", "high"}:
+            add("FINAL_BROAD_BELOW_MODERATE", "cell", cell.get("cell_id", str(row_index)), "return_to_review_or_qc", "final broad label lacks moderate-or-high confidence")
+        if fine and (not broad or conf != "high" or not truth(cell.get("fine_anchor_eligible", ""))):
+            add("FINAL_FINE_GATE_FAILED", "cell", cell.get("cell_id", str(row_index)), "collapse_to_broad_or_supply_high_fine_evidence", "final fine label lacks high fine-anchor evidence")
+        if cell.get("assignment_mode") == "atlas_broad_rescue" and (fine or truth(cell.get("fine_anchor_eligible", ""))):
+            add("ATLAS_FINE_LEAK", "cell", cell.get("cell_id", str(row_index)), "remove_atlas_fine_label", "Atlas rescue is broad-only")
+        if not broad and cell.get("final_state") not in RETAINED:
+            add("FINAL_CELL_UNCOVERED", "cell", cell.get("cell_id", str(row_index)), "write_unique_final_broad_or_retained_state", "cell has no final biological or retained state")
+
+    for route in routes:
+        if route.get("route_class") in {"qc_anchor_recluster", "qc_holdout_recluster"}:
+            add("TERMINAL_QC_RECLUSTER_FORBIDDEN", "route", route.get("route_attempt_id", ""), "remove_qc_reclustering_and_freeze_terminal_qc", "legacy QC reclustering route is active")
+    atlas = [row for row in routes if row.get("route_class") == "residual_qc_atlas_review" and row.get("status") in TERMINAL]
+    if len(atlas) != 1:
+        add("TERMINAL_ATLAS_AUDIT_MISSING", "terminal_residual_qc", "terminal_residual_qc", "run_or_record_zero_query_atlas_consensus", "exactly one terminal Atlas audit is required")
+    for route in atlas:
+        route_id = route.get("route_attempt_id", "")
+        if route.get("applicability") == "not_applicable":
+            if len(route.get("applicability_rationale", "").strip()) < 20:
+                add("ATLAS_ZERO_QUERY_RATIONALE_MISSING", "route", route_id, "record_zero_query_terminal_audit", "zero-query Atlas audit lacks rationale")
+            continue
+        if route.get("source_state") != "residual_qc_holdout_after_all_cohorts":
+            add("ATLAS_QUERY_NOT_TERMINAL_QC", "route", route_id, "freeze_exact_terminal_residual_qc", "Atlas source is not terminal residual QC")
+        tiers = {value for value in re.split(r"[|,;\s]+", route.get("atlas_confidence_enum", "")) if value}
+        if tiers != ATLAS_CONFIDENCE:
+            add("ATLAS_CONFIDENCE_ENUM_INVALID", "route", route_id, "use_high_moderate_only_low_reject", f"Atlas confidence enum is {sorted(tiers)}")
+        if route.get("calibration_origin") != "query_like_heldout_current_query_anchors":
+            add("ATLAS_CALIBRATION_INVALID", "route", route_id, "calibrate_on_disjoint_query_like_anchors", "Atlas calibration origin is invalid")
+        if not truth(route.get("depth_matched_validation", "")) or not truth(route.get("observed_density_spatial_prior", "")):
+            add("ATLAS_CONSENSUS_INCOMPLETE", "route", route_id, "complete_depth_marker_internal_anchor_spatial_consensus", "Atlas lacks required consensus channels")
         for key in ("calibration_manifest", "validation_artifact", "outcome_artifact"):
-            value = row.get(key, "")
+            value = route.get(key, "")
             if not value or not path_at(root, value).is_file():
-                errors.append(f"Atlas route lacks {key}: {aid}")
-    if not any(row.get("view") == "final" and row.get("status") == "validated" for row in views):
-        errors.append("single final annotation view is not validated")
+                add("ATLAS_EVIDENCE_ARTIFACT_MISSING", "route", route_id, "repair_atlas_evidence_bundle", f"missing {key}")
+        if truth(route.get("fine_anchor_eligible", "")):
+            add("ATLAS_FINE_ANCHOR_FORBIDDEN", "route", route_id, "set_fine_anchor_false", "Atlas route cannot seed fine discovery")
+
+    final_view = any(row.get("view") == "final" and row.get("status") == "validated" for row in views)
+    if not final_view:
+        add("FINAL_VIEW_MISSING", "annotation_view", "final", "build_and_validate_single_final_annotation", "single final annotation view is not validated")
+    blocking = [item for item in gaps if item["blocking"]]
     return {
-        "status": "PASS" if not errors else "BLOCKED",
-        "workflow_model": "broad_then_subtype_direct_cross_lineage_then_residual_qc_atlas",
-        "profile_mode": "sheep_ovary" if sheep_ovary else "generic_context",
+        "status": "PASS" if not blocking else "BLOCKED",
+        "controller_state": "CONTINUE" if not blocking else "ITERATION_REQUIRED",
+        "workflow_model": "broad_class_recluster_cohort_then_direct_return_then_terminal_residual_qc",
+        "active_workflow_contract": contract,
         "initial_broad_labels": initial_broad,
         "recluster_cohort_n": len(cohorts),
         "direct_return_n": len(returns),
-        "atlas_phase_n": len(active_atlas),
+        "atlas_phase_n": len(atlas),
         "persistent_biological_pools": False,
-        "errors": errors,
-        "gaps": [{"reason": item} for item in errors],
-        "invalid_attempts": [],
-        "missing_views": [] if any(row.get("view") == "final" and row.get("status") == "validated" for row in views) else ["final"],
+        "errors": [item["detail"] for item in blocking],
+        "gaps": gaps,
+        "invalid_attempts": [item for item in gaps if item["code"].endswith("INVALID")],
+        "missing_views": [] if final_view else ["final"],
     }
 
 
 def main() -> int:
-    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("project_root", type=Path)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--strict-exit-code", action="store_true", help="return nonzero for expected workflow gaps (CI/completion use)")
     args = parser.parse_args()
-    result = audit(args.project_root.resolve())
-    out = args.out or args.project_root / "provenance/direct_lineage_workflow_audit.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    root = args.project_root.resolve()
+    result = audit(root)
+    write_result(args.out or root / "provenance/direct_lineage_workflow_audit.json", result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if result["status"] == "PASS" else 2
+    if args.strict_exit_code and result["status"] != "PASS":
+        return 2
+    return 0
 
 
 if __name__ == "__main__":

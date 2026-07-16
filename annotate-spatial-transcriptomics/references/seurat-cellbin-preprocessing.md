@@ -95,7 +95,7 @@ must be selected from each sample or broad/targeted cohort:
 - the number of PCs for small cohorts when fewer than 30 are supported;
 - biological labels, merges, subtypes and confidence.
 
-Select the lowest-complexity broad resolution that preserves defensible
+Select the complete-grid broad resolution with the best integrated biological evidence that preserves defensible
 lineages using DEG, absolute marker/anti-marker evidence, cluster-size
 distribution, adjacent-resolution stability, UMAP and spatial morphology.
 

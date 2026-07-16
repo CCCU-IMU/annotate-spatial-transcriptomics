@@ -13,7 +13,7 @@ from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 
 
 def detect_cluster_separator(path: str | Path) -> str:
-    """Use the explicit table suffix; pool runners emit TSV, adapters may emit CSV."""
+    """Use the explicit table suffix; cohort runners emit TSV, adapters may emit CSV."""
     name = str(path).lower()
     return "\t" if name.endswith((".tsv", ".tsv.gz", ".txt", ".txt.gz")) else ","
 

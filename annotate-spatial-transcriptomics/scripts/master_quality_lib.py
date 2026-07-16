@@ -24,6 +24,8 @@ BOUND_ARTIFACTS = (
     "final_annotation_census",
     "annotation_view_registry",
     "annotation_support_registry",
+    "annotation_support_validation",
+    "annotation_membership_partition_audit",
     "review_asset_manifest",
     "quality_reference",
 )

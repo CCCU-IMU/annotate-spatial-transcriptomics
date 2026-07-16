@@ -1,55 +1,51 @@
-# Evidence and unresolved-population routing
+# Evidence and unresolved-observation routing
 
-## Minimum evidence
+This file is the active contract. Retired routing instructions live under `references/legacy/` and cannot control a new project.
 
-Use coherent marker programs rather than single genes. Retain absolute detection percentages, average expression, DEG effect size, contradictory programs, QC metrics and spatial location.
+## Evidence floor
 
-When matched single-cell data are available, use `matched-single-cell-reference.md`. Query-derived full-feature anchors remain the primary biological evidence; a stage-matched same-project single-cell reference is the preferred external channel, ahead of public same-species and cross-species atlases. Its source labels must pass an explicit crosswalk and transfer ceiling.
+Use coherent marker families, anti-marker results, full-feature DEG/detection, adjacent-resolution migration, spatial morphology and source/QC composition. A path, status flag or empty table is not biological evidence. Cohort, direct-return and per-label support artifacts must pass their content schemas.
 
-## Decision routes
+## Broad-class reclustering cohort
 
-### Direct definition
+Every credible initial broad class receives exactly one immutable `broad_class_recluster` cohort, except a formally documented underpowered skip. Run the complete active workflow grid and audit purity, hidden lineages and defensible subtypes.
 
-Use when multiple canonical markers, DEG and morphology agree. Assign broad label first; subtype only if subtype-specific evidence is coherent.
+Use `question_mode=broad_purity_audit`. Its expected minimum compartment count is one. A cohort is not penalized for remaining one stable biological population. If the full grid shows no stable mixture or true subtype, close it successfully as `homogeneous_parent_confirmed` and return every observation to the parent broad class.
 
-### Broad review pool plus anchors
+Select the resolution with the best integrated evidence for the current biological question. Preserve stable lineages or true subtypes first; avoid state-only and technical fragmentation second. Use lower complexity only when candidates are otherwise equivalent.
 
-Use for large unresolved populations with usable transcriptomic structure. Add frozen, R-only or platform-matched trustworthy anchors. Recluster query and anchors, then classify only clusters supported by multiple channels. Broad returns are not automatically subtype anchors.
+## Subcluster outcomes and direct returns
 
-Anchors participate in joint normalization/PCA only. Query cells alone define graph, clustering, UMAP, DEG and outcome counts. Require `query_or_anchor` and `anchor_label` in the frozen membership and emit source/state/QC composition tables. Otherwise record the run as query-only, not anchor-assisted.
+Every selected-resolution subcluster has exactly one outcome:
 
-### Targeted RCTD/reference assistance
+- direct parent-broad return;
+- high-confidence, fine-anchor-eligible fine return;
+- direct cross-lineage broad/fine return;
+- one `targeted_recluster` successor for a predeclared mixture question; or
+- QC successor.
 
-Use for a local mixed interface, not as a whole-dataset label generator. Build reference types independently, match query depth for validation, compare parameter settings, calibrate thresholds on held-out anchors and preserve rejects. Record weights, margins, precision and coverage.
+These memberships must be mutually exclusive and exactly partition the cohort query. A cross-lineage return does not create an intermediate cohort and does not automatically rerun the target broad cohort.
 
-Recheck the query/reference boundary for every child pool, even when reusing a previously valid reference. Descendant query pools can contain observations that were anchors for an earlier branch. Run `scripts/filter_reference_query_overlap.py` before fitting; require zero final overlap, adequate counts for every retained reference label and a machine-readable exclusion manifest. A boundary failure is a preserved failed run and must be repaired under a new run/route ID.
+## Targeted mixtures and RCTD
 
-`scripts/run_rctd_review.R` supplies a versioned local-review adapter. Require explicit query-depth `UMI_min`/`counts_MIN`; its results and weights are evidence artifacts only.
+Use `question_mode=targeted_mixture` only for an interpretable local mixture with two or more predeclared competing hypotheses. Its expected compartment count may equal the number of hypotheses. RCTD/reference assistance remains lower priority: canonical high plus independent current-query evidence may support fine; moderate may support broad-only; low goes to QC. RCTD never turns a reject into an anatomical interface by itself.
 
-Use tiered RCTD evidence: extreme confidence plus independent current-query evidence may support a subtype; high confidence may support only a broad return; medium/low confidence enters the frozen post-clustering QC holdout. It may reach depth-matched Atlas/internal-anchor mapping only after every broad/targeted cohort is terminal and only as part of the complete final QC membership; do not recluster QC first. Never equate an RCTD reject with a terminal anatomical interface without checking size and spatial locality.
+Reference/query overlap must be zero. Calibration uses disjoint, query-like held-out current-query anchors; external-reference self-classification is diagnostic only.
 
-### QC holdout plus atlas
+## Terminal residual QC consensus
 
-First determine whether low information is technical, biological or depth-related. Except for verified zero-count observations, a large post-clustering QC holdout must first undergo complete broad-anchor query-only reclustering. Only the remaining rejects proceed to depth-matched atlas/internal-anchor review. Validate reference performance after downsampling anchors to query depth. Combine atlas, internal anchors, markers and observed-density space. A spatial or atlas top label alone cannot write back. Rescue broad classes at predeclared moderate/high confidence; retain observations below the moderate tier as calibrated rejects with the mapping artifact and rationale.
+After every broad-class and targeted cohort is terminal, recompute the residual `qc_holdout` membership from the current cell ledger and freeze that exact set once.
 
-The default atlas policy is route- and class-specific held-out target precision `moderate-or-higher=0.90`, `high=0.95`. These are calibration precision targets used to derive score/margin thresholds, not requirements that every observation's raw confidence be at least 0.90 or 0.95. Calibrate nested cumulative selections on the full held-out group and require the high selection to be a subset of moderate-or-higher. Output counts are `high`, `moderate-only` and `low-reject`; also report the cumulative `moderate-or-higher` count so a nonzero high tier can never be misdescribed as zero observations meeting the moderate gate. Both accepted tiers may return **broad-only** labels after independent current-query evidence passes, and both must set `fine_anchor_eligible=false`.
+**Do not recluster terminal residual QC.** Do not create a QC cohort, anchor-recluster successor or other intermediate membership. Run calibrated Atlas, internal-anchor, current-query marker/anti-marker and observed-density/spatial consensus only on the frozen exact set.
 
-Prefer query-like held-out anchors for final transfer calibration. The completed Scanpy-style route used external Atlas, internal anchors, marker programs and observed-density space as four concordance channels; the completed R-style route calibrated those channels on held-out current-query anchors before high/moderate consensus. An external-reference held-out split measures Atlas self-consistency and is useful diagnostically, but it cannot by itself certify transfer confidence in low-depth query observations.
+Atlas output tiers are `high`, `moderate_only` and `low_reject`. High and moderate_only consensus may return broad-only with `fine_anchor_eligible=false`; low_reject remains QC. Accepted and rejected memberships must be disjoint and exactly partition the Atlas query, and every result must match the cell-ledger writeback cell for cell.
 
-A biologically matched single-cell reference may replace the generic external-atlas channel, but not the internal-anchor, current-query marker/anti-marker or spatial channels. Use its count-level object for depth matching and held-out calibration. If only a marker dotplot is available, use it to refine positive/negative programs and the crosswalk; do not report cell-level mapping confidence from the dotplot.
+For sheep ovary without a matched count-level reference, GSE233801 remains the primary public somatic channel only at this terminal step. It cannot serve as its own reference in a held-out benchmark.
 
-Use `scripts/adjudicate_multichannel_broad_rescue.py` after assembling the evidence matrix. Configure each channel with its own label and acceptance column, require a current-query marker/anti-marker channel, and require at least one route/internal-anchor/observed-density spatial channel. The script derives a candidate label from concordant channels, calibrates cumulative support-count thresholds separately for each declared route/label group, and refuses to extrapolate to support counts absent from held-out anchors. Its output is proposal-only and never edits the cell ledger.
+## Retained uncertainty
 
-The default structural minima are two concordant channels for moderate-or-higher and three for high, but held-out precision calibration may select stricter observed thresholds. High must remain a subset of moderate-or-higher. A group without enough query-like held-out support remains rejected; do not borrow a permissive threshold from an unrelated route merely to increase coverage.
-
-For H5AD references, first use `scripts/downsample_anchors_to_query_depth.py` to create disjoint held-out **current-query anchors** matching the final QC membership's count-depth distribution. `scripts/run_anchor_knn_mapping.py` creates auditable atlas/internal-anchor predictions for those anchors and the QC query; calibrate nested high/moderate tiers with `scripts/calibrate_tiered_mapping_thresholds.py` and its required origin manifest. `scripts/build_depth_matched_atlas_bundle.py` splits an external reference and is diagnostic reference-self-classification only; it cannot calibrate query rescue. The legacy `calibrate_mapping_thresholds.py` is diagnostic-only and never writeback eligible. Accepted rows remain `defined_broad_only`, `fine_anchor_eligible=false`; rejects remain QC/review. More sophisticated mapping methods may replace kNN but must obey the same disjoint query-like calibration contract.
-
-### Retain uncertainty
-
-Use `interface_review`, `qc_holdout` or `technical_state` when evidence remains insufficient. Annotation rate is not an optimization target.
-
-Before retention, compare the proposed interface/QC fraction with the current analysis-set structure. This is a diagnostic trigger, not a quota: a large or diffuse retained pool must demonstrate that broad anchor reclustering, RCTD tiering, complete QC-holdout anchor reclustering and residual-QC-only Atlas/internal-anchor review were all exhausted in that order. Do not preserve a high unresolved fraction simply to maximize specificity.
+Retain `qc_holdout`, `qc_reject` or `technical_state` when evidence is insufficient. A large unresolved fraction triggers evidence review, not a quota and not QC reclustering. Annotation rate is never optimized at the expense of evidence.
 
 ## Contamination and ambient signal
 
-Require lineage-core programs and spatially plausible focal structure. Neighboring or ambient markers must not override a coherent resident program. Report observation/bin counts separately from biological cell counts.
+Require lineage-core programs and compatible anti-markers. Spatial adjacency, zona signal or a single marker cannot override a coherent resident program. Report cellbin/spot counts separately from biological cell counts.

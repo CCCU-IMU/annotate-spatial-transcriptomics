@@ -30,7 +30,7 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         self.assertEqual(fixed["clustering"]["candidate_resolutions"], [0.1, 0.2, 0.3, 0.4, 0.6])
         self.assertEqual(profile["external_reference_policy"]["primary_public_atlas"], "GSE233801")
         self.assertEqual(profile["external_reference_policy"]["calibration_origin"], "query_like_heldout_current_query_anchors")
-        self.assertEqual(profile["external_reference_policy"]["accepted_calibrated_tiers"], ["high", "moderate"])
+        self.assertEqual(profile["external_reference_policy"]["accepted_calibrated_tiers"], ["high", "moderate_only"])
         self.assertEqual(profile["external_reference_policy"]["atlas_rescue_ceiling"], "broad_only")
         self.assertTrue(profile["release_policy"]["all_accepted_broad_rescues_enter_final_deg_and_dotplots"])
 
@@ -62,7 +62,8 @@ class SheepOvaryReleaseContract(unittest.TestCase):
             )
             result = json.loads(output.read_text())
             self.assertEqual(result["preferred_backbone"], "seurat_r_first")
-            self.assertTrue(result["fixed_cellbin_preprocessing_required"])
+            self.assertFalse(result["fixed_cellbin_preprocessing_required"])
+            self.assertTrue(result["stereopy_cellbin_path_or_feature_hint"])
             self.assertEqual(result["primary_public_atlas"], "GSE233801")
             self.assertFalse(result["dotplot_only_reference_allows_cell_transfer"])
 
@@ -83,7 +84,7 @@ class SheepOvaryReleaseContract(unittest.TestCase):
             )
             result = json.loads(output.read_text())
             self.assertTrue(result["sheep_ovary_context"])
-            self.assertTrue(result["fixed_cellbin_preprocessing_required"])
+            self.assertFalse(result["fixed_cellbin_preprocessing_required"])
 
     def test_cellbin_runner_rejects_unrecorded_drift_and_missing_hashes(self) -> None:
         text = (SCRIPTS / "run_seurat_sct_preprocess.R").read_text()
@@ -95,19 +96,19 @@ class SheepOvaryReleaseContract(unittest.TestCase):
 
     def test_seurat_resolution_grids_expose_real_parallel_workers(self) -> None:
         whole = (SCRIPTS / "run_seurat_sct_preprocess.R").read_text()
-        pool = (SCRIPTS / "run_seurat_pool_recluster.R").read_text()
-        for runner in [whole, pool]:
+        cohort = (SCRIPTS / "run_seurat_cohort_recluster_impl.R").read_text()
+        for runner in [whole, cohort]:
             self.assertIn("resolution-workers", runner)
             self.assertIn("resolution-future-plan", runner)
             self.assertIn("future::multicore", runner)
             self.assertIn("resolution_workers_used", runner)
             self.assertIn("umap_threads", runner)
-        self.assertIn('by_cols<-c("cluster",as.character(sc))', pool)
-        self.assertNotIn('by=c("cluster",sc)', pool)
+        self.assertIn('by_cols<-c("cluster",as.character(sc))', cohort)
+        self.assertNotIn('by=c("cluster",sc)', cohort)
         self.assertIn('resolution = resolutions', whole)
-        self.assertIn('FindClusters(object=q[["POOL_snn"]],algorithm=4,resolution=resolutions', pool)
-        self.assertIn('resolution_contract=="sheep_ovary"', pool)
-        self.assertIn('resolution below formal minimum', pool)
+        self.assertIn('FindClusters(object=q[["COHORT_snn"]],algorithm=4,resolution=resolutions', cohort)
+        self.assertIn('resolution_contract=="sheep_ovary"', cohort)
+        self.assertIn('resolution below formal minimum', cohort)
         orchestration = (SKILL / "references/job-orchestration.md").read_text()
         self.assertIn("Mandatory CPU-to-parallelism contract", orchestration)
         self.assertIn("CPU/wall ratio", orchestration)
@@ -116,8 +117,8 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         bundle = (SCRIPTS / "build_depth_matched_atlas_bundle.py").read_text()
         tiered = (SCRIPTS / "calibrate_tiered_mapping_thresholds.py").read_text()
         legacy = (SCRIPTS / "calibrate_mapping_thresholds.py").read_text()
-        materialize = (SCRIPTS / "materialize_adjudication_partition.py").read_text()
-        terminal = (SCRIPTS / "commit_terminal_partitions.py").read_text()
+        materialize = (SCRIPTS / "legacy/materialize_adjudication_partition.py").read_text()
+        terminal = (SCRIPTS / "legacy/commit_terminal_partitions.py").read_text()
         self.assertIn('"heldout_origin": "reference_self_classification"', bundle)
         self.assertIn('"eligible_for_query_rescue_calibration": False', bundle)
         self.assertIn("calibration-origin-manifest", tiered)

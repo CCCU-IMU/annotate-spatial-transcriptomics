@@ -30,22 +30,11 @@ def active_decisions(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     return [row for row in rows if decision_id(row) not in superseded]
 
 
-def classify_error(message: str) -> tuple[int, str, str, str]:
-    if "initial broad class lacks" in message:
-        label = message.rsplit(":", 1)[-1].strip()
-        return 1, "broad_class_recluster_or_underpowered_skip", label, "terminal broad-class cohort or recorded underpowered skip"
-    if "recluster cohort" in message or message.startswith("cohort "):
-        cohort = message.split(":", 1)[0].replace("cohort ", "").strip()
-        return 1, "repair_or_finish_recluster_cohort", cohort, "validated terminal cohort artifact and writeback"
-    if "direct return" in message:
-        return 1, "repair_direct_return", message.split(":", 1)[0], "validated membership, evidence and confidence"
-    if "Atlas" in message or "residual QC Atlas" in message:
-        return 2, "residual_qc_calibrated_atlas_review", "final_qc_holdout", "terminal calibrated broad-only rescue/QC partition"
-    if "final annotation" in message or "final" in message and "view" in message:
-        return 4, "build_final_annotation", "analysis_set", "single final broad/fine/QC annotation"
-    if "cell ledger" in message:
-        return 0, "write_or_repair_cell_ledger", "analysis_set", "valid cell-level state"
-    return 2, "repair_annotation_workflow_gap", "project", "validated state writeback"
+PRIORITY_BY_ENTITY = {
+    "analysis_set": 0, "cell": 0, "broad_label": 1, "cohort": 1,
+    "direct_return": 1, "targeted_cohort": 1, "terminal_residual_qc": 2,
+    "route": 2, "annotation_view": 4,
+}
 
 
 def main() -> int:
@@ -54,6 +43,7 @@ def main() -> int:
     parser.add_argument("--context", required=True, type=Path)
     parser.add_argument("--biological-profile", type=Path)
     parser.add_argument("--profile", type=Path, help="deprecated biological-profile alias")
+    parser.add_argument("--strict-exit-code", action="store_true", help="return nonzero for expected iteration work")
     args = parser.parse_args()
     root = args.project_root.resolve()
     context = json.loads(args.context.read_text(encoding="utf-8"))
@@ -85,12 +75,20 @@ def main() -> int:
                 "reason": "final marker/anti-marker and context-specific evidence require a validated full-feature layer",
                 "target_scope": "whole_tissue_and_all_recluster_cohorts",
                 "blocked_until": "full-feature audit PASS and evidence writeback",
+                "gap_code": "FULL_FEATURE_VALIDATION_REQUIRED", "entity_type": "project", "entity_id": "full_feature_validation",
             })
 
     seen: set[tuple[str, str]] = set()
-    for message in result.get("errors", []):
-        priority, route, target, blocked = classify_error(message)
-        key = (route, target)
+    for workflow_gap in result.get("gaps", []):
+        if not workflow_gap.get("blocking", True):
+            continue
+        code = workflow_gap.get("code", "UNSTRUCTURED_GAP")
+        entity_type = workflow_gap.get("entity_type", "project")
+        target = workflow_gap.get("entity_id", "project")
+        route = workflow_gap.get("required_action", "repair_annotation_workflow_gap")
+        message = workflow_gap.get("detail", code)
+        priority = PRIORITY_BY_ENTITY.get(entity_type, 2)
+        key = (code, target)
         if key in seen:
             continue
         seen.add(key)
@@ -98,7 +96,8 @@ def main() -> int:
             "priority": priority, "source_run_id": "project", "source_cluster": target,
             "n_observations": 0, "current_state": "annotation_workflow_gap", "broad_label": target if route.startswith("broad_class") else "",
             "fine_label": "", "required_route": route, "reason": message,
-            "target_scope": target, "blocked_until": blocked,
+            "target_scope": target, "blocked_until": route,
+            "gap_code": code, "entity_type": entity_type, "entity_id": target,
         })
 
     for row in cluster_rows:
@@ -112,6 +111,7 @@ def main() -> int:
                     "broad_label": row.get("broad_label", ""), "fine_label": row.get("fine_label", ""),
                     "required_route": "full_feature_marker_validation", "reason": "biological decision lacks full-feature validation",
                     "target_scope": row.get("recluster_cohort_id", ""), "blocked_until": "full-feature positive/anti-marker evidence",
+                    "gap_code": "DECISION_FULL_FEATURE_EVIDENCE_REQUIRED", "entity_type": "cluster_decision", "entity_id": row.get("decision_id", row.get("source_cluster", "")),
                 })
 
     rows.sort(key=lambda row: (int(row["priority"]), -int(row["n_observations"])))
@@ -120,6 +120,7 @@ def main() -> int:
     fields = [
         "priority", "source_run_id", "source_cluster", "n_observations", "current_state", "broad_label",
         "fine_label", "required_route", "reason", "target_scope", "blocked_until",
+        "gap_code", "entity_type", "entity_id",
     ]
     with queue_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
@@ -140,7 +141,7 @@ def main() -> int:
     (provenance / "direct_lineage_workflow_audit.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (provenance / "iteration_plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(plan, ensure_ascii=False, indent=2))
-    return 2 if rows else 0
+    return 2 if rows and args.strict_exit_code else 0
 
 
 if __name__ == "__main__":

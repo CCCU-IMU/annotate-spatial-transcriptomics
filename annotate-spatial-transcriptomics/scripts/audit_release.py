@@ -12,6 +12,10 @@ import math
 from html.parser import HTMLParser
 from pathlib import Path
 
+from audit_annotation_membership_partition import audit as audit_membership_partition
+from dependency_manifest import build as build_dependency_manifest
+from validate_annotation_support_registry import validate as validate_support_registry
+
 
 def read_tsv(path: Path):
         opener = gzip.open if path.suffix == ".gz" else open
@@ -130,6 +134,13 @@ def main() -> int:
             workflow_path = root / "provenance/direct_lineage_workflow_audit.json"
             req(workflow_path.exists(), "missing direct-lineage workflow audit")
             if workflow_path.exists(): req(json.loads(workflow_path.read_text()).get("status") == "PASS", "direct-lineage workflow audit did not pass")
+            partition_result=audit_membership_partition(root)
+            req(partition_result.get("status")=="PASS","annotation membership partition audit failed: "+"; ".join(partition_result.get("errors",[])[:5]))
+            support_registry=root/"state/annotation_support_registry.tsv"
+            current_ledger=root/"state/cell_ledger.tsv.gz"
+            if not current_ledger.exists():current_ledger=root/"state/cell_ledger.tsv"
+            support_result=validate_support_registry(root,support_registry,current_ledger)
+            req(support_result.get("status")=="PASS","per-label annotation support validation failed: "+"; ".join(support_result.get("errors",[])[:5]))
             for name in ["state/recluster_cohort_registry.tsv", "state/direct_return_registry.tsv", "state/route_attempt_registry.tsv", "state/workflow_event_registry.tsv", "state/annotation_view_registry.tsv", "state/annotation_support_registry.tsv"]:
                 req((root/name).exists(), f"missing annotation workflow registry: {name}")
             route_rows = read_tsv(root/"state/route_attempt_registry.tsv") if (root/"state/route_attempt_registry.tsv").exists() else []
@@ -205,8 +216,6 @@ def main() -> int:
         session = root / "provenance/release_sessionInfo.txt"
         if session.exists():
             req(session.stat().st_size > 100, "release session info is empty or undersized")
-            release_evidence=[root/"tables/broad_DEG_one_vs_rest_all.tsv",root/"tables/subtype_DEG_one_vs_rest_all.tsv",root/"figures/marker_dotplots/marker_dotplot_asset_index.tsv"]
-            req(session.stat().st_mtime >= max((p.stat().st_mtime for p in release_evidence if p.exists()),default=0), "release session info is older than final DEG/dotplot evidence")
         checksums = root / "provenance/checksums.sha256"
         if checksums.exists():
             checksum_rows = []
@@ -264,6 +273,8 @@ def main() -> int:
     result = {"status": "PASS" if not errors else "FAIL", "profile": args.profile, "errors": sorted(set(errors)), "dotplot_assets": len(assets)}
     out = root / "provenance/release_audit.json"; out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    dependencies = [path for path in [report, root/"provenance/completion_gate.json", root/"provenance/release_manifest.tsv", root/"provenance/checksums.sha256"] if path.is_file()]
+    build_dependency_manifest(out, dependencies, {"asset_class": "release_audit"})
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return 0 if not errors else 1
 

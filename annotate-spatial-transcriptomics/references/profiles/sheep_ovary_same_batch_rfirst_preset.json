@@ -21,8 +21,8 @@
     "fresh_same_batch_preprocessing",
     "adaptive_whole_tissue_resolution",
     "clusterwise_open_world_initial_broad_annotation",
-    "initial_low_information_to_qc_holdout_without_pool_creation",
-    "one_adaptive_recluster_cohort_per_supported_broad_class",
+    "initial_low_information_to_qc_holdout_without_intermediate_cohort",
+    "one_complete_grid_broad_class_recluster_cohort_per_supported_broad_class",
     "subcluster_high_confidence_fine_or_direct_broad_return",
     "direct_cross_lineage_return_when_another_lineage_is_supported",
     "targeted_recluster_or_calibrated_rctd_only_for_interpretable_mixture",
@@ -37,15 +37,15 @@
   "routing_model": "broad_then_subtype_direct_cross_lineage_then_residual_qc_atlas",
   "persistent_biological_pools": false,
   "membership_objects": {
-    "broad_recluster_cohort": "one immutable adaptive reclustering cohort per initial broad class",
-    "targeted_recluster_cohort": "temporary immutable subset only for a decision-relevant interpretable mixture, including Oocyte contamination-safe review",
-    "qc_holdout": "a retained state and final Atlas query boundary, never a biological pool"
+    "broad_class_recluster cohort": "one immutable cohort per initial broad class; run the complete active grid and allow homogeneous_parent_confirmed",
+    "targeted_recluster cohort": "temporary immutable subset only for a decision-relevant interpretable mixture, including Oocyte contamination-safe review",
+    "qc_holdout": "a retained state and final Atlas query boundary, never a biological cohort"
   },
   "open_world_lineage_discovery": {
     "candidate_catalog": "sheep_ovary_candidate_lineage_catalog.json",
     "rule": "Review every catalog boundary in every sample and scan every unexplained multi-gene program for additional lineages. A not-supported decision is valid; absence in the reference case is not negative evidence and the catalog is not exhaustive.",
     "candidate_trigger": "coherent multi-gene program plus anti-marker compatibility and resolution/spatial support",
-    "candidate_action": "assign an initial broad class when moderate-or-higher evidence passes; otherwise use QC holdout. Subsequent supported cross-lineage findings return directly to the target without an intermediate pool.",
+    "candidate_action": "assign an initial broad class when moderate-or-higher evidence passes; otherwise use QC holdout. Subsequent supported cross-lineage findings return directly to the target without an intermediate cohort.",
     "negative_audit_allowed": true
   },
   "fixed_when_same_batch_contract_is_verified": [

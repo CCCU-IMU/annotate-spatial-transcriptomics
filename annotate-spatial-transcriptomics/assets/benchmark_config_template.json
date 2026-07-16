@@ -1,0 +1,7 @@
+{
+  "benchmark_mode": true,
+  "held_out_dataset_id": "GSE233801",
+  "forbidden_reference_ids": ["GSE233801"],
+  "author_labels_locked_until": "annotation_frozen",
+  "unblinding_requires_frozen_hash": true
+}

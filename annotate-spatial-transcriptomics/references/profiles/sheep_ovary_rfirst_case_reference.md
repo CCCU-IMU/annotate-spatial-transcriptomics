@@ -8,7 +8,7 @@ A full-feature Seurat RDS converted from StereoPy `cellbin_PPed` was treated as 
 
 ## 2. Initial broad decisions
 
-Every selected whole-tissue cluster underwent open-world lineage review. Supported clusters received direct moderate-or-higher initial broad labels. Candidate Theca, Smooth muscle, Pericyte/mural, epithelial, immune and Oocyte boundaries were audited independently. Low-information or irreducibly mixed observations entered QC directly; no biological pool name became a label.
+Every selected whole-tissue cluster underwent open-world lineage review. Supported clusters received direct moderate-or-higher initial broad labels. Candidate Theca, Smooth muscle, Pericyte/mural, epithelial, immune and Oocyte boundaries were audited independently. Low-information or irreducibly mixed observations entered QC directly; no computational membership name became a label.
 
 Sheep immunoglobulin LOC aliases were resolved. A multi-locus immunoglobulin program plus an independent B/plasma regulator may support broad Immune despite sparse `PTPRC`; a single immunoglobulin locus, `JCHAIN`, CD74 or MHC signal does not.
 
@@ -18,11 +18,11 @@ Each supported initial broad class received one immutable query-only reclusterin
 
 The Oocyte targeted cohort used the complete multi-module recall set while high-specificity marker/anti-program observations and spatial foci served only as seeds/support. Final Oocyte required multiple non-zona identity/maternal genes, somatic anti-program clearance and compatible object morphology. Zona-positive coherent Granulosa or stromal neighbours returned directly to those somatic lineages with ambient/adjacent tags.
 
-Local interfaces used targeted reclustering first. RCTD was lower priority: extreme plus independent evidence could support fine, high supported broad-only, and medium/low entered QC. A cross-lineage return was not placed in a new target pool and was not automatically reclustered again.
+Local interfaces used targeted reclustering first. RCTD was lower priority: canonical high plus independent evidence could support fine, moderate supported broad-only, and low entered QC. A cross-lineage return was not placed in a new intermediate cohort and was not automatically reclustered again.
 
 ## 4. Residual QC rescue
 
-After every broad and targeted cohort closed, the complete residual QC membership was frozen once and mapped directly; it was not reclustered. External Atlas, current-query marker/anti-marker and internal-anchor or observed-density spatial channels had to agree under thresholds calibrated on disjoint query-like held-out current-query anchors. High and moderate-only returns entered final broad memberships with `fine_anchor_eligible=false`; low calls remained QC. Atlas self-splitting was never accepted as query calibration.
+After every broad and targeted cohort closed, the complete residual QC membership was frozen once and mapped directly; it was not reclustered. External Atlas, current-query marker/anti-marker and internal-anchor or observed-density spatial channels had to agree under thresholds calibrated on disjoint query-like held-out current-query anchors. `high` and `moderate_only` returns entered final broad memberships with `fine_anchor_eligible=false`; `low_reject` calls remained QC. Atlas self-splitting was never accepted as query calibration.
 
 ## 5. Boundary safeguards
 

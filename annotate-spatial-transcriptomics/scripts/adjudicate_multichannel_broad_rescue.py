@@ -266,8 +266,8 @@ def main() -> int:
     )
     if (query["meets_high"] & ~query["meets_moderate_or_higher"]).any():
         raise SystemExit("nested-tier invariant failed: a high row misses moderate-or-higher")
-    query["consensus_tier"] = "low-reject"
-    query.loc[query["meets_moderate_or_higher"], "consensus_tier"] = "moderate-only"
+    query["consensus_tier"] = "low_reject"
+    query.loc[query["meets_moderate_or_higher"], "consensus_tier"] = "moderate_only"
     query.loc[query["meets_high"], "consensus_tier"] = "high"
     query["writeback_eligible"] = query["meets_moderate_or_higher"]
     query["proposed_state"] = config.get("reject_state", "qc_holdout")
@@ -307,9 +307,9 @@ def main() -> int:
         "moderate_target_precision": moderate_target,
         "high_target_precision": high_target,
         "query_high": int(tier_counts.get("high", 0)),
-        "query_moderate_only": int(tier_counts.get("moderate-only", 0)),
+        "query_moderate_only": int(tier_counts.get("moderate_only", 0)),
         "query_moderate_or_higher": int(query["meets_moderate_or_higher"].sum()),
-        "query_low_reject": int(tier_counts.get("low-reject", 0)),
+        "query_low_reject": int(tier_counts.get("low_reject", 0)),
         "nested_tier_invariant": bool((~query["meets_high"] | query["meets_moderate_or_higher"]).all()),
         "broad_only": True,
         "fine_anchor_eligible": False,

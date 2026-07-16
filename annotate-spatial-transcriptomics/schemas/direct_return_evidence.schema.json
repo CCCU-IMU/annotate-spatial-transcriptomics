@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/direct_return_evidence.schema.json",
+  "title": "Direct return biological evidence",
+  "type": "object",
+  "required": [
+    "schema_version", "return_id", "source_cohort_id", "source_subcluster",
+    "target_broad_label", "target_fine_label", "membership", "positive_marker_families",
+    "anti_marker_results", "spatial_evidence", "full_feature_scope", "confidence",
+    "alternative_hypotheses", "evidence_artifacts"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "return_id": {"type": "string", "minLength": 1},
+    "source_cohort_id": {"type": "string", "minLength": 1},
+    "source_subcluster": {"type": "string", "minLength": 1},
+    "target_broad_label": {"type": "string", "minLength": 1},
+    "target_fine_label": {"type": "string"},
+    "membership": {"$ref": "#/$defs/membership"},
+    "positive_marker_families": {"type": "array", "minItems": 1},
+    "anti_marker_results": {"type": "object", "minProperties": 1},
+    "spatial_evidence": {"type": "object", "minProperties": 1},
+    "full_feature_scope": {
+      "type": "object",
+      "required": ["status", "feature_space", "artifact"],
+      "properties": {
+        "status": {"const": "PASS"},
+        "feature_space": {"const": "full_feature"},
+        "artifact": {"$ref": "#/$defs/artifact"}
+      }
+    },
+    "confidence": {"enum": ["moderate", "high"]},
+    "alternative_hypotheses": {"type": "array", "minItems": 1},
+    "evidence_artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifact"}}
+  },
+  "$defs": {
+    "membership": {
+      "type": "object",
+      "required": ["path", "sha256", "n_observations"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "n_observations": {"type": "integer", "minimum": 1}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
