@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 from master_quality_lib import validate_bound_record, validate_master_approval
+from dependency_manifest import stale as content_hash_stale
 
 
 TERMINAL_RUN_STATES = {"validated_done", "failed_preserved", "cancelled_preserved"}
@@ -42,7 +43,16 @@ def newest_mtime(paths: list[Path]) -> float:
 
 
 def stale(target: Path, dependencies: list[Path]) -> bool:
-    return not target.exists() or target.stat().st_mtime < newest_mtime(dependencies)
+    """Cheap freshness hint for lightweight controller products."""
+    return not target.is_file() or target.stat().st_mtime < newest_mtime(dependencies)
+
+
+def expensive_stale(target: Path, dependencies: list[Path]) -> bool:
+    """Authoritative content-hash freshness check for expensive products."""
+    # The builder owns the complete dependency declaration. Re-validate every
+    # recorded hash here; the controller's list is only a scheduling hint and
+    # must not invent a second, divergent dependency contract.
+    return content_hash_stale(target, [])
 
 
 def newest_match(root: Path, patterns: list[str]) -> Path | None:
@@ -246,7 +256,7 @@ def main() -> int:
     completion_dependencies = planning_dependencies + [iteration_plan, queue, taxonomy_audit]
     if not user_confirmed or unexpected_post_confirmation:
         completion_dependencies.append(run_registry)
-    if cluster_ledger.exists() and not queued and (stale(completion, completion_dependencies) or json_status(completion) != "PASS"):
+    if cluster_ledger.exists() and not queued and (expensive_stale(completion, completion_dependencies) or json_status(completion) != "PASS"):
         add("completion_gate", "check_completion_gate.py", "biological completion gate is missing, blocked or stale")
 
     if json_status(completion) == "PASS" and not user_confirmed:
@@ -257,7 +267,7 @@ def main() -> int:
             and not validate_bound_record(root, master_request_record)
         )
         master_ok, master_errors, master_record = validate_master_approval(root, master_approval)
-        if stale(review_asset_manifest, review_dependencies) or json_status(review_asset_manifest) != "PASS":
+        if expensive_stale(review_asset_manifest, review_dependencies) or json_status(review_asset_manifest) != "PASS":
             add(
                 "confirmation_review_assets",
                 "build_confirmation_review_assets.R",
@@ -276,7 +286,7 @@ def main() -> int:
                 action,
                 "quality approval is required after all annotation routes/final writeback, never after broad annotation alone" + (": " + "; ".join(master_errors) if master_errors else ""),
             )
-        elif stale(confirmation_review, review_dependencies + [review_asset_manifest, master_approval]) or json_status(confirmation_review_manifest) != "PASS":
+        elif expensive_stale(confirmation_review, review_dependencies + [review_asset_manifest, master_approval]) or json_status(confirmation_review_manifest) != "PASS":
             add(
                 "confirmation_review",
                 "build_confirmation_review.py",
@@ -326,14 +336,14 @@ def main() -> int:
         add("final_assets", "prepare final metadata, all-accepted broad DEG/dotplots and high-confidence subtype assets", f"{len(missing_assets)} required final asset(s) are missing")
 
     asset_dependencies = [path for path in required_assets if path.exists()] + [completion]
-    if json_status(completion) == "PASS" and user_confirmed and not missing_assets and (not report.exists() or stale(report, asset_dependencies + [confirmation])):
+    if json_status(completion) == "PASS" and user_confirmed and not missing_assets and (not report.exists() or expensive_stale(report, asset_dependencies + [confirmation])):
         add("report", "build_report.py", "final report is missing or older than its evidence assets")
 
     release_dependencies = [report, completion, cluster_ledger, cell_ledger, run_registry] + [path for path in required_assets if path.exists()]
-    if user_confirmed and report.exists() and (stale(release_manifest, release_dependencies + [confirmation]) or stale(checksums, release_dependencies + [confirmation])):
+    if user_confirmed and report.exists() and (expensive_stale(release_manifest, release_dependencies + [confirmation]) or expensive_stale(checksums, release_dependencies + [confirmation])):
         add("release_manifest", "build_release_manifest.py", "release manifest/checksums are missing or stale")
     audit_dependencies = [report, completion, release_manifest, checksums]
-    if user_confirmed and release_manifest.exists() and checksums.exists() and (stale(release_audit, audit_dependencies) or json_status(release_audit) != "PASS"):
+    if user_confirmed and release_manifest.exists() and checksums.exists() and (expensive_stale(release_audit, audit_dependencies) or json_status(release_audit) != "PASS"):
         add("release_audit", "audit_release.py --profile full", "release audit is missing, failed or stale")
 
     if actions:

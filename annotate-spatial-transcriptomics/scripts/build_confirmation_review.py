@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from master_quality_lib import sha256 as master_sha256, validate_master_approval
+from dependency_manifest import build as build_dependency_manifest
 
 
 def sha256(path: Path) -> str:
@@ -189,6 +190,9 @@ def main() -> int:
     manifest_path = root / "provenance/confirmation_review_manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    dependencies = [cell_ledger, cluster_ledger, completion_gate, master_approval_path, support_registry, asset_manifest_path]
+    build_dependency_manifest(output, dependencies, {"asset_class": "confirmation_review"})
+    build_dependency_manifest(manifest_path, dependencies + [output], {"asset_class": "confirmation_review_manifest"})
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
     return 0
 

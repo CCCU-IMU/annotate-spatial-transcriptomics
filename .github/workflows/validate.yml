@@ -24,7 +24,11 @@ jobs:
       - name: Validate repository
         run: python scripts/validate_repo.py
       - name: Verify installable Skill
-        run: python scripts/verify_install.py annotate-spatial-transcriptomics
+        run: |
+          tmp="$(mktemp -d)"
+          bash install.sh --source annotate-spatial-transcriptomics --dest "$tmp"
+          python scripts/verify_install.py "$tmp/annotate-spatial-transcriptomics"
+          rm -rf "$tmp"
       - name: Run release-contract regression tests
         run: PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests -v
       - name: Check installer syntax

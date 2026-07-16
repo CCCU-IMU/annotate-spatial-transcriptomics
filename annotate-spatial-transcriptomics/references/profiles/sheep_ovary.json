@@ -178,7 +178,7 @@
     "report_rule": "biological broad classes and retained anatomical/QC/technical/pending states require separate censuses, trees and evidence cohorts; retained states are excluded from biological broad DEG and marker dotplots"
   },
   "resolution_policy": {
-    "principle": "choose the lowest resolution preserving stable functional compartments",
+    "principle": "choose the resolution with the best integrated evidence for the current biological question; preserve stable lineages or true subtypes first, avoid state/technical fragmentation second, and use lower complexity only as a tie-breaker",
     "formal_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
     "minimum_formal_resolution": 0.1,
     "below_floor_policy": "reject before execution; below-floor artifacts cannot enter ranking, stability, biological interpretation or writeback",
@@ -214,15 +214,15 @@
     "persistent_biological_pools": false,
     "incident_registry_required": true,
     "initial_broad_annotation": "after selecting the whole-tissue resolution, apply the complete open-world lineage audit directly to every cluster; moderate-or-higher broad calls enter their broad class and low-information or irreducibly mixed clusters enter QC holdout",
-    "broad_recluster": "submit one adaptive reclustering cohort per initial broad class; an underpowered class may close as not_applicable_reviewed and remain broad-only",
+    "broad_recluster": "submit one broad_class_recluster cohort per initial broad class and run the complete active-contract candidate grid; select the integrated-evidence optimum, permit homogeneous_parent_confirmed, and allow only a formally evidenced underpowered skip",
     "subcluster_outcomes": ["high_confidence_fine", "direct_broad_return", "direct_cross_lineage_return", "targeted_recluster_or_calibrated_rctd", "qc_holdout"],
-    "cross_lineage_policy": "a source subcluster with coherent evidence for another broad/fine identity returns directly to that target while preserving source run/cluster/cohort provenance; do not create an intermediate target pool or automatically recluster it again",
+    "cross_lineage_policy": "a source subcluster with coherent evidence for another broad/fine identity returns directly to that target while preserving source run/cluster/cohort provenance; do not create an intermediate cohort or automatically recluster it again",
     "targeted_recluster_policy": "create an immutable temporary cohort only when interpretable competing biological programs and sufficient observations make another computation decision-relevant",
     "qc_holdout_recluster_forbidden": true,
     "atlas_scope": "all residual QC holdout after every broad-class and targeted adjudication is complete",
     "atlas_acceptance": "calibrated moderate-or-higher consensus returns broad-only; low confidence remains QC reject",
     "atlas_fine_labels_forbidden": true,
-    "legacy_pool_registries": "migration provenance only; the global controller does not create persistent biological pools"
+    "legacy_pool_registries": "migration provenance only; the active controller uses broad_class_recluster cohort, targeted_recluster cohort, direct return and terminal residual QC"
   },
   "context_questions": ["animal age and reproductive stage", "cycle, pregnancy or disease state", "section anatomy and follicle-size distribution", "cell, nucleus, spot or cellbin observation unit", "primary biological questions and priority lineages"]
 }

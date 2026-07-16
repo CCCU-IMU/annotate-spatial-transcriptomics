@@ -41,14 +41,18 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def membership_count(path: Path) -> int:
+def membership_set(path: Path) -> set[str]:
     opener = gzip.open if path.suffix == ".gz" else open
     with opener(path, "rt", newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle, delimiter="\t"))
     ids = [row.get("cell_id", "").strip() for row in rows]
     if not rows or "cell_id" not in rows[0] or any(not item for item in ids) or len(ids) != len(set(ids)):
         raise ValueError("membership is not a unique nonempty cell_id table")
-    return len(ids)
+    return set(ids)
+
+
+def membership_count(path: Path) -> int:
+    return len(membership_set(path))
 
 
 def validate_terminal(root: Path, record: dict) -> list[str]:
@@ -87,22 +91,22 @@ def validate_terminal(root: Path, record: dict) -> list[str]:
     route = record.get("route_class")
     if route == "targeted_rctd_review":
         try:
-            extreme = int(float(record.get("rctd_extreme_n", 0) or 0))
             high = int(float(record.get("rctd_high_n", 0) or 0))
-            medium_low = int(float(record.get("rctd_medium_low_n", 0) or 0))
+            moderate = int(float(record.get("rctd_moderate_n", 0) or 0))
+            low = int(float(record.get("rctd_low_n", 0) or 0))
             fine = int(float(record.get("rctd_fine_return_n", 0) or 0))
             broad = int(float(record.get("rctd_broad_return_n", 0) or 0))
             rerouted = int(float(record.get("n_rerouted", 0) or 0))
             n_query = int(float(record.get("n_query", 0) or 0))
-            if min(extreme, high, medium_low, fine, broad, rerouted) < 0:
+            if min(high, moderate, low, fine, broad, rerouted) < 0:
                 errors.append("RCTD counts must be nonnegative")
-            if extreme + high + medium_low != n_query:
+            if high + moderate + low != n_query:
                 errors.append("RCTD tiers do not partition n_query")
-            if fine > extreme or fine + broad > extreme + high:
+            if fine > high or fine + broad > high + moderate:
                 errors.append("RCTD return confidence exceeds its tier evidence")
             if fine and not truth(record.get("independent_fine_evidence")):
                 errors.append("RCTD fine returns require independent evidence")
-            if fine + broad + rerouted != n_query or medium_low > rerouted:
+            if fine + broad + rerouted != n_query or low > rerouted:
                 errors.append("RCTD returns plus QC reroute do not partition n_query")
             if truth(record.get("fine_anchor_eligible")):
                 errors.append("RCTD-assisted output cannot become a fine anchor")
@@ -129,6 +133,34 @@ def validate_terminal(root: Path, record: dict) -> list[str]:
                 errors.append("Atlas rescue cannot become a fine anchor")
         except (ValueError, TypeError):
             errors.append("invalid Atlas outcome counts")
+        if record.get("atlas_confidence_enum") != "high|moderate_only|low_reject":
+            errors.append("Atlas confidence enum must be high|moderate_only|low_reject")
+        partitions: dict[str, set[str]] = {}
+        for prefix, expected_n in (("accepted_membership", record.get("n_defined_broad_only", 0)), ("rejected_membership", record.get("n_qc_retained", 0))):
+            value = str(record.get(f"{prefix}_artifact", ""))
+            path = path_at(root, value) if value else Path()
+            if not value or not path.is_file():
+                errors.append(f"missing {prefix}_artifact")
+                continue
+            expected_hash = str(record.get(f"{prefix}_sha256", ""))
+            if not expected_hash or sha256(path) != expected_hash:
+                errors.append(f"{prefix}_sha256 mismatch")
+            try:
+                partitions[prefix] = membership_set(path)
+                observed_n = len(partitions[prefix])
+                registry_n = int(float(record.get(f"{prefix}_n_observations", expected_n) or 0))
+                if observed_n != registry_n or observed_n != int(float(expected_n or 0)):
+                    errors.append(f"{prefix} count mismatch")
+            except (ValueError, TypeError):
+                errors.append(f"invalid {prefix} membership/count")
+        try:
+            query = membership_set(path_at(root, str(record.get("query_membership_artifact", ""))))
+            accepted = partitions.get("accepted_membership", set())
+            rejected = partitions.get("rejected_membership", set())
+            if accepted & rejected or accepted | rejected != query:
+                errors.append("Atlas accepted/rejected memberships do not exactly partition the query")
+        except (OSError, ValueError):
+            errors.append("unable to validate Atlas membership partition")
     return errors
 
 

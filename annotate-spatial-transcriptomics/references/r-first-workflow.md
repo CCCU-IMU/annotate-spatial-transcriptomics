@@ -18,13 +18,13 @@ Existing whole-tissue or cohort clustering is reusable only when source-object a
 
 When no valid clustering is reusable, run SCTransform, PCA and an adaptive Seurat resolution grid. Sheep ovary uses the formal grid `0.1,0.2,0.3,0.4,0.6`; never lower below 0.1 to compensate for a defective graph. Other tissues use a declared context-appropriate grid.
 
-Generate per-resolution one-vs-rest DEG, canonical and data-specific marker summaries, UMAP, whole-section spatial maps and per-cluster highlights. Select the lowest-complexity resolution preserving supported broad lineages without state-only fragmentation.
+Generate per-resolution one-vs-rest DEG, canonical and data-specific marker summaries, UMAP, whole-section spatial maps and per-cluster highlights. Select the integrated-evidence optimum that preserves supported lineages before avoiding state-only fragmentation; use lower complexity only when evidence is otherwise equivalent.
 
-At that resolution, perform open-world lineage review. Supported clusters receive a moderate-or-higher `initial_broad_label` directly. Low-information, featureless or irreducibly mixed observations enter `qc_holdout`; do not create persistent biological pools.
+At that resolution, perform open-world lineage review. Supported clusters receive a moderate-or-higher `initial_broad_label` directly. Low-information, featureless or irreducibly mixed observations enter `qc_holdout`; do not create intermediate biological memberships.
 
 ## 4. Broad-class and targeted cohorts
 
-Create one immutable `broad_class_recluster` cohort for every supported initial broad class. A genuinely underpowered class may remain broad-only only after a recorded `not_applicable_reviewed` decision. Use `run_seurat_cohort_recluster.R` and register its output in `recluster_cohort_registry.tsv`; the older pool-named implementation is migration compatibility only.
+Create one immutable `broad_class_recluster` cohort for every supported initial broad class. A genuinely underpowered class may remain broad-only only after a recorded `not_applicable_reviewed` decision. Use `run_seurat_cohort_recluster.R` and register its output in `recluster_cohort_registry.tsv`.
 
 Fit normalization/PCA jointly with frozen anchors when they are needed, while constructing graph, clusters, UMAP, DEG and outcome counts from query observations only. Select cohort PCs, k and resolution from the current membership; for sheep ovary run the full formal grid for every broad or targeted cohort.
 
@@ -36,11 +36,11 @@ Adjudicate every subcluster as exactly one of:
 - one decision-relevant `targeted_recluster` cohort;
 - residual QC/technical retention.
 
-Do not create an intermediate target pool. A direct cross-lineage return does not automatically enter the target class's reclustering cohort again.
+Do not create an intermediate cohort. A direct cross-lineage return does not automatically enter the target class's reclustering cohort again.
 
 ## 5. Assistance and residual QC
 
-Use a targeted cohort only for a local interpretable mixture, contamination boundary or context-gated identity. RCTD is lower-priority assistance: extreme confidence plus independent marker/anti-marker, resolution and spatial evidence may support fine; high supports broad-only; medium/low enters the final QC holdout.
+Use a targeted cohort only for a local interpretable mixture, contamination boundary or context-gated identity. RCTD is lower-priority assistance: canonical high confidence plus independent marker/anti-marker, resolution and spatial evidence may support fine; moderate supports broad-only; low enters the final QC holdout.
 
 After all broad and targeted cohorts are terminal, freeze the complete residual QC membership. Do not recluster it. Apply calibrated Atlas/internal-anchor/marker/observed-density spatial consensus only to this exact membership. Moderate-or-higher returns broad-only with `fine_anchor_eligible=false`; lower confidence remains QC reject.
 

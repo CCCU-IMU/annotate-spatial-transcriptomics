@@ -32,7 +32,7 @@ def main() -> int:
         ROOT / "LICENSE",
         SKILL / "SKILL.md",
         SKILL / "references" / "direct-lineage-controller.md",
-        SKILL / "references" / "multi-route-controller.md",
+        SKILL / "references" / "legacy" / "multi-route-controller.md",
         SKILL / "references" / "matched-single-cell-reference.md",
         SKILL / "references" / "multi-sample-agent-orchestration.md",
         SKILL / "references" / "profiles" / "sheep_ovary_rfirst_profile.json",
@@ -43,7 +43,7 @@ def main() -> int:
         SKILL / "references" / "profiles" / "sheep_ovary_standard_workflow.md",
         SKILL / "references" / "efficient-operation.md",
         SKILL / "references" / "r-first-workflow.md",
-        SKILL / "references" / "taxonomy-and-pool-design.md",
+        SKILL / "references" / "taxonomy-and-cohort-design.md",
         SKILL / "references" / "report-contract.md",
         SKILL / "scripts" / "audit_release_taxonomy.py",
         SKILL / "scripts" / "validate_matched_reference_crosswalk.py",
@@ -52,9 +52,21 @@ def main() -> int:
         SKILL / "scripts" / "validate_cohort_state.py",
         SKILL / "scripts" / "migrate_project_v1_3_to_v1_4.py",
         SKILL / "scripts" / "migrate_project_v1_4_to_v1_5.py",
+        SKILL / "scripts" / "migrate_project_v1_6_0_to_v1_6_1.py",
         SKILL / "scripts" / "build_final_annotation.py",
         SKILL / "scripts" / "validate_profile_role.py",
         SKILL / "scripts" / "validate_resolution_grid.py",
+        SKILL / "scripts" / "rank_cohort_resolutions.py",
+        SKILL / "scripts" / "validate_cohort_outcome.py",
+        SKILL / "scripts" / "validate_direct_return_evidence.py",
+        SKILL / "scripts" / "validate_annotation_support_registry.py",
+        SKILL / "scripts" / "audit_annotation_membership_partition.py",
+        SKILL / "scripts" / "controller_step.py",
+        SKILL / "scripts" / "validate_benchmark_isolation.py",
+        SKILL / "scripts" / "run_biological_benchmark.py",
+        SKILL / "schemas" / "cohort_outcome.schema.json",
+        SKILL / "schemas" / "direct_return_evidence.schema.json",
+        SKILL / "schemas" / "annotation_support.schema.json",
         SKILL / "scripts" / "validate_direct_lineage_workflow.py",
         SKILL / "scripts" / "register_recluster_cohort.py",
         SKILL / "scripts" / "register_direct_return.py",
@@ -114,8 +126,10 @@ def main() -> int:
     regression = ROOT / "tests/test_release_contract.py"
     if not regression.is_file():
         problems.append("missing release-contract regression tests")
-    if not (ROOT / "tests/test_v1_5_contract.py").is_file():
-        problems.append("missing v1.5 contract regression tests")
+    if not (ROOT / "tests/test_v1_6_contract.py").is_file():
+        problems.append("missing v1.6 active-contract regression tests")
+    if not (ROOT / "tests/test_legacy_migration_contract.py").is_file():
+        problems.append("missing legacy migration regression tests")
 
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     readme = (ROOT / "README.md").read_text(encoding="utf-8")

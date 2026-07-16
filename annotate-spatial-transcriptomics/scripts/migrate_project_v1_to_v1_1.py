@@ -41,7 +41,7 @@ def main() -> int:
             with path.open("w",newline="",encoding="utf-8") as handle:csv.writer(handle,delimiter="\t").writerow(fields)
             created.append(filename)
     cell = state/"cell_ledger.tsv.gz" if (state/"cell_ledger.tsv.gz").exists() else state/"cell_ledger.tsv"
-    result={"status":"MIGRATED_REQUIRES_REVIEW","source_config_sha256":sha(backup),"created_registries":created,"cell_ledger":str(cell) if cell.exists() else None,"required_next_actions":["audit_multiroute_state","populate route attempts from validated artifacts only","reopen gaps with new decision version","migrate to v1.5 and build one final annotation","rerun completion and release audit"]}
+    result={"status":"MIGRATED_REQUIRES_REVIEW","source_config_sha256":sha(backup),"created_registries":created,"cell_ledger":str(cell) if cell.exists() else None,"required_next_actions":["run scripts/legacy/audit_multiroute_state.py","populate legacy route attempts from validated artifacts only","migrate memberships into v1.6 cohorts/direct returns","build one final annotation","rerun completion and release audit"]}
     (provenance/"migration_v1_to_v1_1.json").write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
     print(json.dumps(result,ensure_ascii=False,indent=2));return 0
 

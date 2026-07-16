@@ -15,9 +15,9 @@ This prevents both loss of small/isolated true candidates and overcalling zona-c
 1. Screen full-feature counts for non-ZP identity, maternal/ooplasm and zona modules plus Granulosa, stromal, vascular, epithelial and immune anti-programs.
 2. Build one immutable `oocyte_targeted_recluster` cohort from the multi-module gate. Do not enlarge it from `ZP2/ZP3/ZP4`, location or morphology alone.
 3. Calculate query-calibrated strict seeds. Group candidates for object-level evidence, but retain isolated high-evidence candidates in the full cohort.
-4. Recluster the complete cohort with a query-only graph. Select the lowest complexity that separates an Oocyte-enriched program from coherent somatic alternatives and is stable across adjacent settings.
+4. Recluster the complete cohort with a query-only graph. Select the candidate with the best integrated evidence for the Oocyte-versus-somatic question: preserve a stable Oocyte program or coherent somatic alternative first, reject state/technical fragmentation second, and use lower complexity only when candidates are otherwise equivalent.
 5. Compare every cluster for absolute detection and coherence of non-ZP identity/maternal modules, zona support, somatic anti-programs, QC complexity and spatial objects. A seed-rich cluster remains only a candidate until this passes.
-6. Freeze broad Oocyte only for passing clusters. Return Granulosa-dominant, ECM/stromal-dominant or other coherent somatic clusters directly to their supported broad/fine labels and preserve `oocyte_adjacent`/`zona_ambient` tags. Send non-interpretable remainder to QC. Do not create an intermediate target pool or automatically recluster a direct return again.
+6. Freeze broad Oocyte only for passing clusters. Return Granulosa-dominant, ECM/stromal-dominant or other coherent somatic clusters directly to their supported broad/fine labels and preserve `oocyte_adjacent`/`zona_ambient` tags. Send non-interpretable remainder to QC. Do not create an intermediate cohort or automatically recluster a direct return again.
 7. Group contiguous positive cellbins into putative objects for reporting. Observation count and putative-object count are separate; neither proves a histological oocyte count without image review.
 
 ## Spatial interpretation

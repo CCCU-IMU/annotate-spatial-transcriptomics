@@ -8,7 +8,7 @@ Validate biological context, discover and hash inputs, freeze the analysis set, 
 
 ## Round 1: whole-tissue broad annotation
 
-Select a broad clustering adaptively. Generate cluster DEG, marker/anti-marker programs, UMAP and spatial maps. Perform open-world lineage review and write a direct `initial_broad_label` for supported clusters. Send only low-information, featureless or irreducibly mixed observations to `qc_holdout`; do not create named review pools.
+Select a broad clustering adaptively. Generate cluster DEG, marker/anti-marker programs, UMAP and spatial maps. Perform open-world lineage review and write a direct `initial_broad_label` for supported clusters. Send only low-information, featureless or irreducibly mixed observations to `qc_holdout`; do not create intermediate biological containers.
 
 ## Round 2: broad-class cohorts
 
@@ -16,7 +16,7 @@ For every supported initial broad class, freeze one `broad_class_recluster` coho
 
 ## Round 3: targeted questions
 
-Use a temporary targeted cohort only for an interpretable local mixture, contamination boundary or context-gated identity. RCTD/reference assistance is optional and lower priority. Extreme plus independent evidence may support fine; high supports broad-only; medium/low enters the final QC holdout.
+Use a temporary targeted cohort only for an interpretable local mixture, contamination boundary or context-gated identity. RCTD/reference assistance is optional and lower priority. Canonical high plus independent evidence may support fine; moderate supports broad-only; low enters the final QC holdout.
 
 ## Round 4: residual QC and closure
 

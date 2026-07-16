@@ -47,6 +47,8 @@ def main() -> int:
         "final_annotation_census": root / "tables/final_annotation_census.tsv",
         "annotation_view_registry": root / "state/annotation_view_registry.tsv",
         "annotation_support_registry": root / "state/annotation_support_registry.tsv",
+        "annotation_support_validation": root / "provenance/annotation_support_validation.json",
+        "annotation_membership_partition_audit": root / "provenance/annotation_membership_partition_audit.json",
         "review_asset_manifest": root / "review/confirmation/assets/review_asset_manifest.json",
         "quality_reference": (args.quality_reference or default_reference).resolve(),
     }
@@ -59,6 +61,8 @@ def main() -> int:
     workflow_audit = json.loads(paths["annotation_workflow_audit"].read_text(encoding="utf-8"))
     state_validation = json.loads(paths["state_validation"].read_text(encoding="utf-8"))
     asset_manifest = json.loads(paths["review_asset_manifest"].read_text(encoding="utf-8"))
+    support_validation = json.loads(paths["annotation_support_validation"].read_text(encoding="utf-8"))
+    partition_audit = json.loads(paths["annotation_membership_partition_audit"].read_text(encoding="utf-8"))
     errors: list[str] = []
     if completion.get("status") != "PASS":
         errors.append("completion gate is not PASS")
@@ -68,6 +72,10 @@ def main() -> int:
         errors.append("direct-lineage annotation workflow audit is not PASS")
     if state_validation.get("status") != "PASS":
         errors.append("state validation is not PASS")
+    if support_validation.get("status") != "PASS":
+        errors.append("per-label annotation support validation is not PASS")
+    if partition_audit.get("status") != "PASS" or partition_audit.get("cell_ledger_sha256") != sha256(paths["cell_ledger"]):
+        errors.append("annotation membership partition audit is not PASS/current")
     # The completion gate already owns detailed cohort/route/run closure.  The
     # master gate must not make the reviewer repeat that mechanical audit.
     views = read_tsv(paths["annotation_view_registry"])

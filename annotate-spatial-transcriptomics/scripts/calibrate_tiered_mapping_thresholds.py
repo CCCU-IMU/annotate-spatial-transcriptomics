@@ -194,7 +194,7 @@ def main() -> None:
                     "exclusive_precision": exclusive_precision,
                 }
             )
-            heldout.loc[group.index[moderate_only], "mapping_tier"] = "moderate"
+            heldout.loc[group.index[moderate_only], "mapping_tier"] = "moderate_only"
 
     threshold_columns = [
         "predicted_label",
@@ -224,14 +224,14 @@ def main() -> None:
             query.loc[tier_mask, "mapping_tier"] = "high"
         else:
             query.loc[tier_mask & query["mapping_tier"].eq("low_reject"), "mapping_tier"] = (
-                "moderate"
+                "moderate_only"
             )
     query["meets_moderate_or_higher"] = query["mapping_tier"].isin(
-        ["high", "moderate"]
+        ["high", "moderate_only"]
     )
     status_map = {
         "high": "calibrated_high_broad_candidate",
-        "moderate": "calibrated_moderate_broad_candidate",
+        "moderate_only": "calibrated_moderate_broad_candidate",
         "low_reject": "rejected_to_qc_or_review",
     }
     query["mapping_status"] = query["mapping_tier"].map(status_map)
@@ -244,7 +244,7 @@ def main() -> None:
     )
     heldout["mapping_status"] = heldout["mapping_tier"].map(status_map)
     heldout["meets_moderate_or_higher"] = heldout["mapping_tier"].isin(
-        ["high", "moderate"]
+        ["high", "moderate_only"]
     )
     heldout.to_csv(
         args.out / "heldout_tier_assignments.tsv.gz",
@@ -277,7 +277,7 @@ def main() -> None:
             ("high", group["mapping_tier"].eq("high"), args.high_target_precision),
             (
                 "moderate_or_higher",
-                group["mapping_tier"].isin(["high", "moderate"]),
+                group["mapping_tier"].isin(["high", "moderate_only"]),
                 args.moderate_target_precision,
             ),
         ):
@@ -313,18 +313,17 @@ def main() -> None:
             thresholds["tier"].eq("moderate").sum() if len(thresholds) else 0
         ),
         "query_high": int(counts.get("high", 0)),
-        "query_moderate": int(counts.get("moderate", 0)),
-        "query_moderate_only": int(counts.get("moderate", 0)),
+        "query_moderate_only": int(counts.get("moderate_only", 0)),
         "query_moderate_or_higher": int(
-            counts.get("high", 0) + counts.get("moderate", 0)
+            counts.get("high", 0) + counts.get("moderate_only", 0)
         ),
         "query_low_reject": int(counts.get("low_reject", 0)),
         "query_n": int(len(query)),
         "fine_anchor_eligible": False,
         "heldout_origin": origin["heldout_origin"],
         "calibration_origin_manifest": str(args.calibration_origin_manifest.resolve()),
-        "calibration_semantics": "Nested cumulative thresholds: high is a subset of moderate-or-higher; mapping_tier is mutually exclusive and moderate means moderate-only.",
-        "warning": "High and moderate-only are mutually exclusive output tiers, but every high row also meets the cumulative moderate-or-higher gate. Neither tier authorizes writeback without independent marker/anti-marker and spatial or internal-anchor support.",
+        "calibration_semantics": "Nested cumulative thresholds: high is a subset of moderate-or-higher; mapping_tier uses canonical mutually exclusive high/moderate_only/low_reject values.",
+        "warning": "High and moderate_only are mutually exclusive output tiers, but every high row also meets the cumulative moderate-or-higher gate. Neither tier authorizes writeback without independent marker/anti-marker and spatial or internal-anchor support.",
     }
     if sum(counts.values()) != len(query):
         raise SystemExit("tier counts do not partition query")

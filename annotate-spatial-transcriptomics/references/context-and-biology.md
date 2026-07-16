@@ -6,7 +6,7 @@ After input inspection, run `scripts/resolve_workflow_profile.py`. Sheep/Ovis/ov
 
 If the user explicitly requests the same-batch standard process, pass `--strategy-preset sheep_ovary_same_batch_rfirst` and write the resolver result to `config/active_strategy_preset.json`. This binds a deidentified successful decision process, not a sample answer: phase order and safeguards are fixed, while resolutions, memberships and biological labels remain current-query decisions.
 
-A context profile supplies marker programs, contradictory programs, candidate audit axes and safety alerts. It is not a mapping table. Derive final labels from the current query. Follow `taxonomy-and-pool-design.md`: published taxonomies are checklists, computational cohorts are immutable question boundaries and release classes are independently gated biological conclusions.
+A context profile supplies marker programs, contradictory programs, candidate audit axes and safety alerts. It is not a mapping table. Derive final labels from the current query. Follow `taxonomy-and-cohort-design.md`: published taxonomies are checklists, computational cohorts are immutable question boundaries and release classes are independently gated biological conclusions.
 
 If the project has corresponding single-cell data, read `matched-single-cell-reference.md`. Record whether it is the same animal, cohort, stage or merely the same tissue. A matched reference is the preferred external reference channel, but it never replaces current-query evidence. Preserve the original reference vocabulary and create an auditable crosswalk rather than renaming the reference in place.
 

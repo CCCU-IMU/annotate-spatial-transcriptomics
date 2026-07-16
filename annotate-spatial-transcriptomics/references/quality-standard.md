@@ -19,13 +19,15 @@ Comparable annotation quality requires:
 3. Marker, DEG, source/QC composition and spatial morphology review for every large label and every broad/targeted cohort.
 4. Open-world discovery plus strict context gates for ambient-prone identities; rarity alone is not a class or route. Report spatial objects separately from observation counts.
 5. One reclustering cohort for every supported initial broad class, with an underpowered skip allowed only when recorded.
-6. Tiered low-priority RCTD evidence: extreme plus independent evidence may support fine, high returns broad-only, and medium/low enters the frozen QC holdout rather than Atlas.
-7. Atlas/internal-anchor rescue only for the complete residual QC membership after every broad/targeted cohort is terminal; QC is not reclustered. Calibrated moderate-or-high Atlas calls may return broad-only, while lower calls remain rejects. Already defined broad/fine cells are forbidden Atlas queries. Accepted cells cannot seed fine discovery. Default held-out target-precision tiers are moderate 0.90 and high 0.95; they are not raw per-cell score cutoffs.
+6. Tiered low-priority RCTD evidence: canonical high plus independent evidence may support fine, moderate returns broad-only, and low enters the frozen QC holdout rather than Atlas.
+7. Atlas/internal-anchor rescue only for the exact terminal residual QC membership recomputed after every broad/targeted cohort is terminal; QC is frozen once and never reclustered. Calibrated `high` or `moderate_only` Atlas consensus may return broad-only, while `low_reject` remains QC. Already defined broad/fine cells are forbidden Atlas queries. Accepted cells cannot seed fine discovery. Default held-out target-precision tiers are moderate 0.90 and high 0.95; they are not raw per-cell score cutoffs.
 8. A small/local retained interface, or a documented irreducible QC/technical remainder after every applicable route. Large/diffuse retention automatically reopens.
 9. Broad and subtype evidence assets are separate. The subtype tree may be shallow when the data support only broad identities.
 10. A navigable report whose annotation tree, node highlights, DEG, marker dotplots, spatial gene maps, source ancestry and detailed workflow all resolve to audited artifacts.
 11. A subtype parsimony audit showing that every fine label adds a reproducible functional or lineage program beyond its parent; unsupported splits are merged and retained as state tags.
 12. A taxonomy/cohort audit showing that every release label passed its own gate, every unsupported plausible literature class has a negative audit, and no routing/technical state enters biological DEG or marker discovery.
+13. Content-schema validation for every cohort outcome, direct return and broad/fine support record. Artifact existence alone, empty evidence and status-only placeholders fail.
+14. Exact observation-level partition closure from initial broad membership through cohort outcomes, direct/targeted/QC successors, terminal Atlas accepted/rejected writeback and the single final annotation.
 
 ## Large-label purity trigger
 
@@ -33,7 +35,7 @@ A convincing cluster-level DEG does not validate every observation in that clust
 
 ## Unresolved-fraction trigger
 
-Do not impose a universal annotation-rate quota. Instead, treat any large or spatially diffuse interface/QC/pending fraction as a mandatory route audit. It may close only after the complete frozen membership has undergone the applicable unsupervised anchor, calibrated reference/atlas and technical-retention routes. Report the denominator and every outcome.
+Do not impose a universal annotation-rate quota. Instead, treat any large or spatially diffuse interface/QC/pending fraction as a mandatory evidence audit. Broad/targeted cohorts must already be terminal; then freeze terminal residual QC once and apply calibrated Atlas/internal-anchor/marker/spatial consensus without reclustering. Report the denominator and every accepted/rejected outcome.
 
 ## Forward-test target
 

@@ -132,6 +132,19 @@ manifest <- list(
   palette_tsv=rel(palette_path), palette_tsv_sha256=file_sha256(palette_path),
   scope="preconfirmation_lightweight_only_no_final_deg"
 )
-write_json(manifest, file.path(out,"review_asset_manifest.json"), auto_unbox=TRUE, pretty=TRUE)
+manifest_path <- file.path(out,"review_asset_manifest.json")
+write_json(manifest, manifest_path, auto_unbox=TRUE, pretty=TRUE)
+state_dependencies <- c(
+  file.path(root,"provenance","completion_gate.json"), file.path(root,"state","cluster_decision_ledger.tsv"),
+  file.path(root,"state","cell_ledger.tsv.gz"), file.path(root,"provenance","release_taxonomy_audit.json"),
+  file.path(root,"state","annotation_support_registry.tsv")
+)
+dependency_paths <- unique(c(a$rds, a$metadata, a$markers, if (!is.null(a$coordinates)) a$coordinates else character(), state_dependencies[file.exists(state_dependencies)]))
+dependency_record <- list(
+  status="PASS", target=normalizePath(manifest_path), target_sha256=file_sha256(manifest_path),
+  dependencies=lapply(dependency_paths, function(path) list(path=normalizePath(path), sha256=file_sha256(path))),
+  metadata=list(asset_class="confirmation_review_assets")
+)
+write_json(dependency_record, paste0(manifest_path,".deps.json"), auto_unbox=TRUE, pretty=TRUE)
 capture.output(sessionInfo(), file=file.path(out,"confirmation_review_sessionInfo.txt"))
 message("PASS: lightweight confirmation review assets")

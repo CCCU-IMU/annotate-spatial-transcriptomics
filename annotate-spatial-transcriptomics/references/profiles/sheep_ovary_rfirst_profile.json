@@ -9,7 +9,7 @@
     "trigger": "sheep-ovary context plus a readable full-feature Seurat RDS",
     "banksy_role": "optional spatial clustering adapter or corroborating view",
     "scanpy_role": "fallback for AnnData-first inputs or an independent corroborating analysis",
-    "resolution_rule": "adaptive; select the lowest-complexity broad resolution supported by current-query full-feature markers, anti-markers, stability and spatial morphology"
+    "resolution_rule": "adaptive; select the candidate with the best integrated evidence for the biological question, preserving stable lineages/subtypes before avoiding state/technical fragmentation; lower complexity is only a tie-breaker"
   },
   "cohort_reclustering_contract": {
     "candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
@@ -21,7 +21,8 @@
     "trigger_all": [
       "R object inspection reports a Seurat object",
       "Spatial assay is present with at least 10000 features",
-      "input provenance or path identifies a StereoPy cellbin_PPed conversion"
+      "conversion manifest explicitly verifies a same-batch StereoPy cellbin_PPed conversion",
+      "counts/data layers, marker coverage and cell-coordinate identity audits pass"
     ],
     "entry_qc": {
       "minimum_counts": 100,
@@ -68,7 +69,7 @@
     "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Vascular/endothelial", "Pericyte/mural candidate", "Immune"],
     "primary_public_atlas_exclusions": ["Oocyte", "Theca", "Epithelial/mesothelial"],
     "atlas_rescue_ceiling": "broad_only",
-    "accepted_calibrated_tiers": ["high", "moderate"],
+    "accepted_calibrated_tiers": ["high", "moderate_only"],
     "moderate_or_higher_target_precision": 0.9,
     "high_target_precision": 0.95,
     "required_independent_channels": ["current_query_marker_and_antimarker", "internal_anchor_or_observed_density_spatial"],

@@ -59,7 +59,7 @@ The report must show:
 
 - the source-to-harmonized crosswalk and transfer ceiling;
 - source reference counts and marker evidence;
-- calibrated high, moderate-only and low-reject counts by source/candidate label;
+- calibrated `high`, `moderate_only` and `low_reject` counts by source/candidate label;
 - discordant current-query marker or spatial evidence;
 - broad labels rescued with matched-reference support;
 - reference candidates rejected or retained as negative audits.

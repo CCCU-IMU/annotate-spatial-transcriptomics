@@ -38,7 +38,7 @@ These are intermediate states. Continue autonomously while an in-scope safe next
 
 ## Biological judgment contract
 
-Use profiles as priors and safety gates, never as an answer key. Derive global and cohort resolution from the current data. Use the lowest stable resolution that preserves coherent compartments; roll back state-only fragmentation. Allow broad-only and retained interface/QC outcomes when fine evidence fails. For contamination-prone identities, require the profile’s multi-module, anti-program, spatial-object and targeted-recluster gates even if a reference prediction is confident.
+Use profiles as priors and safety gates, never as an answer key. Derive global and cohort resolution from the current data. Choose the integrated-evidence optimum: preserve stable compartments first, roll back state-only fragmentation second, and use lower complexity only to break an evidence tie. Allow broad-only and retained interface/QC outcomes when fine evidence fails. For contamination-prone identities, require the profile’s multi-module, anti-program, spatial-object and targeted-recluster gates even if a reference prediction is confident.
 
 ## Failure recovery
 

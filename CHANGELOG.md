@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.1 — 2026-07-15
+
+- Removed the last active QC-reclustering prerequisites; Atlas/internal-anchor/marker/spatial consensus now audits only the exact frozen terminal residual-QC partition.
+- Added evidence-content schemas and validators for cohort outcomes, direct returns and per-label support, plus an exact cell-membership closure audit bound to completion, master quality and release.
+- Replaced pool resolution ranking with question-aware cohort ranking; broad-purity audits permit one compartment and can close successfully as `homogeneous_parent_confirmed` after the complete grid.
+- Bound fixed sheep-ovary StereoPy cellbin grids to a hash-verified workflow profile, explicit strategy preset and multi-artifact input provenance instead of species/path/feature hints.
+- Made full-feature validation depend on the loaded biological profile and require exact broad/fine support coverage.
+- Standardized new-project confidence to `low`, `moderate`, `high`, retained the separate Atlas enum, and added a v1.6.0 migration utility.
+- Added structured controller gap codes, business-state exit handling and content-hash dependency manifests for expensive assets.
+- Isolated the retired pool/Route controller under `legacy/` and added homogeneous, subtype, state-only, mixed-lineage, closure, deterministic, leakage-safe benchmark and ablation regression tests.
+
 ## 1.6.0 — 2026-07-15
 
 - Replaced persistent biological review pools with one default direct-lineage architecture for every new project.

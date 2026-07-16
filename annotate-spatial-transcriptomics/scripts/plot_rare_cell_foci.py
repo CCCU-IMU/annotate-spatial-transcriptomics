@@ -16,7 +16,7 @@ def main():
         q=pd.read_csv(a.candidate_membership,sep="\t",dtype={a.cell_id_col:str});
         if a.x_col not in q or a.y_col not in q:q=q.merge(b,on=a.cell_id_col,how="left",validate="one_to_one")
     else:q=s[s.strict_focus_for_recluster.astype(str).str.lower().isin(["true","1"])]
-    ax.scatter(q[a.x_col],q[a.y_col],s=9,c="#d62828",alpha=.9,label="calibrated focus recluster pool")
+    ax.scatter(q[a.x_col],q[a.y_col],s=9,c="#d62828",alpha=.9,label="calibrated targeted cohort")
     if "strict_seed_calibrated" in q:
         seed=q[q.strict_seed_calibrated.astype(str).str.lower().isin(["true","1"])];ax.scatter(seed[a.x_col],seed[a.y_col],s=13,c="#370617",alpha=.95,label="calibrated strict seeds")
     for fid,x in q.groupby("spatial_focus_id"):

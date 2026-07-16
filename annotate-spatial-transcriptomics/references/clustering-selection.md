@@ -15,7 +15,7 @@ Evaluate:
 
 ## Selection principle
 
-Choose the lowest-complexity candidate that preserves supported broad lineages and useful rare populations. A broad-pass clustering can be deliberately coarser than subtype-pass clustering.
+Choose the complete-grid candidate with the best integrated evidence for the current biological question. First avoid losing stable lineages or true subtypes, then avoid state-only/technical fragmentation. Lower complexity is only a tie-breaker when evidence is otherwise equivalent.
 
 Automated scores only rank candidates. Freeze a candidate only after marker and spatial review. Record rejected alternatives and reasons.
 
@@ -27,7 +27,7 @@ ranking aid. Export the full cluster migration table and a
 `small_cluster_review` audit: size alone never deletes, relabels or suppresses
 a cluster from DEG, spatial evidence or rare-lineage/technical adjudication.
 
-Use `scripts/rank_pool_resolutions.py` to shortlist pool resolutions from cluster size, adjacent ARI and profile-program interpretability. For spatial pools, run `scripts/summarize_spatial_cluster_morphology.py` to quantify components, noise and largest-component fraction. Interpret these values against the profile: repeated follicles or a vascular network can legitimately be noncompact, while arbitrary salt-and-pepper splitting is a warning.
+Use `scripts/rank_cohort_resolutions.py --question-mode broad_purity_audit|targeted_mixture` to shortlist cohort resolutions from cluster size, adjacent ARI and profile-program interpretability. For spatial cohorts, run `scripts/summarize_spatial_cluster_morphology.py` to quantify components, noise and largest-component fraction. Interpret these values against the profile: repeated follicles or a vascular network can legitimately be noncompact, while arbitrary salt-and-pepper splitting is a warning.
 
 ## BANKSY
 
@@ -35,10 +35,10 @@ Neighborhood size changes spatial smoothing and cannot be treated as another res
 
 ## Seurat/R-first
 
-When a full-feature Seurat RDS exists, make Seurat the default whole-tissue and pool-reclustering backbone. Use SCTransform for graph construction when appropriate, retain the full RNA/Spatial counts for marker validation, and compare a coarse broad-pass resolution grid rather than inheriting a BANKSY or Scanpy resolution. Existing Seurat grids may be reused after membership/hash and artifact validation, but historical biological labels remain blinded.
+When a full-feature Seurat RDS exists, make Seurat the default whole-tissue and cohort-reclustering backbone. Use SCTransform for graph construction when appropriate, retain the full RNA/Spatial counts for marker validation, and compare a coarse broad-pass resolution grid rather than inheriting a BANKSY or Scanpy resolution. Existing Seurat grids may be reused after membership/hash and artifact validation, but historical biological labels remain blinded.
 
 For mesenchymal-rich tissues, candidate selection must demonstrate whether generic stroma, mesenchymal-progenitor-like, mature smooth muscle, pericyte/mural and endothelial programs are separable. Do not prefer a resolution merely because it creates all named literature classes; require stable multi-gene and spatial evidence.
 
 ## Subset reclustering
 
-Repeat biological selection inside every broad pool. For sheep ovary, keep the fixed formal resolution candidates `0.1,0.2,0.3,0.4,0.6` while adapting the selected value, PCs and k; do not introduce below-floor resolutions. Other profiles may declare different grids.
+Repeat biological selection inside every broad-class cohort. For sheep ovary, keep the fixed formal resolution candidates `0.1,0.2,0.3,0.4,0.6` while adapting the selected value, PCs and k; do not introduce below-floor resolutions. Other profiles may declare different grids.

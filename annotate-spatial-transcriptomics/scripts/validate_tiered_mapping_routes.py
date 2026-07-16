@@ -111,13 +111,13 @@ def main() -> None:
             route_errors.append("mapping IDs are duplicated")
         observed_ids.extend(mapping[args.cell_id_col].astype(str).tolist())
 
-        allowed_tiers = {"high", "moderate", "low_reject"}
+        allowed_tiers = {"high", "moderate_only", "low_reject"}
         unknown_tiers = sorted(set(mapping["mapping_tier"].astype(str)).difference(allowed_tiers))
         if unknown_tiers:
             route_errors.append(f"unknown mapping tiers: {unknown_tiers}")
         expected_status = {
             "high": "calibrated_high_broad_candidate",
-            "moderate": "calibrated_moderate_broad_candidate",
+            "moderate_only": "calibrated_moderate_broad_candidate",
             "low_reject": "rejected_to_qc_or_review",
         }
         bad_status = mapping["mapping_status"].astype(str).ne(
@@ -128,7 +128,7 @@ def main() -> None:
         if mapping["fine_anchor_eligible"].astype(str).str.lower().isin(["true", "1"]).any():
             route_errors.append("mapping candidates were incorrectly made fine anchors")
         expected_moderate_gate = mapping["mapping_tier"].astype(str).isin(
-            ["high", "moderate"]
+            ["high", "moderate_only"]
         )
         observed_moderate_gate = mapping["meets_moderate_or_higher"].astype(str).str.lower().isin(
             ["true", "1"]
@@ -137,7 +137,7 @@ def main() -> None:
             route_errors.append("moderate-or-higher cumulative gate disagrees with tier labels")
         manifest_total = sum(
             int(manifest.get(key, -1))
-            for key in ("query_high", "query_moderate", "query_low_reject")
+            for key in ("query_high", "query_moderate_only", "query_low_reject")
         )
         if manifest_total != len(mapping) or int(manifest.get("query_n", -1)) != len(mapping):
             route_errors.append("manifest tier counts do not partition query")
@@ -182,7 +182,7 @@ def main() -> None:
         ):
             route_errors.append("manifest moderate-or-higher count disagrees with mapping")
         if int(manifest.get("query_moderate_only", -1)) != int(
-            mapping["mapping_tier"].astype(str).eq("moderate").sum()
+            mapping["mapping_tier"].astype(str).eq("moderate_only").sum()
         ):
             route_errors.append("manifest moderate-only count disagrees with mapping")
         validation_copy = heldout_validation.copy()
@@ -207,10 +207,9 @@ def main() -> None:
                 "expected_n": len(expected_ids),
                 "mapping_n": len(mapping),
                 "high_n": int(tier_counts.get("high", 0)),
-                "moderate_n": int(tier_counts.get("moderate", 0)),
-                "moderate_only_n": int(tier_counts.get("moderate", 0)),
+                "moderate_only_n": int(tier_counts.get("moderate_only", 0)),
                 "moderate_or_higher_n": int(
-                    tier_counts.get("high", 0) + tier_counts.get("moderate", 0)
+                    tier_counts.get("high", 0) + tier_counts.get("moderate_only", 0)
                 ),
                 "low_reject_n": int(tier_counts.get("low_reject", 0)),
                 "labels_with_high_threshold": manifest.get("labels_with_high_threshold"),
@@ -251,7 +250,7 @@ def main() -> None:
         "routes_disjoint": len(observed_ids) == len(set(observed_ids)),
         "fine_anchor_eligible": False,
         "errors": errors,
-        "warning": "PASS validates nested cumulative high and moderate-or-higher broad candidates. The mutually exclusive moderate tier means moderate-only; independent biological and spatial adjudication is still mandatory.",
+        "warning": "PASS validates nested cumulative high and moderate-or-higher broad candidates. The mutually exclusive Atlas tier is moderate_only; independent biological and spatial adjudication is still mandatory.",
     }
     (args.out / "validation_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"

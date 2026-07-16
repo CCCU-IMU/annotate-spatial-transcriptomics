@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/annotation_support.schema.json",
+  "title": "Per-label annotation support",
+  "type": "object",
+  "required": [
+    "schema_version", "support_id", "label_level", "broad_label", "fine_label",
+    "confidence", "positive_marker_evidence", "anti_marker_evidence",
+    "full_feature_evidence", "resolution_evidence", "spatial_evidence",
+    "provenance_evidence", "alternative_hypotheses", "evidence_artifacts"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "support_id": {"type": "string", "minLength": 1},
+    "label_level": {"enum": ["broad", "fine"]},
+    "broad_label": {"type": "string", "minLength": 1},
+    "fine_label": {"type": "string"},
+    "confidence": {"enum": ["moderate", "high"]},
+    "positive_marker_evidence": {"type": "object", "minProperties": 1},
+    "anti_marker_evidence": {"type": "object", "minProperties": 1},
+    "full_feature_evidence": {
+      "type": "object",
+      "required": ["status", "feature_space", "artifact"],
+      "properties": {
+        "status": {"const": "PASS"},
+        "feature_space": {"const": "full_feature"},
+        "artifact": {"$ref": "#/$defs/artifact"}
+      }
+    },
+    "resolution_evidence": {"type": "object", "minProperties": 1},
+    "spatial_evidence": {"type": "object", "minProperties": 1},
+    "provenance_evidence": {"type": "object", "minProperties": 1},
+    "alternative_hypotheses": {"type": "array", "minItems": 1},
+    "evidence_artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifact"}}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}
