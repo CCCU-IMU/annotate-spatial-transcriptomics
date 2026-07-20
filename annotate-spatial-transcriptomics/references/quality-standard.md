@@ -18,22 +18,25 @@ Comparable annotation quality requires:
 2. Freeze a label-blind, all-candidate broad evidence matrix before initial labels: positive DEG, anti-DEG, winner/runner-up, margin, marker-family coverage, contradictions and technical flags. Paper markers cannot narrow the candidate set after seeing the result.
 3. Per-class cell/bin-level lineage-core, support and anti-program audits on the full-feature object.
 4. Marker, DEG, source/QC composition and spatial morphology review for every large label and every broad/targeted cohort.
-5. Open-world discovery plus strict context gates for ambient-prone identities; rarity alone is not a class or route. Report spatial objects separately from observation counts.
-6. One reclustering cohort for every supported initial broad class, with an underpowered skip allowed only when recorded.
-7. Tiered low-priority RCTD evidence: canonical high plus independent evidence may support fine, moderate returns broad-only, and low enters the frozen QC holdout rather than Atlas.
-8. After terminal QC is frozen, run one calibrated broad-only Atlas mapping over the complete analysis set. `high`/`moderate_only` plus current-query and independent spatial/internal support may directly rescue only QC; `low_reject`, OOD and ontology-conflicted rows do not write back. Defined cells use the mapping only for concordance challenge. Accepted QC returns cannot seed fine discovery. Default held-out precision targets remain 0.90/0.95.
-9. Every material defined-label disagreement and coherent OOD group reopens the complete cluster/cohort exactly once. Atlas alternatives require independent query full-feature evidence to supersede; mixed evidence downgrades or becomes unknown/QC.
-10. A small/local retained interface, or a documented irreducible QC/technical remainder after every applicable route. Large/diffuse retention automatically reopens.
-11. Broad and subtype evidence assets are separate. The subtype tree may be shallow when the data support only broad identities.
-12. A navigable report whose annotation tree, node highlights, DEG, marker dotplots, spatial gene maps, source ancestry and detailed workflow all resolve to audited artifacts.
-13. A subtype parsimony audit showing that every fine label adds a reproducible functional or lineage program beyond its parent; unsupported splits are merged and retained as state tags.
-14. A taxonomy/cohort audit showing that every release label passed its own gate, every unsupported plausible literature class has a negative audit, and no routing/technical state enters biological DEG or marker discovery.
-15. Content-schema validation for every prelabel freeze, cohort outcome, direct return and broad/fine support record. Artifact existence alone, empty evidence and status-only placeholders fail.
-16. Exact observation-level partition closure through global Atlas query coverage, frozen-QC accepted/rejected writeback, defined-label review closure and the final annotation.
+5. Continuous full-catalog signal coverage at the whole-tissue, broad-cohort and targeted-cohort levels. Audit the selected resolution and next two higher available resolutions; retain weak coherent signals across boundaries instead of treating failure of the naming threshold as absence.
+6. Open-world discovery plus strict context gates for ambient-prone identities; rarity alone is not a class or route. Report spatial objects separately from observation counts.
+7. One reclustering cohort for every supported initial broad class, with an underpowered skip allowed only when recorded.
+8. Tiered low-priority RCTD evidence: canonical high plus independent evidence may support fine, moderate returns broad-only, and low enters the frozen QC holdout rather than Atlas.
+9. After terminal QC is frozen, run one calibrated broad-only Atlas mapping over the complete analysis set. `high`/`moderate_only` plus current-query and independent spatial/internal support may directly rescue only QC; `low_reject`, OOD and ontology-conflicted rows do not write back. Defined cells use the mapping only for concordance challenge. Accepted QC returns cannot seed fine discovery. Default held-out precision targets remain 0.90/0.95.
+10. Every material defined-label disagreement and coherent OOD group reopens the complete cluster/cohort exactly once. Atlas alternatives require independent query full-feature evidence to supersede; mixed evidence downgrades or becomes unknown/QC.
+11. A small/local retained interface, or a documented irreducible QC/technical remainder after every applicable route. Large/diffuse retention automatically reopens.
+12. Broad and subtype evidence assets are separate. The subtype tree may be shallow when the data support only broad identities.
+13. A navigable report whose annotation tree, node highlights, DEG, marker dotplots, spatial gene maps, source ancestry and detailed workflow all resolve to audited artifacts.
+14. A subtype parsimony audit showing that every fine label adds a reproducible functional or lineage program beyond its parent; unsupported splits are merged and retained as state tags.
+15. A taxonomy/cohort audit showing that every release label passed its own gate, every unsupported plausible literature class has a negative audit, and no routing/technical state enters biological DEG or marker discovery.
+16. Content-schema validation for every prelabel freeze, cohort outcome, direct return and broad/fine support record. Artifact existence alone, empty evidence and status-only placeholders fail.
+17. Exact observation-level partition closure through global Atlas query coverage, frozen-QC accepted/rejected writeback, defined-label review closure and the final annotation.
 
 ## Large-label purity trigger
 
 A convincing cluster-level DEG does not validate every observation in that cluster. Reopen a large direct label when a cell-level lineage backbone is sparse, anti-programs dominate, spatial distribution is too broad for the proposed identity, or a small coherent lineage appears embedded in a resident class. Freeze only the coherent cells; return the remainder directly to a supported broad lineage, a targeted cohort, or QC.
+
+The purity trigger and rare-lineage recall use the same persistent signal ledger. Every cohort remains open to cross-lineage evidence. An embedded lineage that was subthreshold at the whole-tissue pass is a tracked hypothesis, not a rejected class; a coherent recurrence in a subcluster must reopen broad-class construction.
 
 ## Unresolved-fraction trigger
 

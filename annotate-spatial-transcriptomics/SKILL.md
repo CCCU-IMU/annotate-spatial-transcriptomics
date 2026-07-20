@@ -16,16 +16,20 @@ Execute this order without skipping phases:
 1. Discover, inspect and hash inputs; freeze `full_object`, `analysis_set` and `excluded_initial_qc` memberships.
 2. Select a whole-tissue broad clustering adaptively. Before showing paper labels or a favored marker interpretation, freeze label-blind positive DEG, anti-DEG, technical flags and simultaneous scores for every eligible broad lineage, including winner, runner-up, margin and contradictions. Validate with `validate_prelabel_broad_evidence.py`.
 3. Review every cluster from that frozen open-world matrix. Assign a moderate-or-higher initial broad label only from at least two coherent marker families, a positive winner margin and no unresolved material contradiction; otherwise use `qc_holdout`. Paper markers may explain a frozen result but may not redefine the candidate set after the fact.
+   Start the continuous lineage-signal ledger at this boundary. Scan the selected resolution and next two higher available candidates; `below label threshold` means `watch and carry forward`, not absent.
 4. Freeze one immutable `broad_class_recluster` cohort for every supported initial broad class and run the complete active-workflow candidate grid. A one-cluster or unsplit result is not penalized: when no stable mixture or real subtype exists, close successfully as `homogeneous_parent_confirmed` and return all observations to the parent. A genuinely underpowered class may remain broad-only only after a hash-bound `not_applicable_reviewed` skip.
+   At the selected resolution and next two higher available candidates, rescan every subcluster against the complete catalog plus unexplained programs. The parent broad label is provenance, never a search-space restriction.
 5. Write each subcluster directly as a high-confidence shallow fine label, its supported parent broad class, a supported cross-lineage broad/fine return, one decision-relevant targeted cohort, or QC/technical retention.
+   Every `watch`, `candidate` or `supported` signal must be resolved with multichannel evidence; it cannot disappear because it failed an earlier naming gate.
 6. Create `targeted_recluster` only for a local interpretable mixture, contamination boundary or context-gated identity. It answers one question and cannot become a long-lived catch-all.
+   Its subclusters still receive the same full-catalog, selected-plus-two-higher scan.
 7. Use RCTD/reference assistance only when applicable. Canonical high plus independent marker/anti-marker, resolution and spatial evidence may support fine; moderate supports broad-only; low enters QC.
 8. After every broad/targeted cohort is terminal, freeze the complete residual `qc_holdout` membership once. Do not recluster it. Run one calibrated broad-only Atlas mapping over the complete `analysis_set`, preferably by projecting into a reusable fixed reference representation/index rather than repeating joint integration.
 9. Compare every mapped observation with the frozen primary state using `build_global_atlas_concordance.py`. A QC observation with moderate-or-higher Atlas tier, current-query marker/anti-marker support, an independent internal-anchor/spatial channel and no OOD/ontology conflict returns broad-only with `fine_anchor_eligible=false`; lower confidence remains QC. Defined broad labels are never overwritten by mapping alone.
 10. Reopen a complete cluster or frozen cohort once when a calibrated alternative differs in a material fraction, a material ontology conflict remains after crosswalk inspection, or a coherent group is out-of-distribution. Use query full-feature positive/anti evidence, pseudobulk, stability, sample consistency, spatial morphology and technical alternatives to retain, supersede, downgrade or mark `Unknown candidate`. Close every trigger with `validate_global_atlas_concordance.py`; do not chase the reference iteratively.
 11. Validate evidence content and exact membership closure. Prelabel freezes, cohort outcomes, direct returns, Atlas concordance/reviews and per-label supports must pass their schemas and hashes; empty/status-only evidence fails.
 12. Materialize one final annotation: moderate-or-higher broad labels, optional high-confidence fine labels, or explicit retained QC/technical/unknown state.
-13. Pass direct-workflow, state, taxonomy, completion and main-Agent biological-quality gates; generate the lightweight confirmation HTML; wait for explicit user confirmation; then produce final DEG, figures and release HTML.
+13. Run `validate_lineage_signal_coverage.py`; pass direct-workflow, state, taxonomy, completion and main-Agent biological-quality gates; generate the lightweight confirmation HTML including label-independent all-cell canonical-marker spatial panels; wait for explicit user confirmation; then produce final DEG, figures and release HTML.
 
 A cohort is a frozen computational query boundary, not a cell type. Direct cross-lineage return preserves source cohort/subcluster/membership/evidence and does not create an intermediate cohort or automatically trigger another target-lineage reclustering.
 
@@ -86,7 +90,9 @@ Use `adjudicate_multichannel_broad_rescue.py` only to decide writeback for froze
 
 Read `references/autonomous-operation.md` for end-to-end work. Run `autopilot_status.py PROJECT_ROOT` at startup and after every writeback. Run `plan_next_iteration.py` after every biological decision; it consumes structured gap codes rather than English error strings. In Agent mode, `CONTINUE`, `ITERATION_REQUIRED` and `EXPECTED_GATE_BLOCKED` are expected business states, while schema/parse/corruption exceptions are execution failures. Use strict nonzero gap exits only in CI/completion. Validate failed jobs under new run IDs and record every incident; do not overwrite failure evidence.
 
-New projects use `recluster_cohort_registry.tsv`, `direct_return_registry.tsv` and `route_attempt_registry.tsv`. Retired registry formats remain readable only through migration tools; never create them in a new project.
+New projects use `recluster_cohort_registry.tsv`, `direct_return_registry.tsv`, `route_attempt_registry.tsv`, `lineage_signal_boundary_registry.tsv` and `lineage_signal_registry.tsv`. The signal registries keep weak lineage evidence alive across whole-tissue, broad and targeted boundaries until explicitly supported or refuted. Retired registry formats remain readable only through migration tools; never create them in a new project.
+
+Use `scripts/migrate_project_v1_7_to_v1_8.py` to opt an existing v1.7 project into these fail-closed gates. Migration creates empty registries and intentionally blocks completion until the historical boundaries are backfilled and audited; it never fabricates evidence.
 
 For multi-sample work, read `references/multi-sample-agent-orchestration.md`. The main conversation Agent owns progress, user decisions, cross-sample audit and final quality approval. Assign exactly one complete workflow child Agent per sample; parallel workers must meet identical gates and must not be reduced to cluster renaming or audit-only tasks.
 
@@ -95,9 +101,9 @@ For multi-sample work, read `references/multi-sample-agent-orchestration.md`. Th
 Before confirmation:
 
 1. run `build_final_annotation.py`;
-2. run `validate_prelabel_broad_evidence.py`, `validate_global_atlas_concordance.py`, `audit_release_taxonomy.py`, `validate_direct_lineage_workflow.py`, `validate_annotation_support_registry.py` and `audit_annotation_membership_partition.py`;
+2. run `validate_prelabel_broad_evidence.py`, `validate_lineage_signal_coverage.py`, `validate_global_atlas_concordance.py`, `audit_release_taxonomy.py`, `validate_direct_lineage_workflow.py`, `validate_annotation_support_registry.py` and `audit_annotation_membership_partition.py`;
 3. run `validate_state.py`, `plan_next_iteration.py` and `check_completion_gate.py`;
-4. populate `annotation_support_registry.tsv` and build frozen lightweight broad spatial/canonical-marker assets;
+4. populate `annotation_support_registry.tsv` and build frozen lightweight broad spatial/canonical-marker assets plus all-cell canonical-marker spatial panels (no label filtering; fixed point size);
 5. request and record one main-Agent biological quality approval only after all annotation phases finish;
 6. build the lightweight confirmation HTML and request explicit user confirmation.
 

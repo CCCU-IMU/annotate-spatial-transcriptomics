@@ -54,6 +54,8 @@ def main() -> int:
         SKILL / "scripts" / "migrate_project_v1_4_to_v1_5.py",
         SKILL / "scripts" / "migrate_project_v1_6_0_to_v1_6_1.py",
         SKILL / "scripts" / "migrate_project_v1_6_1_to_v1_7_0.py",
+        SKILL / "scripts" / "migrate_project_v1_7_to_v1_8.py",
+        SKILL / "scripts" / "validate_lineage_signal_coverage.py",
         SKILL / "scripts" / "build_final_annotation.py",
         SKILL / "scripts" / "validate_profile_role.py",
         SKILL / "scripts" / "validate_resolution_grid.py",
@@ -138,6 +140,8 @@ def main() -> int:
         problems.append("missing v1.6 active-contract regression tests")
     if not (ROOT / "tests/test_v1_7_contract.py").is_file():
         problems.append("missing v1.7 active-contract regression tests")
+    if not (ROOT / "tests/test_v1_8_contract.py").is_file():
+        problems.append("missing v1.8 active-contract regression tests")
     if not (ROOT / "tests/test_legacy_migration_contract.py").is_file():
         problems.append("missing legacy migration regression tests")
 

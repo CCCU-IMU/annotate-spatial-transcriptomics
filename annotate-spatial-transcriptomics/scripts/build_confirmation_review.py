@@ -60,6 +60,7 @@ def main() -> int:
     parser.add_argument("project_root", type=Path)
     parser.add_argument("--asset-manifest", type=Path)
     parser.add_argument("--support-registry", type=Path)
+    parser.add_argument("--marker-spatial-group-index", type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     root = args.project_root.resolve()
@@ -70,10 +71,16 @@ def main() -> int:
     support_registry = args.support_registry or root / "state/annotation_support_registry.tsv"
     asset_manifest_path = args.asset_manifest or root / "review/confirmation/assets/review_asset_manifest.json"
     output = args.out or root / "review/confirmation/index.html"
+    project_path = root / "config/project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8")) if project_path.is_file() else {}
+    marker_spatial_required = project.get("all_cell_marker_spatial_panels_required", False) is True
+    marker_spatial_index = args.marker_spatial_group_index or root / "review/confirmation/assets/tables/spatial_gene_group_asset_index.tsv"
     required = [cell_ledger, cluster_ledger, completion_gate, support_registry, asset_manifest_path, master_approval_path]
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise SystemExit("confirmation review inputs are missing: " + ", ".join(missing))
+    if marker_spatial_required and not marker_spatial_index.is_file():
+        raise SystemExit(f"all-cell marker spatial panel index is required: {marker_spatial_index}")
     completion = json.loads(completion_gate.read_text(encoding="utf-8"))
     if completion.get("status") != "PASS":
         raise SystemExit("completion gate must pass before building the confirmation review")
@@ -110,6 +117,26 @@ def main() -> int:
     missing_fine = sorted(set(fine_counts) - set(fine_support))
     if missing_broad or missing_fine:
         raise SystemExit(f"validated support reasons are incomplete: broad={missing_broad}; fine={missing_fine}")
+
+    marker_spatial_rows: list[dict[str, str]] = []
+    marker_spatial_paths: list[Path] = []
+    if marker_spatial_required:
+        marker_spatial_rows = read_tsv(marker_spatial_index)
+        expected_groups = set(broad_counts) | {fine for _, fine in fine_counts}
+        observed_groups = {row.get("marker_group", "") for row in marker_spatial_rows}
+        missing_groups = sorted(expected_groups - observed_groups)
+        if missing_groups:
+            raise SystemExit(f"all-cell marker spatial panels are incomplete: {missing_groups}")
+        n_analysis = sum(broad_counts.values()) + sum(retained_counts.values())
+        for row in marker_spatial_rows:
+            if row.get("scope") != "all_analysis_set_observations" or int(float(row.get("n_observations", 0) or 0)) != n_analysis:
+                raise SystemExit(f"marker spatial panel is not based on the complete analysis set: {row.get('marker_group','')}")
+            if int(float(row.get("n_available", 0) or 0)) < 1:
+                raise SystemExit(f"marker spatial panel has no available canonical marker: {row.get('marker_group','')}")
+            png = resolve(root, row.get("png", ""))
+            if not png.is_file():
+                raise SystemExit(f"marker spatial panel is missing: {png}")
+            marker_spatial_paths.append(png)
 
     asset_manifest = json.loads(asset_manifest_path.read_text(encoding="utf-8"))
     if asset_manifest.get("status") != "PASS" or asset_manifest.get("label_column") != "primary_broad_label":
@@ -160,6 +187,12 @@ def main() -> int:
     quality_rows = []
     for item, entry in master_approval.get("checklist", {}).items():
         quality_rows.append({"质量维度": item, "结论": entry.get("status", ""), "备注": entry.get("note", entry.get("evidence", ""))})
+    marker_spatial_html = "".join(
+        "<details><summary>" + html.escape(row.get("marker_group", "")) + " · "
+        + html.escape(row.get("available_genes", "")) + "</summary><img loading='lazy' src='"
+        + png_data_uri(resolve(root, row.get("png", ""))) + "'></details>"
+        for row in marker_spatial_rows
+    )
     review_html = f"""<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>确认前轻量注释审阅</title>
 <style>body{{font-family:Arial,'Noto Sans CJK SC',sans-serif;background:#f4f6f8;color:#20242a;margin:0}}header,main{{max-width:1500px;margin:auto;padding:22px}}header{{max-width:none;background:#17324d;color:#fff}}section{{background:#fff;margin:16px 0;padding:18px;border-radius:10px}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:15px}}img{{max-width:100%;height:auto;border:1px solid #d8dee6}}table{{border-collapse:collapse;width:100%;font-size:12px}}th,td{{border:1px solid #cdd5df;padding:6px;text-align:left;vertical-align:top}}th{{background:#eef3f7}}.scroll{{overflow:auto}}.chip{{display:inline-flex;align-items:center;margin:4px 10px 4px 0;padding:5px 8px;border:1px solid #ccd4dd;border-radius:16px}}.chip i{{width:16px;height:16px;border-radius:3px;margin-right:6px;border:1px solid #555}}.warn{{background:#fff4ce;border-left:5px solid #d99b00;padding:12px}}</style></head><body>
 <header><h1>确认前轻量注释审阅</h1><p>这是完成门通过后的冻结候选注释，仅供人工确认；尚未生成最终 DEG、完整双层树点图、逐节点空间图或发布 HTML。</p></header><main>
@@ -167,6 +200,7 @@ def main() -> int:
 <section><h2>主 Agent 注释质量审批</h2><p><b>结论：</b>{html.escape(master_approval.get('status',''))}　<b>与验证参考流程的比较：</b>{html.escape(master_approval.get('comparison_to_reference',''))}</p><p><b>审批说明：</b>{html.escape(master_approval.get('rationale',''))}</p>{table(quality_rows, ['质量维度','结论','备注'])}</section>
 <section><h2>大类配色与数量</h2>{palette_html}</section>
 <section class='grid'><article><h2>大类空间投影</h2><img src='{png_data_uri(assets['spatial_png'])}'></article><article><h2>大类典型 marker dotplot</h2><img src='{png_data_uri(assets['dotplot_png'])}'></article></section>
+<section><h2>典型 marker 全 cellbin 空间表达</h2><p>不按注释标签筛选；固定点径；颜色为每个基因独立记录的表达尺度。</p>{marker_spatial_html}</section>
 <section><h2>大类注释支持原因</h2>{table(broad_rows, ['大类','数量','置信度','正向 marker','anti-marker','分辨率/稳定性','空间依据','路线'])}</section>
 <section><h2>高置信亚群支持原因</h2>{table(fine_rows, ['大类','高置信亚群','数量','正向 marker','anti-marker','分辨率/稳定性','空间依据'])}</section>
 <section><h2>保留的非生物学状态</h2>{table([{'状态': key, '数量': value} for key, value in retained_counts.most_common()], ['状态','数量'])}</section>
@@ -182,6 +216,8 @@ def main() -> int:
         "master_quality_approval": str(master_approval_path.resolve()), "master_quality_approval_sha256": master_sha256(master_approval_path),
         "support_registry": str(support_registry.resolve()), "support_registry_sha256": sha256(support_registry),
         "asset_manifest": str(asset_manifest_path.resolve()), "asset_manifest_sha256": sha256(asset_manifest_path),
+        "marker_spatial_group_index": str(marker_spatial_index.resolve()) if marker_spatial_required else "",
+        "marker_spatial_group_index_sha256": sha256(marker_spatial_index) if marker_spatial_required else "",
         "broad_labels": dict(broad_counts),
         "fine_labels": {f"{broad} -> {fine}": count for (broad, fine), count in fine_counts.items()},
         "retained_states": dict(retained_counts),
@@ -191,6 +227,8 @@ def main() -> int:
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     dependencies = [cell_ledger, cluster_ledger, completion_gate, master_approval_path, support_registry, asset_manifest_path]
+    if marker_spatial_required:
+        dependencies.extend([marker_spatial_index] + marker_spatial_paths)
     build_dependency_manifest(output, dependencies, {"asset_class": "confirmation_review"})
     build_dependency_manifest(manifest_path, dependencies + [output], {"asset_class": "confirmation_review_manifest"})
     print(json.dumps(manifest, ensure_ascii=False, indent=2))

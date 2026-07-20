@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0 — 2026-07-20
+
+- Separated biological naming thresholds from signal memory: subthreshold but coherent lineage evidence is retained as `watch` rather than silently treated as absence.
+- Added continuous full-catalog lineage scans at whole-tissue, broad-class and targeted-reclustering boundaries, covering the selected resolution plus the next two higher available candidates.
+- Added immutable lineage boundary/signal registries and a fail-closed coverage validator for missing catalog products, unexplained programs, large-label purity audits and unresolved signals.
+- Prohibited parent broad labels from narrowing later candidate searches; cohort subclusters remain open to cross-lineage reconstruction.
+- Added v1.7-to-v1.8 migration that creates empty registries and intentionally blocks completion until historical evidence is backfilled.
+- Added fixed-point, label-independent all-cell canonical-marker spatial panels to the pre-confirmation report contract, including explicit missing-marker records.
+- Added regression tests for complete negative scans, missing lineage products and positive evidence incorrectly recorded as absent.
+
 ## 1.7.0 — 2026-07-16
 
 - Added a mandatory label-blind prelabel broad-evidence freeze with all-candidate positive/anti programs, winner/runner-up margin and contradiction checks to prevent paper-marker anchoring.

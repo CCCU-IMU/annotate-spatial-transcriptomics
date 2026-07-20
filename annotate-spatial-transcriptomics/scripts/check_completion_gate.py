@@ -10,6 +10,7 @@ from audit_annotation_membership_partition import audit as audit_membership_part
 from validate_annotation_support_registry import validate as validate_support_registry
 from dependency_manifest import build as build_dependency_manifest
 from evidence_schema_lib import active_registry_rows
+from validate_lineage_signal_coverage import audit as audit_lineage_signals
 
 def read(path):
     if not path.exists():return []
@@ -109,6 +110,12 @@ def main():
         ff=r/"provenance/full_feature_validation.json"
         if not ff.exists() or json.loads(ff.read_text()).get("status")!="PASS":errors.append("active biological profile requires full-feature validation, but the gate has not passed")
     multi=audit_direct_lineage(r)
+    lineage_signal_required=project.get("continuous_open_world_lineage_scan_required",False) is True
+    lineage_signal={"status":"NOT_REQUIRED","errors":[],"boundaries":0,"signal_rows":0,"open_signals":[]}
+    if lineage_signal_required:
+        lineage_signal=audit_lineage_signals(r)
+        (r/"provenance/lineage_signal_coverage_validation.json").write_text(json.dumps(lineage_signal,ensure_ascii=False,indent=2)+"\n")
+        if lineage_signal.get("status")!="PASS":errors.append(f"continuous lineage-signal coverage is blocked: {len(lineage_signal.get('errors',[]))} errors, {len(lineage_signal.get('open_signals',[]))} open signals")
     if preset_requested and not profile_path:errors.append("active strategy preset lacks a resolvable biological profile binding")
     if profile.get("annotation_workflow_policy",{}).get("incident_registry_required",False):
         incident_path=r/"provenance/incidents/incident_registry.tsv"
@@ -171,9 +178,9 @@ def main():
     if support.get("status")!="PASS":errors.append(f"annotation support coverage validation failed: {len(support.get('errors',[]))} errors")
     (r/"provenance/direct_lineage_workflow_audit.json").write_text(json.dumps(multi,ensure_ascii=False,indent=2)+"\n")
     if multi.get("status")!="PASS":errors.append(f"annotation workflow completion is blocked: {len(multi.get('gaps',[]))} gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
-    result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"recluster_cohorts":len(cohorts),"direct_returns":len(returns),"persistent_biological_pools":False,"runs":len(runs),"annotation_workflow_status":multi.get("status"),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context}
+    result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"recluster_cohorts":len(cohorts),"direct_returns":len(returns),"persistent_biological_pools":False,"runs":len(runs),"annotation_workflow_status":multi.get("status"),"lineage_signal_coverage_status":lineage_signal.get("status"),"lineage_signal_boundaries":lineage_signal.get("boundaries",0),"lineage_signal_rows":lineage_signal.get("signal_rows",0),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context}
     completion_path=r/"provenance/completion_gate.json";completion_path.parent.mkdir(parents=True,exist_ok=True);completion_path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
-    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
+    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"state/lineage_signal_boundary_registry.tsv",r/"state/lineage_signal_registry.tsv",r/"provenance/lineage_signal_coverage_validation.json",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
     dependencies.extend(path for path in referenced_files(r,clusters+cohorts+returns+read(r/"state/route_attempt_registry.tsv")+read(r/"state/annotation_support_registry.tsv")) if path not in dependencies)
     if profile_path and profile_path.is_file() and profile_path not in dependencies:dependencies.append(profile_path)
     build_dependency_manifest(completion_path,dependencies,{"gate":"completion"})

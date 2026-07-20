@@ -42,6 +42,8 @@ Allowed states:
 - `provenance/incidents/incident_registry.tsv`: every EXIT/cancel/fail-closed/runtime/resource incident, failure boundary, reusable artifacts, repair and verification. Open rows block completion.
 - `branch_control_board.tsv`: legacy migration registry only; new projects use cohort outcomes and structured controller gaps.
 - `annotation_support_registry.tsv`: one validated evidence summary for every released broad class and high-confidence fine label, including positive markers, anti-markers, resolution stability, spatial evidence, route ancestry and validation artifacts. It is frozen into the pre-confirmation HTML and confirmation hash.
+- `lineage_signal_boundary_registry.tsv`: every whole-tissue, broad-class and targeted boundary, its selected/candidate/audited resolutions, exact cluster universe, complete candidate catalog, unexplained-program audit and large-label purity audit.
+- `lineage_signal_registry.tsv`: one row per boundary/resolution/cluster/catalog lineage plus additional unexplained programs. It preserves `watch` signals across boundaries and records explicit supported or refuted closure evidence.
 - `workflow_event_registry.tsv`: chronological Chinese-ready input, job, failure, repair, review and writeback events.
 - `annotation_view_registry.tsv`: the validated single `final` annotation census and membership artifact. Legacy view rows may remain as non-release history.
 - `provenance/analysis_scope_policy.json`: immutable full-object versus analysis-set boundary and membership hash.
@@ -65,3 +67,5 @@ RCTD is low-priority assistance. Its canonical `high`, `moderate` and `low` tier
 No-repeat policy is scoped to a frozen cohort generation. A cell can enter a later scientific question only through an explicit superseding version; it cannot silently re-enter a completed cohort in the same annotation version. Direct cross-lineage return does not itself trigger another target-lineage reclustering.
 
 Cohort identity is provenance, not biology. A cohort name cannot be copied directly into a biological label. Legacy pool identity follows the same rule. Literature categories that fail query-specific gates are recorded as negative audits, not inserted into the cell ledger. Biological broad labels and retained anatomical-interface/QC/technical/pending states have separate release censuses and evidence cohorts.
+
+A label threshold controls naming, not memory. Positive-family evidence cannot be stored as `absent`. Every `watch`, `candidate` or `supported` lineage signal remains open until it has a supported biological outcome or hash-bound multichannel refutation. Parent/cohort identity never narrows the catalog scanned at a later boundary.
