@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.1 — 2026-07-21
+
+- Preserve all v1.9 prelabel-evidence freeze fields when reviewed cluster mappings are committed.
+- Add a regression test proving that evidence artifact, hash, winner, runner-up and margin survive the state-ledger write.
+
 ## 1.9.0 — 2026-07-21
 
 - Added a fail-closed project-local derived-expression registry and validator binding every query evidence object to project/sample, raw-count hash, analysis-set hash, parent artifact and purpose; cross-project derived expression is restricted to explicit Atlas/reference channels.

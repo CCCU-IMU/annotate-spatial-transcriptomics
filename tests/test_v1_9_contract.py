@@ -36,7 +36,7 @@ class V19ContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = self.init_project(temp)
             config = json.loads((project / "config/project.json").read_text())
-            self.assertEqual(config["framework_version"], "1.9.0")
+            self.assertEqual(config["framework_version"], "1.9.1")
             self.assertTrue(config["project_input_boundary_validation_required"])
             self.assertTrue(config["broad_class_completeness_review_required"])
             self.assertTrue((project / "state/derived_expression_registry.tsv").is_file())
@@ -188,6 +188,27 @@ class V19ContractTests(unittest.TestCase):
         text = (SKILL / "references/direct-lineage-controller.md").read_text(encoding="utf-8")
         self.assertIn("must not narrow the candidates", text)
         self.assertIn("Direct cross-lineage return", text)
+
+    def test_reviewed_mapping_preserves_prelabel_freeze_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = self.init_project(temp)
+            evidence = Path(temp) / "cluster_1.json"; evidence.write_text("{}\n")
+            mapping = Path(temp) / "mapping.tsv"
+            mapping.write_text(
+                "source_cluster\tbroad_label\tfine_label\tstate\tconfidence\tevidence_status\troute\tfine_anchor_eligible\tnext_action\tclosed\tprelabel_evidence_artifact\tprelabel_evidence_sha256\tprelabel_evidence_frozen\tprelabel_winner\tprelabel_runner_up\tprelabel_winning_margin\n"
+                f"1\tGranulosa\t\tdefined\thigh\tsupported\tbroad_class_recluster\tfalse\trecluster\tfalse\t{evidence}\t{digest(evidence)}\ttrue\tGranulosa\tTheca\t0.42\n"
+            )
+            counts = Path(temp) / "counts.tsv"; counts.write_text("cluster\tn_observations\n1\t100\n")
+            result = run(SCRIPTS / "commit_reviewed_mapping.py", project, "--mapping", mapping,
+                         "--counts", counts, "--selected-run", "res0p8", "--method", "BANKSY",
+                         "--sample", "s1", "--selection-rationale", "query evidence")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            with (project / "state/cluster_decision_ledger.tsv").open(newline="") as handle:
+                row = next(csv.DictReader(handle, delimiter="\t"))
+            self.assertEqual(row["prelabel_evidence_frozen"], "true")
+            self.assertEqual(row["prelabel_winner"], "Granulosa")
+            self.assertEqual(row["prelabel_runner_up"], "Theca")
+            self.assertEqual(row["prelabel_winning_margin"], "0.42")
 
 
 if __name__ == "__main__":

@@ -40,7 +40,7 @@ class V17ContractTests(unittest.TestCase):
             ], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             project = json.loads((root / "config/project.json").read_text())
-            self.assertEqual(project["framework_version"], "1.9.0")
+            self.assertEqual(project["framework_version"], "1.9.1")
             self.assertEqual(project["global_atlas_mapping_scope"], "complete_analysis_set")
             cluster_header = (root / "state/cluster_decision_ledger.tsv").read_text().splitlines()[0]
             route_header = (root / "state/route_attempt_registry.tsv").read_text().splitlines()[0]
