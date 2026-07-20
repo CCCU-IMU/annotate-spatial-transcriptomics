@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.2 — 2026-07-21
+
+- Make state validation understand P00 frozen full-object membership tables containing both `analysis_set` and `excluded_initial_qc`, with compatible `_count` and `_n` policy fields.
+- Canonicalize reviewed-mapping state aliases before ledger writes and reject unknown state values, preventing descriptive controller terms from corrupting the formal state schema.
+
 ## 1.9.1 — 2026-07-21
 
 - Preserve all v1.9 prelabel-evidence freeze fields when reviewed cluster mappings are committed.

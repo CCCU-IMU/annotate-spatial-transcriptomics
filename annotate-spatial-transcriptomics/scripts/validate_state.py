@@ -34,6 +34,15 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def policy_count(policy: dict, *names: str) -> int:
+    """Read a scope count while accepting the frozen-P00 and final-view spellings."""
+    for name in names:
+        value = policy.get(name)
+        if value not in (None, ""):
+            return int(value)
+    return -1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("project_root", type=Path)
@@ -69,15 +78,40 @@ def main() -> int:
                     require(sha256(membership_path) == expected_hash, "analysis-scope membership SHA256 is stale", errors)
                 membership_rows = list(rows(membership_path))
                 require(bool(membership_rows) and "cell_id" in membership_rows[0], "analysis-scope membership lacks cell_id", errors)
-                expected_analysis_ids = {row.get("cell_id", "") for row in membership_rows}
+                has_scope = "analysis_scope" in membership_rows[0]
+                if has_scope:
+                    valid_scopes = {"analysis_set", "excluded_initial_qc"}
+                    require(
+                        all(row.get("analysis_scope") in valid_scopes for row in membership_rows),
+                        "analysis-scope membership has an invalid analysis_scope",
+                        errors,
+                    )
+                    analysis_rows = [row for row in membership_rows if row.get("analysis_scope") == "analysis_set"]
+                    excluded_rows = [row for row in membership_rows if row.get("analysis_scope") == "excluded_initial_qc"]
+                else:
+                    analysis_rows = membership_rows
+                    excluded_rows = []
+                expected_analysis_ids = {row.get("cell_id", "") for row in analysis_rows}
+                excluded_ids = {row.get("cell_id", "") for row in excluded_rows}
                 require("" not in expected_analysis_ids, "analysis-scope membership has empty cell_id", errors)
-                require(len(expected_analysis_ids) == len(membership_rows), "analysis-scope membership has duplicate cell_id", errors)
+                require("" not in excluded_ids, "analysis-scope excluded membership has empty cell_id", errors)
+                require(not (expected_analysis_ids & excluded_ids), "analysis and excluded memberships overlap", errors)
+                all_ids = expected_analysis_ids | excluded_ids
+                require(len(all_ids) == len(membership_rows), "analysis-scope membership has duplicate cell_id", errors)
                 try:
                     require(
-                        len(expected_analysis_ids) == int(scope_policy.get("analysis_set_n", -1)),
+                        len(expected_analysis_ids) == policy_count(scope_policy, "analysis_set_n", "analysis_set_count"),
                         "analysis-scope policy count disagrees with frozen membership",
                         errors,
                     )
+                    require(
+                        len(excluded_ids) == policy_count(scope_policy, "excluded_initial_qc_n", "excluded_initial_qc_count"),
+                        "analysis-scope excluded count disagrees with frozen membership",
+                        errors,
+                    )
+                    expected_full = policy_count(scope_policy, "full_object_n", "full_object_count")
+                    if expected_full >= 0:
+                        require(len(all_ids) == expected_full, "full-object count disagrees with frozen membership", errors)
                 except (TypeError, ValueError):
                     require(False, "analysis-scope policy count is invalid", errors)
         except (OSError, json.JSONDecodeError) as exc:
@@ -216,7 +250,7 @@ def main() -> int:
             if expected_analysis_ids is not None:
                 require(analysis_ids_seen == expected_analysis_ids, "cell-ledger analysis_set differs from frozen analysis-scope membership", errors)
                 try:
-                    expected_excluded = int(scope_policy.get("excluded_initial_qc_n", -1)) if scope_policy else -1
+                    expected_excluded = policy_count(scope_policy, "excluded_initial_qc_n", "excluded_initial_qc_count") if scope_policy else -1
                     require(excluded_n == expected_excluded, "cell-ledger excluded_initial_qc count disagrees with policy", errors)
                 except (TypeError, ValueError):
                     require(False, "analysis-scope excluded count is invalid", errors)
