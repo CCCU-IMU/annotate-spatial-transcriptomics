@@ -6,6 +6,21 @@ import argparse,csv
 from datetime import datetime,timezone
 from pathlib import Path
 
+ALLOWED_STATES = {"defined_fine", "defined_broad_only", "interface_review", "qc_holdout", "technical_state", "pending_review", "unknown_candidate", "excluded_initial_qc", "closed_and_frozen"}
+
+def canonical_state(row):
+    state = row.get("state", "").strip()
+    aliases = {
+        "technical_or_low_information": "technical_state",
+        "candidate_defined_pending_context_safe_recluster": "pending_review",
+    }
+    if state == "defined":
+        state = "defined_fine" if row.get("fine_label", "").strip() else "defined_broad_only"
+    state = aliases.get(state, state)
+    if state not in ALLOWED_STATES:
+        raise SystemExit(f"invalid annotation state for cluster {row.get('source_cluster', '')}: {row.get('state', '')}")
+    return state
+
 def read(path,delimiter="\t"):
     with path.open(newline="",encoding="utf-8") as h:return list(csv.DictReader(h,delimiter=delimiter))
 
@@ -24,7 +39,7 @@ def main():
     for r in maps:
         did=r.get("decision_id") or f"{a.decision_version}:{a.selected_run}:{r['source_cluster']}"
         if did in known:raise SystemExit(f"decision_id already exists: {did}")
-        known.add(did);new.append({"decision_version":a.decision_version,"decision_id":did,"sample_id":a.sample,"source_run_id":a.selected_run,"source_cluster":r["source_cluster"],"n_observations":counts.get(str(r["source_cluster"]),""),"spatial_object_count":r.get("spatial_object_count",""),"count_interpretation":r.get("count_interpretation","observations_not_inferred_cells"),"prelabel_evidence_artifact":r.get("prelabel_evidence_artifact",""),"prelabel_evidence_sha256":r.get("prelabel_evidence_sha256",""),"prelabel_evidence_frozen":r.get("prelabel_evidence_frozen","false"),"prelabel_winner":r.get("prelabel_winner",r.get("broad_label","")),"prelabel_runner_up":r.get("prelabel_runner_up",""),"prelabel_winning_margin":r.get("prelabel_winning_margin",""),"initial_broad_label":r.get("initial_broad_label",r["broad_label"]),"broad_label":r["broad_label"],"fine_label":r["fine_label"],"state":r["state"],"confidence":r["confidence"],"evidence_status":r["evidence_status"],"validation_status":r.get("validation_status","not_required"),"validation_artifact":r.get("validation_artifact",""),"validation_feature_scope":r.get("validation_feature_scope","unknown"),"route":r["route"],"route_run_id":r.get("route_run_id",""),"recluster_cohort_id":r.get("recluster_cohort_id",""),"assignment_mode":r.get("assignment_mode","initial_broad_direct"),"cross_lineage_target":r.get("cross_lineage_target",r.get("cross_branch_target","")),"iteration":r.get("iteration","1"),"fine_anchor_eligible":r["fine_anchor_eligible"],"next_action":r["next_action"],"closure_rationale":r.get("closure_rationale",""),"supersedes":r.get("supersedes",""),"closed":r["closed"],"created_at":now})
+        known.add(did);new.append({"decision_version":a.decision_version,"decision_id":did,"sample_id":a.sample,"source_run_id":a.selected_run,"source_cluster":r["source_cluster"],"n_observations":counts.get(str(r["source_cluster"]),""),"spatial_object_count":r.get("spatial_object_count",""),"count_interpretation":r.get("count_interpretation","observations_not_inferred_cells"),"prelabel_evidence_artifact":r.get("prelabel_evidence_artifact",""),"prelabel_evidence_sha256":r.get("prelabel_evidence_sha256",""),"prelabel_evidence_frozen":r.get("prelabel_evidence_frozen","false"),"prelabel_winner":r.get("prelabel_winner",r.get("broad_label","")),"prelabel_runner_up":r.get("prelabel_runner_up",""),"prelabel_winning_margin":r.get("prelabel_winning_margin",""),"initial_broad_label":r.get("initial_broad_label",r["broad_label"]),"broad_label":r["broad_label"],"fine_label":r["fine_label"],"state":canonical_state(r),"confidence":r["confidence"],"evidence_status":r["evidence_status"],"validation_status":r.get("validation_status","not_required"),"validation_artifact":r.get("validation_artifact",""),"validation_feature_scope":r.get("validation_feature_scope","unknown"),"route":r["route"],"route_run_id":r.get("route_run_id",""),"recluster_cohort_id":r.get("recluster_cohort_id",""),"assignment_mode":r.get("assignment_mode","initial_broad_direct"),"cross_lineage_target":r.get("cross_lineage_target",r.get("cross_branch_target","")),"iteration":r.get("iteration","1"),"fine_anchor_eligible":r["fine_anchor_eligible"],"next_action":r["next_action"],"closure_rationale":r.get("closure_rationale",""),"supersedes":r.get("supersedes",""),"closed":r["closed"],"created_at":now})
     append_rows(state/"cluster_decision_ledger.tsv",cfields,new)
     dfields=["decision_version","sample_id","method","run_id","parameters","n_clusters","quantitative_rank","marker_review","spatial_review","decision","rationale","created_at"]
     ranks=read(a.ranking) if a.ranking else []

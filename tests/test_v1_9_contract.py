@@ -36,7 +36,7 @@ class V19ContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = self.init_project(temp)
             config = json.loads((project / "config/project.json").read_text())
-            self.assertEqual(config["framework_version"], "1.9.1")
+            self.assertEqual(config["framework_version"], "1.9.2")
             self.assertTrue(config["project_input_boundary_validation_required"])
             self.assertTrue(config["broad_class_completeness_review_required"])
             self.assertTrue((project / "state/derived_expression_registry.tsv").is_file())
@@ -209,6 +209,26 @@ class V19ContractTests(unittest.TestCase):
             self.assertEqual(row["prelabel_winner"], "Granulosa")
             self.assertEqual(row["prelabel_runner_up"], "Theca")
             self.assertEqual(row["prelabel_winning_margin"], "0.42")
+            self.assertEqual(row["state"], "defined_broad_only")
+
+    def test_state_validator_understands_frozen_full_scope_membership(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            project = self.init_project(temp)
+            membership = project / "membership.tsv"
+            membership.write_text(
+                "sample_id\tcell_id\tanalysis_scope\n"
+                "s1\ta\tanalysis_set\n"
+                "s1\tb\tanalysis_set\n"
+                "s1\tc\texcluded_initial_qc\n"
+            )
+            policy = {
+                "status": "PASS", "membership_path": str(membership),
+                "membership_sha256": digest(membership), "full_object_count": 3,
+                "analysis_set_count": 2, "excluded_initial_qc_count": 1,
+            }
+            (project / "provenance/analysis_scope_policy.json").write_text(json.dumps(policy))
+            result = run(SCRIPTS / "validate_state.py", project)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":
