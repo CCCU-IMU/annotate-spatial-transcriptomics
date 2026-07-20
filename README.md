@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcrip
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcriptomics/main/install.sh \
-  | bash -s -- --ref v1.8.0
+  | bash -s -- --ref v1.9.0
 ```
 
 克隆后本地安装（适合内网或需要审查源码的环境）：
@@ -380,7 +380,7 @@ GitHub Actions 的 PR 验证与 Release 打包均使用 Python 3.11 和仓库内
 
 ## 版本
 
-当前版本：`1.8.0`。发布包的校验和将在 GitHub Release 中提供。
+当前版本：`1.9.0`。发布包的校验和将在 GitHub Release 中提供。
 
 ## 许可
 

@@ -12,6 +12,8 @@ from pathlib import Path
 from validate_direct_lineage_workflow import audit as audit_direct
 from validate_profile_role import load_profile
 from validate_lineage_signal_coverage import audit as audit_lineage_signals
+from validate_project_input_boundary import validate as validate_input_boundary
+from validate_broad_class_completeness import validate as validate_broad_completeness
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -60,6 +62,17 @@ def main() -> int:
     result = audit_direct(root)
     rows: list[dict[str, object]] = []
 
+    if project.get("project_input_boundary_validation_required", False) is True:
+        boundary = validate_input_boundary(root)
+        for index, message in enumerate(boundary.get("errors", []), start=1):
+            rows.append({
+                "priority": 0, "source_run_id": "project", "source_cluster": "__PROJECT_INPUT_BOUNDARY__",
+                "n_observations": 0, "current_state": "provenance_gap", "broad_label": "", "fine_label": "",
+                "required_route": "register_or_repair_project_local_expression_ancestry", "reason": message,
+                "target_scope": "all_query_expression_artifacts", "blocked_until": "project input boundary validation PASS",
+                "gap_code": "PROJECT_INPUT_BOUNDARY_REQUIRED", "entity_type": "project", "entity_id": f"input_boundary_{index}",
+            })
+
     if project.get("continuous_open_world_lineage_scan_required", False) is True:
         signal_audit = audit_lineage_signals(root)
         for index, message in enumerate(signal_audit.get("errors", []), start=1):
@@ -89,6 +102,19 @@ def main() -> int:
                 "target_scope": "whole_tissue_and_all_recluster_cohorts",
                 "blocked_until": "full-feature audit PASS and evidence writeback",
                 "gap_code": "FULL_FEATURE_VALIDATION_REQUIRED", "entity_type": "project", "entity_id": "full_feature_validation",
+            })
+
+    atlas_rows = [row for row in read_tsv(root / "state/route_attempt_registry.tsv") if row.get("route_class") == "global_atlas_broad_audit" and row.get("status") in {"completed", "validated_done", "closed"}]
+    if atlas_rows and project.get("broad_class_completeness_review_required", False) is True:
+        catalog = Path(__file__).resolve().parents[1] / "references/profiles/sheep_ovary_candidate_lineage_catalog.json"
+        completeness = validate_broad_completeness(root, catalog)
+        for index, message in enumerate(completeness.get("errors", []), start=1):
+            rows.append({
+                "priority": 1, "source_run_id": "project", "source_cluster": "__BROAD_CLASS_COMPLETENESS__",
+                "n_observations": 0, "current_state": "post_atlas_review_gap", "broad_label": "", "fine_label": "",
+                "required_route": "broad_class_completeness_review", "reason": message,
+                "target_scope": "present_and_zero_census_broad_lineages", "blocked_until": "query-derived broad completeness validation PASS",
+                "gap_code": "BROAD_CLASS_COMPLETENESS_REQUIRED", "entity_type": "project", "entity_id": f"broad_completeness_{index}",
             })
 
     seen: set[tuple[str, str]] = set()
