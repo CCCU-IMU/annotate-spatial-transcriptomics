@@ -43,7 +43,7 @@ def main() -> int:
         (root / d).mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     config = {
-        "framework_version": "1.9.0", "project_id": args.project_id or root.name, "sample_id": args.sample,
+        "framework_version": "1.9.1", "project_id": args.project_id or root.name, "sample_id": args.sample,
         "input_root": str(args.input_root.resolve()), "project_root": str(root),
         "modality": args.modality, "observation_unit": args.observation_unit,
         "decision_version": "v001", "status": "initialized", "created_at_utc": now,

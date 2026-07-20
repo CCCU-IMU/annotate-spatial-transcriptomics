@@ -25,7 +25,7 @@ class V18ContractTests(unittest.TestCase):
             ], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             config = json.loads((project / "config/project.json").read_text())
-            self.assertEqual(config["framework_version"], "1.9.0")
+            self.assertEqual(config["framework_version"], "1.9.1")
             self.assertTrue(config["continuous_open_world_lineage_scan_required"])
             self.assertEqual(config["lineage_signal_resolution_policy"], "selected_plus_two_higher_available")
             self.assertTrue((project / "state/lineage_signal_boundary_registry.tsv").is_file())
