@@ -31,6 +31,7 @@ Allowed states:
 ## Registries
 
 - `input_snapshot_registry.tsv`: immutable input files, dimensions and hashes.
+- `derived_expression_registry.tsv`: every normalized/SCT/full-feature query-evidence object with project/sample IDs, raw-count and analysis-set hashes, parent artifact, purpose and explicit external-reference status. Cross-project derived expression is forbidden in query-evidence channels.
 - `clustering_decision_ledger.tsv`: every candidate and selection/rejection rationale.
 - `cluster_decision_ledger.tsv`: cluster evidence, decision, confidence and next route.
 - `recluster_cohort_registry.tsv`: immutable broad-class or targeted cohort membership, source boundary, candidate grid, selected resolution, run, terminal status and outcome artifact.
@@ -44,6 +45,7 @@ Allowed states:
 - `annotation_support_registry.tsv`: one validated evidence summary for every released broad class and high-confidence fine label, including positive markers, anti-markers, resolution stability, spatial evidence, route ancestry and validation artifacts. It is frozen into the pre-confirmation HTML and confirmation hash.
 - `lineage_signal_boundary_registry.tsv`: every whole-tissue, broad-class and targeted boundary, its selected/candidate/audited resolutions, exact cluster universe, complete candidate catalog, unexplained-program audit and large-label purity audit.
 - `lineage_signal_registry.tsv`: one row per boundary/resolution/cluster/catalog lineage plus additional unexplained programs. It preserves `watch` signals across boundaries and records explicit supported or refuted closure evidence.
+- `broad_class_completeness_registry.tsv`: post-Atlas, query-derived review of every present broad class and every zero-census default tissue lineage, including full-membership purity, selected-plus-two-higher, large-label embedded programs, spatial morphology, QC/OOD and technical-missingness closure.
 - `workflow_event_registry.tsv`: chronological Chinese-ready input, job, failure, repair, review and writeback events.
 - `annotation_view_registry.tsv`: the validated single `final` annotation census and membership artifact. Legacy view rows may remain as non-release history.
 - `provenance/analysis_scope_policy.json`: immutable full-object versus analysis-set boundary and membership hash.
@@ -69,3 +71,5 @@ No-repeat policy is scoped to a frozen cohort generation. A cell can enter a lat
 Cohort identity is provenance, not biology. A cohort name cannot be copied directly into a biological label. Legacy pool identity follows the same rule. Literature categories that fail query-specific gates are recorded as negative audits, not inserted into the cell ledger. Biological broad labels and retained anatomical-interface/QC/technical/pending states have separate release censuses and evidence cohorts.
 
 A label threshold controls naming, not memory. Positive-family evidence cannot be stored as `absent`. Every `watch`, `candidate` or `supported` lineage signal remains open until it has a supported biological outcome or hash-bound multichannel refutation. Parent/cohort identity never narrows the catalog scanned at a later boundary.
+
+The canonical Oocyte recall cohort and an Oocyte spatial context window are different memberships. The latter is evidence-only and cannot expand the Oocyte census. It may support direct somatic returns or a candidate review.

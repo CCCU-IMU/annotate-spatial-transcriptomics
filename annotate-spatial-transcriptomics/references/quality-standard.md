@@ -31,12 +31,16 @@ Comparable annotation quality requires:
 15. A taxonomy/cohort audit showing that every release label passed its own gate, every unsupported plausible literature class has a negative audit, and no routing/technical state enters biological DEG or marker discovery.
 16. Content-schema validation for every prelabel freeze, cohort outcome, direct return and broad/fine support record. Artifact existence alone, empty evidence and status-only placeholders fail.
 17. Exact observation-level partition closure through global Atlas query coverage, frozen-QC accepted/rejected writeback, defined-label review closure and the final annotation.
+18. A post-Atlas query-derived broad-class completeness audit: present classes pass full-membership expression/spatial/purity review, while every zero-census default tissue lineage has a multichannel negative audit independent of Atlas.
+19. Every expression object used as query evidence is project-local and hash-bound to its raw counts, analysis set and parent artifact; cross-project derived expression is reference-only and explicitly registered.
 
 ## Large-label purity trigger
 
 A convincing cluster-level DEG does not validate every observation in that cluster. Reopen a large direct label when a cell-level lineage backbone is sparse, anti-programs dominate, spatial distribution is too broad for the proposed identity, or a small coherent lineage appears embedded in a resident class. Freeze only the coherent cells; return the remainder directly to a supported broad lineage, a targeted cohort, or QC.
 
 The purity trigger and rare-lineage recall use the same persistent signal ledger. Every cohort remains open to cross-lineage evidence. An embedded lineage that was subthreshold at the whole-tissue pass is a tracked hypothesis, not a rejected class; a coherent recurrence in a subcluster must reopen broad-class construction.
+
+Use observation-level core/support/anti hits and local spatial connected components inside large labels. A coherent program occupying only 1–5% of a parent label is not refuted by a weak parent-cluster average. It enters `watch/candidate` and receives one bounded targeted recall. More graph clusters without improved lineage separation and anti-program clearance do not constitute rescue.
 
 ## Unresolved-fraction trigger
 

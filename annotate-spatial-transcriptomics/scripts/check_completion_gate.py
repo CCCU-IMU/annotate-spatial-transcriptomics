@@ -11,6 +11,8 @@ from validate_annotation_support_registry import validate as validate_support_re
 from dependency_manifest import build as build_dependency_manifest
 from evidence_schema_lib import active_registry_rows
 from validate_lineage_signal_coverage import audit as audit_lineage_signals
+from validate_project_input_boundary import validate as validate_input_boundary
+from validate_broad_class_completeness import validate as validate_broad_completeness
 
 def read(path):
     if not path.exists():return []
@@ -116,6 +118,23 @@ def main():
         lineage_signal=audit_lineage_signals(r)
         (r/"provenance/lineage_signal_coverage_validation.json").write_text(json.dumps(lineage_signal,ensure_ascii=False,indent=2)+"\n")
         if lineage_signal.get("status")!="PASS":errors.append(f"continuous lineage-signal coverage is blocked: {len(lineage_signal.get('errors',[]))} errors, {len(lineage_signal.get('open_signals',[]))} open signals")
+    input_boundary={"status":"NOT_REQUIRED","errors":[]}
+    if project.get("project_input_boundary_validation_required",False) is True:
+        input_boundary=validate_input_boundary(r)
+        (r/"provenance/project_input_boundary_validation.json").write_text(json.dumps(input_boundary,ensure_ascii=False,indent=2)+"\n")
+        if input_boundary.get("status")!="PASS":errors.append(f"project input boundary is blocked: {len(input_boundary.get('errors',[]))} errors")
+    broad_completeness={"status":"NOT_REQUIRED","errors":[]}
+    if project.get("broad_class_completeness_review_required",False) is True:
+        catalog=Path(__file__).resolve().parents[1]/"references/profiles/sheep_ovary_candidate_lineage_catalog.json"
+        if not catalog.is_file():errors.append("broad-class completeness catalog is missing")
+        else:
+            broad_completeness=validate_broad_completeness(r,catalog)
+            (r/"provenance/broad_class_completeness_validation.json").write_text(json.dumps(broad_completeness,ensure_ascii=False,indent=2)+"\n")
+            if broad_completeness.get("status")!="PASS":errors.append(f"broad-class completeness review is blocked: {len(broad_completeness.get('errors',[]))} errors")
+    banksy_rows=[row for row in read(r/"state/clustering_decision_ledger.tsv") if row.get("method","").upper()=="BANKSY"]
+    if banksy_rows and project.get("banksy_broad_resolution_selection_evidence_required_when_applicable",False) is True:
+        banksy_gate=r/"provenance/banksy_broad_resolution_selection_validation.json"
+        if not banksy_gate.is_file() or json.loads(banksy_gate.read_text()).get("status")!="PASS":errors.append("BANKSY initial broad-resolution selection evidence has not passed")
     if preset_requested and not profile_path:errors.append("active strategy preset lacks a resolvable biological profile binding")
     if profile.get("annotation_workflow_policy",{}).get("incident_registry_required",False):
         incident_path=r/"provenance/incidents/incident_registry.tsv"
@@ -178,9 +197,9 @@ def main():
     if support.get("status")!="PASS":errors.append(f"annotation support coverage validation failed: {len(support.get('errors',[]))} errors")
     (r/"provenance/direct_lineage_workflow_audit.json").write_text(json.dumps(multi,ensure_ascii=False,indent=2)+"\n")
     if multi.get("status")!="PASS":errors.append(f"annotation workflow completion is blocked: {len(multi.get('gaps',[]))} gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
-    result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"recluster_cohorts":len(cohorts),"direct_returns":len(returns),"persistent_biological_pools":False,"runs":len(runs),"annotation_workflow_status":multi.get("status"),"lineage_signal_coverage_status":lineage_signal.get("status"),"lineage_signal_boundaries":lineage_signal.get("boundaries",0),"lineage_signal_rows":lineage_signal.get("signal_rows",0),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context}
+    result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"recluster_cohorts":len(cohorts),"direct_returns":len(returns),"persistent_biological_pools":False,"runs":len(runs),"annotation_workflow_status":multi.get("status"),"lineage_signal_coverage_status":lineage_signal.get("status"),"lineage_signal_boundaries":lineage_signal.get("boundaries",0),"lineage_signal_rows":lineage_signal.get("signal_rows",0),"project_input_boundary_status":input_boundary.get("status"),"broad_class_completeness_status":broad_completeness.get("status"),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context}
     completion_path=r/"provenance/completion_gate.json";completion_path.parent.mkdir(parents=True,exist_ok=True);completion_path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
-    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"state/lineage_signal_boundary_registry.tsv",r/"state/lineage_signal_registry.tsv",r/"provenance/lineage_signal_coverage_validation.json",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
+    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"state/lineage_signal_boundary_registry.tsv",r/"state/lineage_signal_registry.tsv",r/"state/derived_expression_registry.tsv",r/"state/broad_class_completeness_registry.tsv",r/"provenance/lineage_signal_coverage_validation.json",r/"provenance/project_input_boundary_validation.json",r/"provenance/broad_class_completeness_validation.json",r/"provenance/banksy_broad_resolution_selection_validation.json",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
     dependencies.extend(path for path in referenced_files(r,clusters+cohorts+returns+read(r/"state/route_attempt_registry.tsv")+read(r/"state/annotation_support_registry.tsv")) if path not in dependencies)
     if profile_path and profile_path.is_file() and profile_path not in dependencies:dependencies.append(profile_path)
     build_dependency_manifest(completion_path,dependencies,{"gate":"completion"})
