@@ -14,6 +14,8 @@ Select a broad clustering adaptively. Before paper context or label interpretati
 
 For every supported initial broad class, freeze one `broad_class_recluster` cohort, run a cohort-specific candidate resolution grid and adjudicate every subcluster. Outcomes are mutually exclusive: high-confidence fine label, direct parent-broad return, direct cross-lineage return, one decision-relevant targeted cohort, or QC/technical retention. A small class may remain broad-only after a recorded underpowered skip.
 
+At whole-tissue, broad-cohort and targeted-cohort boundaries, repeat a complete catalog-by-cluster lineage scan at the selected resolution and the next two higher available resolutions. Do not inherit the parent label as a candidate filter. Preserve subthreshold but coherent evidence as `watch` in `lineage_signal_registry.tsv`; later clustering can strengthen it into a lineage even when the initial broad pass could not. A signal may disappear from the active queue only through a hash-bound supported outcome or multichannel refutation.
+
 ## Round 3: targeted questions
 
 Use a temporary targeted cohort only for an interpretable local mixture, contamination boundary or context-gated identity. RCTD/reference assistance is optional and lower priority. Canonical high plus independent evidence may support fine; moderate supports broad-only; low enters the final QC holdout.

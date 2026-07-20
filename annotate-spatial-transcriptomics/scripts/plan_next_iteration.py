@@ -11,6 +11,7 @@ from pathlib import Path
 
 from validate_direct_lineage_workflow import audit as audit_direct
 from validate_profile_role import load_profile
+from validate_lineage_signal_coverage import audit as audit_lineage_signals
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -58,6 +59,18 @@ def main() -> int:
     cluster_rows = active_decisions(read_tsv(root / "state/cluster_decision_ledger.tsv"))
     result = audit_direct(root)
     rows: list[dict[str, object]] = []
+
+    if project.get("continuous_open_world_lineage_scan_required", False) is True:
+        signal_audit = audit_lineage_signals(root)
+        for index, message in enumerate(signal_audit.get("errors", []), start=1):
+            rows.append({
+                "priority": 0, "source_run_id": "project", "source_cluster": "__LINEAGE_SIGNAL_COVERAGE__",
+                "n_observations": 0, "current_state": "lineage_signal_gap", "broad_label": "", "fine_label": "",
+                "required_route": "continuous_open_world_lineage_scan", "reason": message,
+                "target_scope": "whole_tissue_and_every_recluster_boundary",
+                "blocked_until": "full catalog-by-cluster scan and explicit signal resolution",
+                "gap_code": "LINEAGE_SIGNAL_COVERAGE_REQUIRED", "entity_type": "lineage_signal", "entity_id": f"signal_gap_{index}",
+            })
 
     if profile.get("final_validation"):
         full_feature = root / "provenance/full_feature_validation.json"

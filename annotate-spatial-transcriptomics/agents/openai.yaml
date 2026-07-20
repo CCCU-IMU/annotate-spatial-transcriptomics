@@ -1,4 +1,4 @@
 interface:
   display_name: "Evidence-first Transcriptomics Annotation"
-  short_description: "Evidence-first annotation with all-cell Atlas audit"
-  default_prompt: "Use $annotate-spatial-transcriptomics to annotate each sample from label-blind broad evidence through direct-lineage cohorts, one calibrated all-cell Atlas concordance and OOD audit, QC broad rescue, discrepancy review, and audited release."
+  short_description: "Open-world annotation with persistent lineage-signal memory"
+  default_prompt: "Use $annotate-spatial-transcriptomics to annotate each sample with label-blind evidence, continuous full-catalog lineage scans at whole-tissue and every reclustering boundary, persistent weak-signal review, direct-lineage cohorts, one calibrated all-cell Atlas concordance/OOD audit, and an audited release."
