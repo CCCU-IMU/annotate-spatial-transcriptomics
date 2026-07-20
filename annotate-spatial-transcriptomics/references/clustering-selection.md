@@ -33,6 +33,10 @@ Use `scripts/rank_cohort_resolutions.py --question-mode broad_purity_audit|targe
 
 Neighborhood size changes spatial smoothing and cannot be treated as another resolution value. Compare resolution within each k, then compare plausible candidates across k. High k may merge small anatomical structures; low k may fragment continuous tissue.
 
+When BANKSY memberships are the requested whole-tissue starting point, freeze one initial broad-annotation resolution only after every formal resolution has a query-derived broad-evidence review. Rank preservation of supported/default broad lineages and large-label purity first; then marker/DEG coherence, spatial morphology and adjacent-resolution migration; penalize technical fragmentation. Cluster count, UMAP appearance and a target number of clusters are shortlist aids only. A resolution with fewer clusters is preferred only when broad evidence is otherwise equivalent.
+
+Record weak coherent programs seen only at a rejected or higher resolution in the continuous signal ledger. If no single resolution separates every lineage, choose the most defensible broad-resolution anchor and rely on open-world broad-cohort reclustering/direct cross-lineage return; never silently close the missing lineage.
+
 ## Seurat/R-first
 
 When a full-feature Seurat RDS exists, make Seurat the default whole-tissue and cohort-reclustering backbone. Use SCTransform for graph construction when appropriate, retain the full RNA/Spatial counts for marker validation, and compare a coarse broad-pass resolution grid rather than inheriting a BANKSY or Scanpy resolution. Existing Seurat grids may be reused after membership/hash and artifact validation, but historical biological labels remain blinded.

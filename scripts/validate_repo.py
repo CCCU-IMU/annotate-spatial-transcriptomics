@@ -56,6 +56,13 @@ def main() -> int:
         SKILL / "scripts" / "migrate_project_v1_6_1_to_v1_7_0.py",
         SKILL / "scripts" / "migrate_project_v1_7_to_v1_8.py",
         SKILL / "scripts" / "validate_lineage_signal_coverage.py",
+        SKILL / "scripts" / "register_derived_expression_artifact.py",
+        SKILL / "scripts" / "validate_project_input_boundary.py",
+        SKILL / "scripts" / "validate_banksy_broad_resolution_selection.py",
+        SKILL / "scripts" / "validate_broad_class_completeness.py",
+        SKILL / "scripts" / "screen_embedded_lineage_components.py",
+        SKILL / "scripts" / "evaluate_graph_sensitivity.py",
+        SKILL / "scripts" / "validate_oocyte_context_boundary.py",
         SKILL / "scripts" / "build_final_annotation.py",
         SKILL / "scripts" / "validate_profile_role.py",
         SKILL / "scripts" / "validate_resolution_grid.py",
@@ -142,6 +149,8 @@ def main() -> int:
         problems.append("missing v1.7 active-contract regression tests")
     if not (ROOT / "tests/test_v1_8_contract.py").is_file():
         problems.append("missing v1.8 active-contract regression tests")
+    if not (ROOT / "tests/test_v1_9_contract.py").is_file():
+        problems.append("missing v1.9 broad-completeness regression tests")
     if not (ROOT / "tests/test_legacy_migration_contract.py").is_file():
         problems.append("missing legacy migration regression tests")
 

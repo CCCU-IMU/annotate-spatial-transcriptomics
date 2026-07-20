@@ -59,6 +59,13 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 - A large or spatially diffuse terminal interface and a large first-pass direct label without cell-level purity/anchor review both block completion, even when cluster-level DEG or RCTD artifacts exist.
 - Continuous lineage-signal coverage fixtures must fail when any whole-tissue/broad/targeted boundary omits a catalog-by-cluster product, when selected-plus-two-higher resolution coverage is incomplete, when an unexplained-program audit is missing, or when a positive-family signal is written as `absent`.
 - A lineage below the initial naming threshold must remain `watch`; a later cross-lineage subcluster can support and reconstruct that broad class. Parent cohort labels may never reduce the candidate catalog.
+- Project-boundary fixtures must reject project A derived expression as project B query evidence while allowing an explicitly registered Atlas/reference artifact.
+- BANKSY broad-resolution fixtures must fail when selection is based on cluster count or omits full-catalog recall, zero-census and large-cluster purity review.
+- Large-label dilution fixtures must preserve a spatially coherent 3–5% epithelial program as `candidate` even when its parent-cluster average is weak.
+- Zero-census fixtures must block completion when a default sheep-ovary broad lineage lacks a query-derived multichannel negative audit; Atlas non-mapping is insufficient.
+- Oocyte context fixtures must prevent context-only observations from entering the Oocyte census and must emit a somatic/pregranulosa candidate when appropriate evidence exists.
+- Graph-sensitivity fixtures must reject a claimed rescue when only cluster count increases without improved core/support separation, anti-program clearance and spatial coherence.
+- Cross-lineage fixtures must allow a supported epithelial subcluster inside a Stromal parent to create a direct Epithelial/mesothelial broad return.
 - The pre-confirmation report must fail under framework v1.8 when any released broad/fine label lacks an all-analysis-set canonical-marker spatial panel, when its denominator differs from the analysis set, or when the panel was label-filtered.
 - One final annotation covers the analysis set exactly once; the full-object ledger separately accounts for initial QC exclusions. Broad labels meet moderate-or-higher confidence and fine labels meet high confidence.
 - If an analysis-scope policy exists, changing even one cell from `excluded_initial_qc` to `analysis_set`, leaking an excluded label into any view, or registering a stale membership hash must fail state validation. A report-only refresh must preserve pre-adjudicated view fields.

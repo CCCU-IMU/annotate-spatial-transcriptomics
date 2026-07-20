@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.0 — 2026-07-21
+
+- Added a fail-closed project-local derived-expression registry and validator binding every query evidence object to project/sample, raw-count hash, analysis-set hash, parent artifact and purpose; cross-project derived expression is restricted to explicit Atlas/reference channels.
+- Added BANKSY whole-tissue broad-resolution selection evidence based on complete lineage recall, zero-census review, large-cluster purity, DEG/marker coherence, spatial morphology and adjacent-resolution migration; cluster count is shortlist-only.
+- Added post-Atlas query-derived broad-class completeness validation for both present labels and zero-census default tissue lineages; Atlas cannot establish absence.
+- Added observation-level embedded-lineage spatial component screening to retain coherent 1–5% programs hidden inside large labels.
+- Separated canonical Oocyte recall membership from evidence-only spatial context and added multichannel pregranulosa safeguards.
+- Added bounded graph-sensitivity adjudication in which more clusters alone cannot rescue or name a lineage.
+- Added regression fixtures for cross-project expression leakage, weak-signal memory, large-label dilution, zero-census review, graph sensitivity, Oocyte context and open-world cross-lineage reconstruction.
+
 ## 1.8.0 — 2026-07-20
 
 - Separated biological naming thresholds from signal memory: subthreshold but coherent lineage evidence is retained as `watch` rather than silently treated as absence.
