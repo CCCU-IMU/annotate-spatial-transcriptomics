@@ -41,6 +41,13 @@
             "type": "array", "uniqueItems": true,
             "items": {"type": "string", "minLength": 1}
           },
+          "absolute_family_support_count": {"type": "integer", "minimum": 0},
+          "absolute_supported_families": {
+            "type": "array", "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "absolute_detection_evidence": {"$ref": "#/$defs/artifact"},
+          "comparative_score_role": {"enum": ["comparative_not_absence_gate"]},
           "anti_program_burden": {"type": "number", "minimum": 0},
           "contradiction_count": {"type": "integer", "minimum": 0},
           "evidence_artifacts": {

@@ -40,7 +40,7 @@ class V17ContractTests(unittest.TestCase):
             ], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             project = json.loads((root / "config/project.json").read_text())
-            self.assertEqual(project["framework_version"], "1.9.2")
+            self.assertEqual(project["framework_version"], "1.10.0")
             self.assertEqual(project["global_atlas_mapping_scope"], "complete_analysis_set")
             cluster_header = (root / "state/cluster_decision_ledger.tsv").read_text().splitlines()[0]
             route_header = (root / "state/route_attempt_registry.tsv").read_text().splitlines()[0]
@@ -68,6 +68,8 @@ class V17ContractTests(unittest.TestCase):
                 "lineage_hypotheses": [
                     {"candidate_id": "granulosa", "candidate_broad_lineage": "Granulosa", "eligible": True, "program_score": 2.0,
                      "positive_marker_family_count": 2, "positive_marker_families": ["AMH-HSD17B1", "SERPINE2-GSTA1"],
+                     "absolute_family_support_count": 2, "absolute_supported_families": ["AMH-HSD17B1", "SERPINE2-GSTA1"],
+                     "absolute_detection_evidence": artifact(positive), "comparative_score_role": "comparative_not_absence_gate",
                      "anti_program_burden": 0.0, "contradiction_count": 0, "evidence_artifacts": [artifact(positive)]},
                     {"candidate_id": "stromal_mesenchymal", "candidate_broad_lineage": "Stromal/mesenchymal", "eligible": True, "program_score": 0.5,
                      "positive_marker_family_count": 1, "positive_marker_families": ["DCN-LUM"],

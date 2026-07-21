@@ -26,6 +26,16 @@ def validate(root: Path, ledger_path: Path) -> dict:
     schema = Path(__file__).resolve().parents[1] / "schemas/prelabel_broad_evidence.schema.json"
     errors: list[str] = []
     validated = 0
+    project_path = root / "config/project.json"
+    try:
+        framework = json.loads(project_path.read_text(encoding="utf-8")).get("framework_version", "0")
+    except (OSError, json.JSONDecodeError):
+        framework = "0"
+    try:
+        framework_tuple = tuple(int(part) for part in str(framework).split(".")[:3])
+    except ValueError:
+        framework_tuple = (0,)
+    absolute_broad_contract = framework_tuple >= (1, 10, 0)
     for line, row in enumerate(rows, 2):
         cluster = row.get("source_cluster", "").strip()
         artifact_value = row.get("prelabel_evidence_artifact", "").strip()
@@ -89,6 +99,22 @@ def validate(root: Path, ledger_path: Path) -> dict:
                 errors.append(f"cluster row {line} assigned broad label without a positive winner margin")
             if int(winning.get("positive_marker_family_count", 0)) < 2:
                 errors.append(f"cluster row {line} assigned broad label from fewer than two marker families")
+            if absolute_broad_contract:
+                absolute_families = winning.get("absolute_supported_families", [])
+                if int(winning.get("absolute_family_support_count", 0)) < 2 or len(absolute_families) < 2:
+                    errors.append(f"cluster row {line} assigned broad label without two absolute-expression-supported families")
+                if int(winning.get("absolute_family_support_count", 0)) != len(absolute_families):
+                    errors.append(f"cluster row {line} absolute family support count is inconsistent")
+                if winning.get("comparative_score_role") != "comparative_not_absence_gate":
+                    errors.append(f"cluster row {line} does not declare centered/DEG scores as comparative-only")
+                absolute = winning.get("absolute_detection_evidence")
+                if not isinstance(absolute, dict):
+                    errors.append(f"cluster row {line} lacks absolute detection/pseudobulk evidence")
+                else:
+                    _, absolute_errors = validate_evidence_artifact(
+                        root, absolute, f"cluster row {line} absolute broad-presence evidence"
+                    )
+                    errors.extend(absolute_errors)
             if int(winning.get("contradiction_count", 0)) > 0:
                 errors.append(f"cluster row {line} assigned broad label despite unresolved contradictions")
         if row.get("prelabel_winner", "") != winner or row.get("prelabel_runner_up", "") != runner_up:

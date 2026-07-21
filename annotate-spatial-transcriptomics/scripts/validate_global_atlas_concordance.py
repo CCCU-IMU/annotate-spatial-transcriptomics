@@ -57,8 +57,13 @@ def main() -> int:
         errors.append("all-cell concordance does not exactly contain unique analysis-set cells")
     if any(row.get("comparison_status") == "qc_writeback_candidate" and row.get("atlas_tier") not in {"high", "moderate_only"} for row in all_cells):
         errors.append("QC writeback contains a below-moderate Atlas result")
-    if any(row.get("comparison_status") == "qc_writeback_candidate" and row.get("consensus_pass") != "true" for row in all_cells):
-        errors.append("QC writeback bypasses multichannel consensus")
+    policy = manifest.get("qc_writeback_policy", "legacy_multichannel")
+    if policy not in {"state_aware_calibrated", "legacy_multichannel"}:
+        errors.append(f"unknown QC writeback policy: {policy}")
+    if policy == "legacy_multichannel" and any(row.get("comparison_status") == "qc_writeback_candidate" and row.get("consensus_pass") != "true" for row in all_cells):
+        errors.append("legacy QC writeback bypasses multichannel consensus")
+    if policy == "state_aware_calibrated" and any(row.get("comparison_status") == "qc_writeback_candidate" and row.get("atlas_scope_pass") != "true" for row in all_cells):
+        errors.append("state-aware QC writeback contains a profile-excluded Atlas class")
     if any(row.get("comparison_status") == "qc_writeback_candidate" and (row.get("out_of_distribution") == "true" or row.get("ontology_conflict") == "true") for row in all_cells):
         errors.append("QC writeback contains OOD or ontology-conflicted observations")
     queue = read_tsv(Path(artifacts.get("discrepancy_review_queue", {}).get("path", "")))

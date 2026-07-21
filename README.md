@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcrip
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcriptomics/main/install.sh \
-  | bash -s -- --ref v1.9.2
+  | bash -s -- --ref v1.10.0
 ```
 
 克隆后本地安装（适合内网或需要审查源码的环境）：
@@ -188,9 +188,9 @@ runtime=可用的 R/Python 环境与调度资源
 | 成人卵巢方法学边界 | 成人卵巢单细胞专家综述（AJOG, 2025, DOI 10.1016/j.ajog.2024.05.046） | 强调取样/过滤造成的谱系缺失、表面上皮难捕获、单 marker 不可靠和“无限亚型”风险，支持以可靠浅层大类为终点。 |
 | 谱系专项证据 | [羊巨噬细胞–颗粒细胞互作（FASEB J, 2026）](https://pubmed.ncbi.nlm.nih.gov/41801067/)、[人卵泡 theca–stroma 连续轨迹](https://pubmed.ncbi.nlm.nih.gov/36599970/)、[人卵巢空间图谱](https://pubmed.ncbi.nlm.nih.gov/38578993/) | 用于解决 macrophage、theca/stroma、血管/壁细胞和空间界面等竞争假设；专项论文不能越过当前样本的 marker、anti-marker 与空间门。 |
 
-发布命名遵循“最浅且足够”的原则：`Stromal/mesenchymal` 是允许的诚实大类；只有形成完整 `STAR/CYP11A1/CYP17A1/HSD3B/NR5A1/LHCGR` 甾体生成或雄激素程序时才单列 `Theca`，仅有 `ALPL/PTCH1`、胶原或收缩信号的卵泡壁细胞直接回归其支持的基质/壁细胞大类；`Smooth muscle` 需要 `MYH11/MYL9/TAGLN/ACTA2/CNN1` 成熟收缩骨架；`Pericyte/mural` 需要稳定的壁细胞骨架而非单个 `RGS5`；`Oocyte` 必须通过多基因、anti-program、局灶空间形态和 cellbin 数量解释四重门。颗粒细胞仅在 AMH/IHH 等完整、稳定且有文献支持的功能程序通过时使用“早期/未充分分化”等浅层亚型，否则保留 `Granulosa` 大类。血管细胞默认发布为 `Vascular/endothelial`，只有如 `CCL21/LYVE1/PROX1/FLT4` 这样完整且空间相符的程序才发布淋巴内皮亚型。
+发布命名遵循“最浅且足够”的原则：`Stromal/mesenchymal` 是允许的诚实大类；只有形成完整 `STAR/CYP11A1/CYP17A1/HSD3B/NR5A1/LHCGR` 甾体生成或雄激素程序时才单列 `Theca`，仅有 `ALPL/PTCH1`、胶原或收缩信号的卵泡壁细胞直接回归其支持的基质/壁细胞大类；`Smooth muscle` 需要 `MYH11/MYL9/TAGLN/ACTA2/CNN1` 成熟收缩骨架。内皮和周细胞统一发布为 `Vascular-associated` 大类，`Blood endothelial`、`Lymphatic endothelial`、`Pericyte/mural` 作为可选高置信亚型；成熟平滑肌仍为独立大类。`Oocyte` 先以 strict seed/空间对象判定通过簇，再纳入该簇全部 canonical cohort 成员，不能用 seed 或 object ID 逐细胞缩小最终集合。颗粒细胞仅在完整、稳定且有文献支持的功能程序通过时使用浅层亚型，否则保留 `Granulosa` 大类。
 
-推荐把 `Granulosa`、`Stromal/mesenchymal`、`Vascular/endothelial`、`Immune`、`Epithelial/mesothelial` 和严格门控的 `Oocyte` 作为候选审查骨架，但审查不止这些类型。Skill 内置机器可读的羊卵巢候选谱系目录，逐样本覆盖卵泡/生殖系、甾体生成、基质–间充质–收缩/壁细胞、血管/淋巴、免疫、上皮/间皮及神经胶质/神经内分泌边界；`Theca`、`Smooth muscle`、`Pericyte/mural`、`Mesenchymal progenitor-like`、`Luteal steroidogenic`、淋巴内皮和 `Neural/Schwann/glia` 等只有在各自证据门通过后才发布。目录不是答案表，也不穷尽当前样本：每个候选可以得到阴性结论，目录外的相干多基因程序则必须新增审查。不要使用 `Theca/follicular wall` 或 `Stromal/perivascular` 作为方便的最终兜底大类。
+推荐把 `Granulosa`、`Stromal/mesenchymal`、`Vascular-associated`、`Immune`、`Epithelial/mesothelial` 和严格门控的 `Oocyte` 作为候选审查骨架，但审查不止这些类型。Skill 内置机器可读的羊卵巢候选谱系目录，逐样本覆盖卵泡/生殖系、甾体生成、基质–间充质–收缩/壁细胞、血管/淋巴、免疫、上皮/间皮及神经胶质/神经内分泌边界；`Theca`、`Smooth muscle`、`Mesenchymal progenitor-like`、`Luteal steroidogenic` 和 `Neural/Schwann/glia` 等只有在各自证据门通过后才作为大类发布，周细胞和内皮谱系则保留在共享血管大类下的可选亚型。目录不是答案表，也不穷尽当前样本：每个候选可以得到阴性结论，目录外的相干多基因程序则必须新增审查。不要使用 `Theca/follicular wall` 或 `Stromal/perivascular` 作为方便的最终兜底大类。
 
 Agent 通过 `init_open_world_lineage_audit.py` 从当前 cluster ledger 和目录生成完整审查骨架，填入各边界的全基因 DEG、anti-marker、相邻分辨率稳定性与空间证据后，再由 `validate_open_world_lineage_audit.py` 校验。目录、审查源文件和 biological profile 均参与哈希绑定；只审查少数示例、漏掉阴性结论或在完成门后修改目录都会使发布失效。
 
@@ -380,7 +380,7 @@ GitHub Actions 的 PR 验证与 Release 打包均使用 Python 3.11 和仓库内
 
 ## 版本
 
-当前版本：`1.9.2`。发布包的校验和将在 GitHub Release 中提供。
+当前版本：`1.10.0`。发布包的校验和将在 GitHub Release 中提供。
 
 ## 许可
 

@@ -72,11 +72,11 @@
     },
     {
       "candidate_id": "pericyte_mural",
-      "family": "stromal_contractile_mural",
-      "release_level": "evidence_dependent_broad_candidate",
+      "family": "vascular",
+      "release_level": "evidence_dependent_fine_candidate_under_vascular_associated",
       "profile_program": "lineages.pericyte_mural",
       "review_required": true,
-      "release_rule": "Require a coherent RGS5/PDGFRB/CSPG4/NOTCH3/MCAM mural program and vascular adjacency, not ACTA2 or proximity alone."
+      "release_rule": "Require a coherent RGS5/PDGFRB/CSPG4/NOTCH3/MCAM mural program and vascular adjacency, not ACTA2 or proximity alone; release broad Vascular-associated with optional fine Pericyte/mural."
     },
     {
       "candidate_id": "vascular_endothelial",
@@ -84,7 +84,7 @@
       "release_level": "default_broad_candidate",
       "profile_program": "lineages.blood_endothelial",
       "review_required": true,
-      "release_rule": "Release the broad vascular/endothelial parent when a coherent endothelial backbone and branching morphology pass."
+      "release_rule": "Release the broad Vascular-associated parent when a coherent endothelial backbone and branching morphology pass; preserve Blood endothelial as an optional fine identity."
     },
     {
       "candidate_id": "lymphatic_endothelial",
@@ -92,7 +92,7 @@
       "release_level": "evidence_dependent_fine_or_standalone_candidate",
       "profile_program": "lineages.lymphatic_endothelial",
       "review_required": true,
-      "release_rule": "Require both an endothelial backbone and coherent PROX1/FLT4/MMRN1/LYVE1/PDPN/CCL21 support; otherwise retain Vascular/endothelial."
+      "release_rule": "Require both an endothelial backbone and coherent PROX1/FLT4/MMRN1/LYVE1/PDPN/CCL21 support; otherwise retain broad Vascular-associated."
     },
     {
       "candidate_id": "immune",
@@ -131,7 +131,7 @@
     "granulosa": ["cumulus-like", "mural/estrogenic", "luteinizing"],
     "luteal_steroidogenic": ["granulosa-lutein-like", "theca-lutein-like"],
     "immune": ["macrophage/myeloid", "T/NK", "B/plasma", "granulocyte"],
-    "vascular_endothelial": ["blood endothelial", "lymphatic endothelial"],
+    "vascular_associated": ["blood endothelial", "lymphatic endothelial", "pericyte/mural"],
     "epithelial_mesothelial": ["surface epithelial", "mesothelial-like"]
   },
   "literature_basis": [

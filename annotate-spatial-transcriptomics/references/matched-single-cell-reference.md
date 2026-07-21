@@ -31,8 +31,8 @@ The matched reference is normally the strongest **external** channel, but it doe
 
 ## Harmonization rules
 
-- Map detailed reference labels to a shallow candidate broad vocabulary before transfer. Many single-cell immune labels may map to `Immune`; blood and lymphatic endothelial labels may map to `Vascular/endothelial` while retaining subtype candidates.
-- Keep evidence-dependent lineages such as `Theca`, `Smooth muscle`, `Pericyte/mural`, `Neural/Schwann` and strict `Oocyte` behind their tissue-profile gates even when the reference contains those names.
+- Map detailed reference labels to a shallow candidate broad vocabulary before transfer. Many single-cell immune labels may map to `Immune`; blood endothelial, lymphatic endothelial and pericyte/mural labels map to the release broad parent `Vascular-associated` while retaining their fine candidates.
+- Keep evidence-dependent lineages such as `Theca`, `Smooth muscle`, `Neural/Schwann` and strict `Oocyte` behind their tissue-profile gates even when the reference contains those names. Pericyte/mural remains evidence-gated as a fine identity under `Vascular-associated`, not as a separate release broad class.
 - A combined source label such as `APCs&B` has a broad-only ceiling until APC and B-cell programs separate in the current query.
 - A source label whose displayed markers do not support its name is a review hypothesis, not a transferable identity. For example, neuronal genes without `CHGA/CHGB/SYP/SCG/INSM1` do not establish a neuroendocrine lineage.
 - Preserve absent reference classes as negative audits. Do not lower a query gate to reproduce the reference taxonomy.
@@ -42,14 +42,15 @@ The matched reference is normally the strongest **external** channel, but it doe
 
 Build depth-matched held-out reference cells only to diagnose reference separability. Final rescue thresholds require disjoint held-out current-query anchors with frozen truth, target membership and an origin manifest. Derive score and margin thresholds per route and candidate broad class from those query-like anchors. Reference self-classification is never an acceptable final calibration target.
 
-For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel **only after every broad/targeted cohort is terminal and residual QC is frozen**. Run one broad-only mapping over the complete analysis set. Frozen QC is eligible for calibrated multichannel broad rescue; defined broad/fine cells use the same mapping only for concordance challenge. A dotplot-only artifact remains marker evidence and cannot support all-cell mapping. Otherwise GSE233801 is the primary public adult-sheep somatic Atlas. It does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
+For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel **only after every broad/targeted cohort is terminal and residual QC is frozen**. Run one broad-only mapping over the complete analysis set. Unlabeled frozen QC is eligible for calibrated broad-only rescue; defined broad/fine cells use the same mapping only for concordance challenge. A dotplot-only artifact remains marker evidence and cannot support all-cell mapping. Otherwise GSE233801 is the primary public adult-sheep somatic Atlas. It does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
 
-The default crosswalk ceiling is `broad_only_after_calibration`. A reference prediction may return a broad label only when:
+The default crosswalk ceiling is `broad_only_after_calibration`. A calibrated Atlas prediction may return a broad label to an unlabeled frozen-QC observation only when:
 
 - its calibrated tier is moderate-or-higher;
-- current-query marker/anti-marker evidence supports the same broad class;
-- at least one independent query/internal-anchor or observed-density spatial channel agrees; and
-- the result does not violate a rare/context-specific tissue gate.
+- it is not OOD or ontology-conflicted;
+- the candidate is within the declared Atlas scope and does not violate a rare/context-specific tissue gate.
+
+Current-query marker/anti-marker, internal-anchor and spatial evidence remain mandatory audit columns and can trigger a group-level veto/review when they show coherent contradiction. They are not repeated as per-cell prerequisites after the Atlas tier has already been calibrated on disjoint query-like anchors.
 
 Transferred observations set `fine_anchor_eligible=false`. A fine label requires current-query full-feature evidence, cohort-specific stability and morphology; reference agreement is supporting evidence only.
 

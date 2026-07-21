@@ -323,7 +323,7 @@ def main() -> None:
         "heldout_origin": origin["heldout_origin"],
         "calibration_origin_manifest": str(args.calibration_origin_manifest.resolve()),
         "calibration_semantics": "Nested cumulative thresholds: high is a subset of moderate-or-higher; mapping_tier uses canonical mutually exclusive high/moderate_only/low_reject values.",
-        "warning": "High and moderate_only are mutually exclusive output tiers, but every high row also meets the cumulative moderate-or-higher gate. Neither tier authorizes writeback without independent marker/anti-marker and spatial or internal-anchor support.",
+        "warning": "High and moderate_only are mutually exclusive output tiers, but every high row also meets the cumulative moderate-or-higher gate. For an unlabeled frozen-QC observation, state-aware broad-only writeback additionally requires non-OOD, ontology-compatible and profile-scope-safe status; marker/spatial evidence remains an audit and coherent-group challenge.",
     }
     if sum(counts.values()) != len(query):
         raise SystemExit("tier counts do not partition query")

@@ -16,7 +16,7 @@ Targeted high-level sheep studies answer narrower questions. A 2026 *FASEB Journ
 
 Cross-species studies may clarify boundaries but do not override the query. Human theca/stroma work (PMID 36599970) supports a progenitor-to-structural/perifollicular/androgenic continuum. Human morphologically guided spatial work (PMID 38578993) emphasizes oocyte, theca and granulosa programs and cortex/medulla variation while reporting only four major scRNA-seq types. These differences demonstrate why missing literature labels must be audited, not manufactured.
 
-The cross-study adult sheep candidate backbone is therefore `Granulosa`, `Stromal/mesenchymal`, `Vascular/endothelial`, `Immune`, `Epithelial/mesothelial` and strict `Oocyte`. `profiles/sheep_ovary_candidate_lineage_catalog.json` expands the mandatory boundary audit to evidence-, stage- and anatomy-dependent alternatives including steroidogenic Theca/luteal, mature Smooth muscle, Pericyte/mural, Mesenchymal progenitor-like, lymphatic endothelial and neural/glial/neuroendocrine programs. It is non-exhaustive and is still an audit surface, not a requirement that every label appear.
+The cross-study adult sheep candidate backbone is therefore `Granulosa`, `Stromal/mesenchymal`, `Vascular-associated`, `Immune`, `Epithelial/mesothelial` and strict `Oocyte`. `Vascular-associated` is the release umbrella for endothelial and mural/pericyte vascular cells; it preserves `Blood endothelial`, `Lymphatic endothelial` and `Pericyte/mural` as optional fine children. This follows the 2025 *Science* ovary atlas statement that endothelial cells and pericytes form the ovarian vasculature, while keeping mature Smooth muscle separate. `profiles/sheep_ovary_candidate_lineage_catalog.json` expands the mandatory boundary audit to evidence-, stage- and anatomy-dependent alternatives including steroidogenic Theca/luteal, mature Smooth muscle, Mesenchymal progenitor-like, lymphatic endothelial, pericyte/mural and neural/glial/neuroendocrine programs. It is non-exhaustive and is still an audit surface, not a requirement that every label appear.
 
 ## 2. Computational cohorts and QC state
 
@@ -38,7 +38,7 @@ Release labels describe biology and require query-specific evidence. Use the fol
 
 - `Granulosa`
 - `Stromal/mesenchymal`
-- `Vascular/endothelial`
+- `Vascular-associated`
 - `Immune`
 - `Epithelial/mesothelial`
 - `Oocyte`, only after the strict context gate
@@ -47,13 +47,13 @@ Release labels describe biology and require query-specific evidence. Use the fol
 
 - `Theca`: reserve for a coherent steroidogenic/androgenic theca program with follicular outer-ring morphology. Do not publish `Theca/follicular wall` as a broad label; structural follicular wall may be stroma, smooth muscle, pericyte or interface.
 - `Smooth muscle`: publish when a mature contractile backbone, stable separation and coherent vessel-wall/hilar/structural tracks pass. This is not synonymous with ACTA2/TAGLN-positive stroma.
-- `Pericyte/mural`: publish when the RGS5/PDGFRB/CSPG4/NOTCH3/MCAM backbone separates it from endothelial, smooth muscle and generic stroma. Otherwise retain a mural state tag under `Stromal/mesenchymal`.
+- `Pericyte/mural` is not a standalone broad class: publish it as an optional fine child of `Vascular-associated` when the RGS5/PDGFRB/CSPG4/NOTCH3/MCAM backbone separates it from endothelial, smooth muscle and generic stroma. Otherwise retain broad `Vascular-associated` or, when vascular identity itself is unsupported, a mural state tag under the supported resident parent.
 - `Mesenchymal progenitor-like`: publish separately from `Stromal/mesenchymal` only when a stable S100A4/progenitor-like program and morphology pass the profile gate. Absence after a documented negative audit is valid.
 - `Luteal steroidogenic`: requires stage/context plus a coherent corpus-luteum-like spatial structure; STAR/CYP11A1 alone is insufficient.
 - `Neural/Schwann`: requires a coherent glial program and nerve-track morphology.
 - `Neuroendocrine`: requires a secretory-neuroendocrine core (`CHGA/CHGB/SYP/SCG/INSM1`), neuronal support and coherent rare-focus morphology. `DLG2/RBFOX1/TENM3` alone remains a state tag under the resident class.
 
-The final label must be the least specific honest name. For example, use `Vascular/endothelial` when blood versus lymphatic separation is ambiguous; use `Immune` when myeloid versus lymphoid support is too shallow; use `Stromal/mesenchymal` when a standalone Mesenchymal class is unsupported.
+The final label must be the least specific honest name. For example, use `Vascular-associated` when endothelial versus pericyte/mural or blood versus lymphatic separation is ambiguous; use `Immune` when myeloid versus lymphoid support is too shallow; use `Stromal/mesenchymal` when a standalone Mesenchymal class is unsupported.
 
 ### Non-biological retained states
 
@@ -70,7 +70,7 @@ Report them in a separate retained-state census and spatial layer. They remain m
 
 Before a broad label is frozen:
 
-1. Demonstrate at least two independent positive marker families on the full-feature object.
+1. Demonstrate at least two explicit independent positive marker families on the full-feature object. Validate the profile contains those families before applying the gate. Use absolute detection/prevalence and pseudobulk for broad presence; centered module scores and one-vs-rest DEG cannot reject a parent program merely because it is shared by several abundant clusters.
 2. Quantify major anti-program leakage at observation level, not only cluster-average DEG.
 3. Verify spatial morphology when coordinates exist.
 4. Review stability across adjacent whole-tissue or cohort resolutions.
@@ -85,7 +85,7 @@ The forward test established reusable failure checks:
 
 - A broad `Theca/follicular wall` bucket can absorb mature smooth muscle, generic ECM stroma, granulosa and endothelial cells. Reopen it with separate steroidogenic, contractile, stromal, granulosa and endothelial programs.
 - A strong mature-contractile population with ring/track morphology can be hidden inside Theca or Stroma. The smooth-muscle audit is mandatory even when no initial cluster carries that name.
-- A stromal cohort containing CDH5/PECAM1/CLDN5/PTPRB/ROBO4/MMRN2-positive branching tracks must return those observations directly to `Vascular/endothelial` after evidence review.
+- A stromal cohort containing CDH5/PECAM1/CLDN5/PTPRB/ROBO4/MMRN2-positive branching tracks must return those observations directly to broad `Vascular-associated`, with `Blood endothelial` as a fine label when supported.
 - Do not create Mesenchymal or Pericyte merely because a reference lists them. A machine-readable negative audit is an acceptable result.
 - Zona or other oocyte-adjacent RNA in granulosa does not establish Oocyte. Report cellbin/spot counts separately from inferred biological objects.
 - A query cluster with vascular-adjacent markers but dominant granulosa lineage support may remain Granulosa with a spatial/state tag; top DEG alone must not switch its lineage.

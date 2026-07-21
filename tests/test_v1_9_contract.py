@@ -36,7 +36,7 @@ class V19ContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             project = self.init_project(temp)
             config = json.loads((project / "config/project.json").read_text())
-            self.assertEqual(config["framework_version"], "1.9.2")
+            self.assertEqual(config["framework_version"], "1.10.0")
             self.assertTrue(config["project_input_boundary_validation_required"])
             self.assertTrue(config["broad_class_completeness_review_required"])
             self.assertTrue((project / "state/derived_expression_registry.tsv").is_file())
