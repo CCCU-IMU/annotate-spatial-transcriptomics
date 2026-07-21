@@ -16,7 +16,7 @@ Existing whole-tissue or cohort clustering is reusable only when source-object a
 
 ## 3. Whole-tissue broad pass
 
-When no valid clustering is reusable, run SCTransform, PCA and an adaptive Seurat resolution grid. Sheep ovary uses the formal grid `0.1,0.2,0.3,0.4,0.6`; never lower below 0.1 to compensate for a defective graph. Other tissues use a declared context-appropriate grid.
+When no valid clustering is reusable, run SCTransform, PCA and an adaptive Seurat resolution grid. Sheep ovary fresh R-first graphs use `0.1,0.2,0.3,0.4,0.6`; never lower below 0.1 to compensate for a defective graph. A reusable BANKSY input retains its own complete bound resolution grid for the initial broad choice. Other tissues use a declared context-appropriate grid.
 
 Generate per-resolution one-vs-rest DEG, canonical and data-specific marker summaries, UMAP, whole-section spatial maps and per-cluster highlights. Select the integrated-evidence optimum that preserves supported lineages before avoiding state-only fragmentation; use lower complexity only when evidence is otherwise equivalent.
 

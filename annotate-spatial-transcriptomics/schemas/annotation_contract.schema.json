@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/annotation_contract.schema.json",
+  "title": "V2 annotation execution contract",
+  "type": "object",
+  "required": [
+    "schema_version", "framework_version", "project_id", "sample_id",
+    "project_config", "workflow_profile", "biological_profile", "candidate_catalog",
+    "selected_input_snapshot", "expression_ancestry_policy",
+    "whole_tissue_partition", "query_reclustering", "broad_family_evidence",
+    "atlas_routing", "release_taxonomy"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "framework_version": {"const": "2.0.0"},
+    "project_id": {"type": "string", "minLength": 1},
+    "sample_id": {"type": "string", "minLength": 1},
+    "project_config": {"$ref": "#/$defs/artifact"},
+    "workflow_profile": {"$ref": "#/$defs/artifact"},
+    "biological_profile": {"$ref": "#/$defs/artifact"},
+    "candidate_catalog": {"$ref": "#/$defs/artifact"},
+    "selected_input_snapshot": {
+      "type": "object",
+      "required": ["registry_path", "snapshot_id", "sha256"],
+      "properties": {
+        "registry_path": {"type": "string", "minLength": 1},
+        "snapshot_id": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "expression_ancestry_policy": {
+      "type": "object",
+      "required": ["project_local_query_evidence", "cross_project_expression_requires_external_reference"],
+      "properties": {
+        "project_local_query_evidence": {"const": true},
+        "cross_project_expression_requires_external_reference": {"const": true}
+      }
+    },
+    "whole_tissue_partition": {
+      "type": "object",
+      "required": ["method", "candidate_grid_source", "candidate_resolutions", "selection_endpoint"],
+      "properties": {
+        "method": {"enum": ["BANKSY", "Seurat", "Scanpy", "external"]},
+        "candidate_grid_source": {"enum": ["bound_upstream_input", "fresh_project_computation"]},
+        "candidate_resolutions": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "number"}},
+        "grid_artifact": {"$ref": "#/$defs/artifact"},
+        "selection_endpoint": {"const": "broad_recall_and_purity"}
+      },
+      "allOf": [{
+        "if": {"properties": {"candidate_grid_source": {"const": "bound_upstream_input"}}},
+        "then": {"required": ["grid_artifact"]}
+      }]
+    },
+    "query_reclustering": {
+      "type": "object",
+      "required": ["candidate_resolutions", "separate_from_upstream_banksy_grid"],
+      "properties": {
+        "candidate_resolutions": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "number"}},
+        "separate_from_upstream_banksy_grid": {"const": true}
+      }
+    },
+    "broad_family_evidence": {
+      "type": "object",
+      "required": ["required", "feature_scope", "complete_cartesian_product"],
+      "properties": {
+        "required": {"const": true},
+        "feature_scope": {"const": "full_feature"},
+        "complete_cartesian_product": {"const": true}
+      }
+    },
+    "atlas_routing": {
+      "type": "object",
+      "required": ["authoritative_router", "mapping_scope", "writeback_scope", "fine_anchor_eligible"],
+      "properties": {
+        "authoritative_router": {"const": "route_global_atlas_v2.py"},
+        "mapping_scope": {"const": "complete_analysis_set"},
+        "writeback_scope": {"const": "unlabeled_frozen_qc_only"},
+        "fine_anchor_eligible": {"const": false}
+      }
+    },
+    "release_taxonomy": {
+      "type": "object",
+      "required": ["vascular_parent", "hierarchy_validation_required"],
+      "properties": {
+        "vascular_parent": {"const": "Vascular-associated"},
+        "hierarchy_validation_required": {"const": true}
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

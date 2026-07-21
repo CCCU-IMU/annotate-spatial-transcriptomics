@@ -1,9 +1,9 @@
 {
-  "profile_id": "ovis_aries_ovary_v2",
+  "profile_id": "ovis_aries_ovary_v3",
   "species": "Ovis aries",
   "tissue": "ovary",
   "profile_role": "biological_evidence",
-  "profile_schema_version": "1.7",
+  "profile_schema_version": "2.0",
   "reference_scope": {
     "GSE233801": "adult estrus sheep somatic anchors; does not sufficiently define Oocyte, Theca or Epithelial and preserves unknown clusters",
     "iScience_2025_sheep_ovarian_development": "developmental sheep reference with Oocyte, Theca and Epithelial programs; stage and sampling dependent",
@@ -43,12 +43,20 @@
       "safety": "ZP-family or other oocyte-adjacent RNA without a non-ZP oocyte core does not convert a coherent granulosa program into Oocyte"
     },
     "theca_steroidogenic": {
+      "positive_families": {
+        "steroidogenic_core": ["CYP17A1", "CYP11A1", "STAR", "HSD3B1"],
+        "theca_androgenic_support": ["INSL3", "ANPEP", "NR5A1", "FDX1", "DHCR24"]
+      },
       "required_program": ["CYP17A1", "CYP11A1", "STAR", "HSD3B1", "INSL3", "ANPEP", "NR5A1", "FDX1", "DHCR24"],
       "support_only": ["LHCGR"],
       "spatial_expectation": "outer ring around growing follicles, often vascular-associated",
       "safety": "ECM or LHCGR alone cannot define Theca"
     },
     "theca_progenitor_follicular_stroma": {
+      "positive_families": {
+        "follicular_progenitor_core": ["TCF21", "PDGFRA", "WT1", "PTCH1"],
+        "follicular_ecm_support": ["DCN", "LUM", "COL1A1"]
+      },
       "program": ["TCF21", "PDGFRA", "WT1", "PTCH1", "DCN", "LUM", "COL1A1"],
       "spatial_expectation": "follicle-adjacent outer ring",
       "safety": "without steroidogenic program retain follicular stromal/theca-progenitor or interface"
@@ -64,6 +72,10 @@
       "safety": "ECM, stress or ribosomal splits are states unless independent lineage evidence exists"
     },
     "mesenchymal_progenitor_like": {
+      "positive_families": {
+        "mesenchymal_progenitor_core": ["S100A4", "PDGFRA", "TCF21", "NR2F2", "CD34", "PI16"],
+        "specialized_fibroblast_support": ["COL14A1", "DPT", "CFD", "APOD", "COL15A1"]
+      },
       "core": ["S100A4", "PDGFRA", "TCF21", "NR2F2", "CD34", "PI16", "COL14A1", "DPT", "CFD", "APOD", "COL15A1"],
       "support": ["DCN", "LUM", "COL1A1", "COL1A2", "COL3A1", "OGN"],
       "anti_programs": ["MYH11", "CNN1", "ACTG2", "RGS5", "PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
@@ -71,6 +83,10 @@
       "safety": "the 2025 sheep atlas called a very small S100A4-positive population Mesenchymal, whereas ovarian stromal cells are themselves mesenchymal; never add this class merely to match the paper—require a stable S100A4-supported program and morphology that separate it from generic stroma"
     },
     "pericyte_mural": {
+      "positive_families": {
+        "mural_identity_backbone": ["RGS5", "MCAM", "PDGFRB", "CSPG4", "NOTCH3", "RERGL"],
+        "mural_contractile_support": ["DES", "ACTA2", "TAGLN", "MYL9"]
+      },
       "core": ["RGS5", "MCAM", "PDGFRB", "CSPG4", "NOTCH3", "RERGL"],
       "support": ["DES", "ACTA2", "TAGLN", "MYL9"],
       "anti_programs": ["PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
@@ -78,6 +94,10 @@
       "safety": "ACTA2/TAGLN or vascular proximity without a pericyte backbone is insufficient"
     },
     "smooth_muscle": {
+      "positive_families": {
+        "mature_contractile_core": ["MYH11", "CNN1", "ACTG2"],
+        "contractile_structure_support": ["TAGLN", "ACTA2", "MYL9", "MYL6", "DES", "TPM2", "FHL1"]
+      },
       "mature_contractile_core": ["MYH11", "CNN1", "ACTG2"],
       "contractile_support": ["TAGLN", "ACTA2", "MYL9", "MYL6", "DES", "TPM2", "FHL1"],
       "anti_programs": ["PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
@@ -93,6 +113,10 @@
       "spatial_expectation": "branching vascular network"
     },
     "lymphatic_endothelial": {
+      "positive_families": {
+        "endothelial_backbone": ["PECAM1", "CDH5", "VWF", "CLDN5"],
+        "lymphatic_identity_support": ["PROX1", "FLT4", "MMRN1", "LYVE1", "PDPN", "CCL21"]
+      },
       "program": ["PROX1", "FLT4", "MMRN1", "LYVE1", "PDPN", "CCL21"],
       "required_backbone": ["PECAM1", "CDH5", "VWF", "CLDN5"],
       "safety": "PDPN, LYVE1 or CCL21 alone is insufficient"
@@ -112,6 +136,10 @@
       "safety": "a single JCHAIN, a single immunoglobulin locus, CD74 or MHC alone cannot define an immune lineage; immunoglobulin-heavy clusters still require an independent B/plasma regulator or a stable multi-locus antibody-secreting program"
     },
     "luteal_steroidogenic": {
+      "positive_families": {
+        "luteal_steroidogenic_core": ["STAR", "CYP11A1", "HSD3B1", "FDX1", "NR5A1", "NR5A2"],
+        "luteal_receptor_support": ["LHCGR", "CYP17A1", "INSL3", "INHA", "INHBA", "CYP19A1", "FSHR"]
+      },
       "program": ["STAR", "CYP11A1", "HSD3B1", "FDX1", "NR5A1", "NR5A2", "LHCGR"],
       "theca_lutein_support": ["CYP17A1", "INSL3", "ANPEP"],
       "granulosa_lutein_support": ["INHA", "INHBA", "CYP19A1", "FSHR"],
@@ -119,11 +147,19 @@
       "safety": "stage is required for confident corpus-luteum or luteal subtype labels; generic steroidogenesis alone remains steroidogenic somatic"
     },
     "neural_schwann": {
+      "positive_families": {
+        "schwann_glial_identity": ["SOX10", "S100B", "PLP1", "MPZ", "PMP22"],
+        "neural_support": ["ERBB3", "NCAM1", "GFRA3", "FABP7"]
+      },
       "program": ["SOX10", "S100B", "PLP1", "MPZ", "PMP22", "ERBB3", "NCAM1", "GFRA3", "FABP7"],
       "spatial_expectation": "thin nerve-like tracks, often accompanying vessels",
       "safety": "PLP1, MPZ or GFRA3 alone is insufficient; require a coherent glial program and track-like morphology"
     },
     "neuroendocrine": {
+      "positive_families": {
+        "neurosecretory_core": ["CHGA", "CHGB", "SYP", "SCG2", "SCG3", "INSM1"],
+        "neuronal_support": ["RBFOX1", "TENM3", "DLG2"]
+      },
       "secretory_core": ["CHGA", "CHGB", "SYP", "SCG2", "SCG3", "INSM1"],
       "neuronal_support": ["RBFOX1", "TENM3", "DLG2"],
       "spatial_expectation": "rare coherent neurosecretory or nerve-associated focus, not a diffuse stromal domain",
@@ -208,10 +244,30 @@
       "smooth_muscle_policy": "Smooth muscle remains a separate evidence-dependent broad class",
       "legacy_alias_policy": "Vascular/endothelial and standalone Pericyte/mural broad labels must be migrated to Vascular-associated while preserving their supported fine identity"
     },
+    "broad_aliases": {
+      "Vascular/endothelial": "Vascular-associated",
+      "Vascular/perivascular": "Vascular-associated",
+      "Pericyte/mural": "Vascular-associated",
+      "Stromal": "Stromal/mesenchymal",
+      "Immune/plasma": "Immune"
+    },
+    "fine_parent_allowlist": {
+      "Blood endothelial": ["Vascular-associated"],
+      "Lymphatic endothelial": ["Vascular-associated"],
+      "Pericyte/mural": ["Vascular-associated"],
+      "Oocyte": ["Oocyte"]
+    },
+    "forbidden_fine_semantics": [
+      "low-information", "low information", "qc", "holdout", "pending", "unknown",
+      "unresolved", "candidate", "review", "technical", "ambient-only"
+    ],
     "report_rule": "biological broad classes and retained anatomical/QC/technical/pending states require separate censuses, trees and evidence cohorts; retained states are excluded from biological broad DEG and marker dotplots"
   },
   "resolution_policy": {
     "principle": "choose the resolution with the best integrated evidence for the current biological question; preserve stable lineages or true subtypes first, avoid state/technical fragmentation second, and use lower complexity only as a tie-breaker",
+    "fresh_r_first_whole_tissue_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
+    "query_reclustering_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
+    "upstream_banksy_whole_tissue_policy": "audit the complete resolution grid stored in the bound BANKSY input, then select for broad recall/purity; this upstream grid is not replaced by the query-reclustering grid",
     "formal_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
     "minimum_formal_resolution": 0.1,
     "below_floor_policy": "reject before execution; below-floor artifacts cannot enter ranking, stability, biological interpretation or writeback",
@@ -236,6 +292,19 @@
     "broad_only": "broad supported but subtype evidence insufficient; fine_anchor_eligible=false",
     "interface_review": "real mixed programs cannot be reliably separated after targeted review; retain rather than force",
     "context_specific_defined": "multi-module program plus lineage-appropriate spatial object/morphology; rarity alone is never a class or a mandatory route"
+  },
+  "broad_family_evidence_contract": {
+    "schema_version": "2.0",
+    "source_layer": "project-local full-feature raw counts plus a separately verified project-local normalized validation layer",
+    "required_metrics_per_cluster_candidate_family": [
+      "available_marker_count", "detected_marker_count", "any_detection_fraction",
+      "median_detected_markers_per_observation", "pseudobulk_sum", "mean_normalized_expression"
+    ],
+    "complete_cartesian_product_required": true,
+    "minimum_independent_positive_families_for_broad_assignment": 2,
+    "comparative_scores_can_establish_absence": false,
+    "one_vs_rest_deg_can_establish_absence": false,
+    "decision_thresholds_must_be_recorded_not_inferred_from_color_scales": true
   },
   "final_validation": {
     "minimum_features_for_full_validation": 10000,

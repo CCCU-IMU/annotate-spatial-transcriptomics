@@ -8,6 +8,8 @@ Run `scripts/audit_release_taxonomy.py` on one passing and one deliberately fail
 
 Run `python -m unittest discover -s tests -v`. The release-contract suite must exercise the sheep-ovary resolver, exact StereoPy cellbin profile, GSE233801 priority, dotplot no-transfer rule, query-like held-out origin, legacy combined-tier rejection and one-worker-per-sample cohort isolation.
 
+For v2, additionally test contract hash freshness, exact upstream BANKSY grid binding, complete all-candidate marker-family coverage, authoritative Atlas classwise calibration, release broad/fine hierarchy, typed residual-QC closure and read-only result-directory consistency. Run the result audit against representative historical projects; old `completion_gate=PASS` is expected to be blocked when the released ledger violates v2 semantics.
+
 ## End-to-end test
 
 Use a real input directory without supplying the intended clustering choice or final labels. Require the agent to discover inputs, inventory prior progress, rank candidates, inspect shortlisted outputs, freeze a choice, write state and generate required artifacts.

@@ -54,9 +54,40 @@ def referenced_files(root, rows):
                         if child.is_file() and child.resolve() not in found:pending.append(child.resolve())
             elif isinstance(value,list):stack.extend(value)
     return sorted(found)
+def bound_candidate_catalog(root):
+    """Resolve the immutable v2 catalog instead of assuming the bundled sheep profile."""
+    contract_path=root/"config/annotation_contract.json"
+    if contract_path.is_file():
+        try:
+            value=json.loads(contract_path.read_text(encoding="utf-8")).get("candidate_catalog",{}).get("path","")
+            if value:
+                path=Path(value);path=path if path.is_absolute() else root/path
+                if path.is_file():return path
+        except (OSError,json.JSONDecodeError,AttributeError):pass
+    return Path(__file__).resolve().parents[1]/"references/profiles/sheep_ovary_candidate_lineage_catalog.json"
 def main():
     p=argparse.ArgumentParser();p.add_argument("project_root",type=Path);p.add_argument("--context",type=Path);p.add_argument("--biological-profile",type=Path);p.add_argument("--profile",type=Path,help="deprecated alias; must still be a biological_evidence profile");a=p.parse_args();r=a.project_root;errors=[];all_clusters=read(r/"state/cluster_decision_ledger.tsv");clusters=active_decisions(all_clusters);cohorts=active_registry_rows(read(r/"state/recluster_cohort_registry.tsv"),"cohort_id");returns=active_registry_rows(read(r/"state/direct_return_registry.tsv"),"return_id");runs=read(r/"state/run_registry.tsv");queue=read(r/"state/next_action_queue.tsv")
     project_path=r/"config/project.json";project=json.loads(project_path.read_text()) if project_path.exists() else {};preset_requested=project.get("strategy_preset_requested","");preset_record={}
+    v2=str(project.get("framework_version","")).startswith("2.");contract_payload={}
+    if v2:
+        contract=r/"config/annotation_contract.json";contract_gate=r/"provenance/annotation_contract_validation.json"
+        if not contract.is_file():errors.append("v2 project lacks config/annotation_contract.json")
+        else:
+            try:contract_payload=json.loads(contract.read_text(encoding="utf-8"))
+            except (OSError,json.JSONDecodeError):errors.append("v2 annotation contract is unreadable")
+        if not contract_gate.is_file():errors.append("v2 annotation contract has not been validated")
+        else:
+            record=json.loads(contract_gate.read_text())
+            if record.get("status")!="PASS" or not contract.is_file() or record.get("contract_sha256")!=sha256(contract):errors.append("v2 annotation contract validation is failed or stale")
+        if project.get("global_atlas_concordance_required_when_reference_applicable",False) is True:
+            atlas_gate=r/"provenance/atlas_state_routing_validation.json"
+            if not atlas_gate.is_file():errors.append("v2 authoritative all-cell Atlas routing has not been validated")
+            else:
+                atlas=json.loads(atlas_gate.read_text());manifest=Path(atlas.get("routing_manifest", ""))
+                if atlas.get("status")!="PASS" or not manifest.is_file() or atlas.get("routing_manifest_sha256")!=sha256(manifest):errors.append("v2 all-cell Atlas routing validation is failed or stale")
+                elif contract_payload:
+                    routing=json.loads(manifest.read_text(encoding="utf-8"));expected=contract_payload.get("workflow_profile",{});actual=routing.get("workflow_profile",{})
+                    if actual.get("sha256")!=expected.get("sha256"):errors.append("v2 Atlas routing uses a workflow profile different from the annotation contract")
     if preset_requested:
         preset_path=r/"config/active_strategy_preset.json"
         if not preset_path.exists():errors.append("requested strategy preset is not activated in config/active_strategy_preset.json")
@@ -107,6 +138,10 @@ def main():
     if profile_path:
         try:profile=load_profile(profile_path,"biological_evidence")
         except Exception as exc:errors.append(f"invalid biological profile binding: {exc}")
+    if v2 and profile_path and profile_path.is_file() and contract_payload:
+        expected=contract_payload.get("biological_profile",{})
+        if str(profile_path.resolve())!=str(Path(expected.get("path","")).resolve()) or sha256(profile_path)!=expected.get("sha256"):
+            errors.append("active biological profile differs from the v2 annotation contract")
     requires_full_feature=bool(profile.get("final_validation"))
     if requires_full_feature:
         ff=r/"provenance/full_feature_validation.json"
@@ -125,7 +160,7 @@ def main():
         if input_boundary.get("status")!="PASS":errors.append(f"project input boundary is blocked: {len(input_boundary.get('errors',[]))} errors")
     broad_completeness={"status":"NOT_REQUIRED","errors":[]}
     if project.get("broad_class_completeness_review_required",False) is True:
-        catalog=Path(__file__).resolve().parents[1]/"references/profiles/sheep_ovary_candidate_lineage_catalog.json"
+        catalog=bound_candidate_catalog(r)
         if not catalog.is_file():errors.append("broad-class completeness catalog is missing")
         else:
             broad_completeness=validate_broad_completeness(r,catalog)
@@ -135,6 +170,9 @@ def main():
     if banksy_rows and project.get("banksy_broad_resolution_selection_evidence_required_when_applicable",False) is True:
         banksy_gate=r/"provenance/banksy_broad_resolution_selection_validation.json"
         if not banksy_gate.is_file() or json.loads(banksy_gate.read_text()).get("status")!="PASS":errors.append("BANKSY initial broad-resolution selection evidence has not passed")
+        elif v2:
+            banksy=json.loads(banksy_gate.read_text());contract=r/"config/annotation_contract.json"
+            if not contract.is_file() or banksy.get("annotation_contract_sha256")!=sha256(contract):errors.append("v2 BANKSY broad-resolution selection is not bound to the active annotation contract")
     if preset_requested and not profile_path:errors.append("active strategy preset lacks a resolvable biological profile binding")
     if profile.get("annotation_workflow_policy",{}).get("incident_registry_required",False):
         incident_path=r/"provenance/incidents/incident_registry.tsv"
@@ -196,6 +234,22 @@ def main():
         family_gate=r/"provenance/broad_marker_family_contract_validation.json"
         if not family_gate.is_file() or json.loads(family_gate.read_text()).get("status")!="PASS":
             errors.append("default broad marker-family contract has not passed")
+        elif v2 and profile_path:
+            family=json.loads(family_gate.read_text())
+            catalog=bound_candidate_catalog(r)
+            if family.get("profile_sha256")!=sha256(profile_path) or family.get("catalog_sha256")!=sha256(catalog):errors.append("v2 broad marker-family contract is stale for the active profile/catalog")
+    if v2 and project.get("broad_family_evidence_matrix_required",False) is True:
+        evidence_gate=r/"provenance/broad_family_evidence_validation.json"
+        if not evidence_gate.is_file():errors.append("v2 full-feature broad-family evidence matrix has not been validated")
+        else:
+            evidence=json.loads(evidence_gate.read_text())
+            manifest=Path(evidence.get("manifest", ""))
+            if evidence.get("status")!="PASS" or not manifest.is_file() or evidence.get("manifest_sha256")!=sha256(manifest):errors.append("v2 broad-family evidence matrix validation is failed or stale")
+            elif contract_payload:
+                family_manifest=json.loads(manifest.read_text(encoding="utf-8"))
+                for key in ("biological_profile","candidate_catalog"):
+                    if family_manifest.get(key,{}).get("sha256")!=contract_payload.get(key,{}).get("sha256"):
+                        errors.append(f"v2 broad-family evidence uses a {key} different from the annotation contract")
     if project.get("residual_qc_upstream_recall_audit_required",False) is True:
         residual_gate=r/"provenance/residual_qc_audit_validation.json"
         if not residual_gate.is_file():errors.append("residual-QC upstream-recall audit has not been run")
@@ -203,6 +257,22 @@ def main():
             residual=json.loads(residual_gate.read_text())
             if residual.get("status")!="PASS":errors.append("residual-QC upstream-recall audit is blocked")
             if not cell_ledger.is_file() or residual.get("cell_ledger_sha256")!=sha256(cell_ledger):errors.append("residual-QC upstream-recall audit is stale for the current cell ledger")
+            if v2 and residual.get("v2_evidence_required") is not True:errors.append("v2 residual-QC audit did not enforce typed reasons and evidence artifacts")
+    if v2:
+        taxonomy_path=r/"provenance/release_taxonomy_audit.json"
+        if taxonomy_path.is_file() and json.loads(taxonomy_path.read_text()).get("v2_contract_required") is not True:errors.append("v2 release taxonomy audit did not enforce broad-fine hierarchy")
+        atlas_gate=r/"provenance/atlas_state_routing_validation.json"
+        if atlas_gate.is_file():
+            atlas=json.loads(atlas_gate.read_text());manifest=Path(atlas.get("routing_manifest", ""))
+            if manifest.is_file() and cell_ledger.is_file():
+                routing=json.loads(manifest.read_text(encoding="utf-8"))
+                if routing.get("cell_ledger",{}).get("sha256")!=sha256(cell_ledger):errors.append("v2 Atlas routing is stale for the current committed cell ledger")
+        result_audit_path=r/"provenance/project_results_audit.json"
+        if not result_audit_path.is_file():errors.append("v2 read-only project-results audit has not been run")
+        else:
+            result_audit=json.loads(result_audit_path.read_text())
+            if result_audit.get("status")!="PASS" or not cell_ledger.is_file() or result_audit.get("ledger_sha256")!=sha256(cell_ledger):errors.append("v2 project-results audit is failed or stale for the committed ledger")
+            if contract_payload and result_audit.get("biological_profile_sha256")!=contract_payload.get("biological_profile",{}).get("sha256"):errors.append("v2 project-results audit uses a biological profile different from the annotation contract")
     support=validate_support_registry(r,r/"state/annotation_support_registry.tsv",cell_ledger)
     (r/"provenance/annotation_support_validation.json").write_text(json.dumps(support,ensure_ascii=False,indent=2)+"\n")
     if support.get("status")!="PASS":errors.append(f"annotation support coverage validation failed: {len(support.get('errors',[]))} errors")
@@ -210,7 +280,7 @@ def main():
     if multi.get("status")!="PASS":errors.append(f"annotation workflow completion is blocked: {len(multi.get('gaps',[]))} gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
     result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"recluster_cohorts":len(cohorts),"direct_returns":len(returns),"persistent_biological_pools":False,"runs":len(runs),"annotation_workflow_status":multi.get("status"),"lineage_signal_coverage_status":lineage_signal.get("status"),"lineage_signal_boundaries":lineage_signal.get("boundaries",0),"lineage_signal_rows":lineage_signal.get("signal_rows",0),"project_input_boundary_status":input_boundary.get("status"),"broad_class_completeness_status":broad_completeness.get("status"),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context}
     completion_path=r/"provenance/completion_gate.json";completion_path.parent.mkdir(parents=True,exist_ok=True);completion_path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
-    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"state/lineage_signal_boundary_registry.tsv",r/"state/lineage_signal_registry.tsv",r/"state/derived_expression_registry.tsv",r/"state/broad_class_completeness_registry.tsv",r/"provenance/lineage_signal_coverage_validation.json",r/"provenance/project_input_boundary_validation.json",r/"provenance/broad_class_completeness_validation.json",r/"provenance/broad_marker_family_contract_validation.json",r/"provenance/residual_qc_audit_validation.json",r/"provenance/banksy_broad_resolution_selection_validation.json",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
+    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"state/lineage_signal_boundary_registry.tsv",r/"state/lineage_signal_registry.tsv",r/"state/derived_expression_registry.tsv",r/"state/broad_class_completeness_registry.tsv",r/"provenance/lineage_signal_coverage_validation.json",r/"provenance/project_input_boundary_validation.json",r/"provenance/broad_class_completeness_validation.json",r/"provenance/broad_marker_family_contract_validation.json",r/"provenance/broad_family_evidence_validation.json",r/"provenance/residual_qc_audit_validation.json",r/"provenance/banksy_broad_resolution_selection_validation.json",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/atlas_state_routing_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/annotation_contract.json",r/"provenance/annotation_contract_validation.json",r/"provenance/project_results_audit.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
     dependencies.extend(path for path in referenced_files(r,clusters+cohorts+returns+read(r/"state/route_attempt_registry.tsv")+read(r/"state/annotation_support_registry.tsv")) if path not in dependencies)
     if profile_path and profile_path.is_file() and profile_path not in dependencies:dependencies.append(profile_path)
     build_dependency_manifest(completion_path,dependencies,{"gate":"completion"})

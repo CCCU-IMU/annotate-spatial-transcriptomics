@@ -1,4 +1,4 @@
 interface:
-  display_name: "Evidence-first Transcriptomics Annotation"
-  short_description: "Open-world annotation with persistent lineage-signal memory"
+  display_name: "Evidence-first Transcriptomics Annotation v2"
+  short_description: "Hash-bound open-world annotation with lineage-completeness gates"
   default_prompt: "Use $annotate-spatial-transcriptomics to annotate each sample with label-blind evidence, continuous full-catalog lineage scans at whole-tissue and every reclustering boundary, persistent weak-signal review, direct-lineage cohorts, one calibrated all-cell Atlas concordance/OOD audit, and an audited release."

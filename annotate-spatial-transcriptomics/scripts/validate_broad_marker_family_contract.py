@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -13,6 +14,14 @@ def resolve(payload: dict, dotted: str):
     for key in dotted.split("."):
         value = value[key]
     return value
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def main() -> int:
@@ -26,9 +35,7 @@ def main() -> int:
     errors: list[str] = []
     rows: list[dict] = []
     for candidate in catalog.get("candidate_boundaries", []):
-        if candidate.get("release_level") not in {
-            "default_broad_candidate", "context_specific_broad_candidate"
-        }:
+        if candidate.get("review_required") is not True:
             continue
         candidate_id = candidate.get("candidate_id", "")
         path = candidate.get("profile_program", "")
@@ -53,7 +60,7 @@ def main() -> int:
                     overlaps.append({"left": left, "right": right, "shared": shared})
         if len(valid) < 2:
             errors.append(
-                f"{candidate_id}: default broad gate requires >=2 explicit positive_families, found {len(valid)}"
+                f"{candidate_id}: open-world broad scan requires >=2 explicit positive_families, found {len(valid)}"
             )
         if overlaps:
             errors.append(f"{candidate_id}: positive families overlap and are not independent: {overlaps}")
@@ -68,7 +75,17 @@ def main() -> int:
         )
     result = {
         "status": "PASS" if not errors else "BLOCKED",
-        "default_candidates_checked": len(rows),
+        "schema_version": "2.0",
+        "profile": str(args.profile.resolve()),
+        "profile_sha256": sha256(args.profile),
+        "catalog": str(args.catalog.resolve()),
+        "catalog_sha256": sha256(args.catalog),
+        "review_required_candidates_checked": len(rows),
+        "default_candidates_checked": sum(
+            candidate.get("release_level") in {"default_broad_candidate", "context_specific_broad_candidate"}
+            for candidate in catalog.get("candidate_boundaries", [])
+            if candidate.get("review_required") is True
+        ),
         "candidates": rows,
         "errors": errors,
         "broad_presence_rule": "absolute full-feature detection/prevalence and pseudobulk; centered scores are comparative only",

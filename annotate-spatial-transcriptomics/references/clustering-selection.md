@@ -33,6 +33,8 @@ Use `scripts/rank_cohort_resolutions.py --question-mode broad_purity_audit|targe
 
 Neighborhood size changes spatial smoothing and cannot be treated as another resolution value. Compare resolution within each k, then compare plausible candidates across k. High k may merge small anatomical structures; low k may fragment continuous tissue.
 
+For an upstream BANKSY result, the candidate grid is exactly the grid present in the frozen input and recorded in `annotation_contract.json`; do not replace it with the sheep R-first `0.1,0.2,0.3,0.4,0.6` grid. That fixed grid applies only to fresh profile-controlled computation and query-only cohort reclustering. BANKSY resolution, BANKSY neighborhood `k`, Leiden/Louvain resolution and graph-neighbor `k` are separate parameters and must never be used interchangeably in evidence or prose.
+
 When BANKSY memberships are the requested whole-tissue starting point, freeze one initial broad-annotation resolution only after every formal resolution has a query-derived broad-evidence review. Rank preservation of supported/default broad lineages and large-label purity first; then marker/DEG coherence, spatial morphology and adjacent-resolution migration; penalize technical fragmentation. Cluster count, UMAP appearance and a target number of clusters are shortlist aids only. A resolution with fewer clusters is preferred only when broad evidence is otherwise equivalent.
 
 Record weak coherent programs seen only at a rejected or higher resolution in the continuous signal ledger. If no single resolution separates every lineage, choose the most defensible broad-resolution anchor and rely on open-world broad-cohort reclustering/direct cross-lineage return; never silently close the missing lineage.

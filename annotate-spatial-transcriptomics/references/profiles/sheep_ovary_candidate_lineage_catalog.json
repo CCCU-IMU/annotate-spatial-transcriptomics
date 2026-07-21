@@ -1,6 +1,6 @@
 {
   "catalog_id": "sheep_ovary_literature_candidate_lineages_2025_2026",
-  "catalog_schema_version": "1.0",
+  "catalog_schema_version": "2.0",
   "purpose": "A literature-informed, non-exhaustive boundary audit for sheep-ovary annotation. It is not a required label list and does not imply that every candidate is present.",
   "taxonomy_policy": {
     "presence_is_never_required": true,

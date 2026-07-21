@@ -36,6 +36,7 @@ def validate(root: Path, ledger_path: Path) -> dict:
     except ValueError:
         framework_tuple = (0,)
     absolute_broad_contract = framework_tuple >= (1, 10, 0)
+    v2_contract = framework_tuple >= (2, 0, 0)
     for line, row in enumerate(rows, 2):
         cluster = row.get("source_cluster", "").strip()
         artifact_value = row.get("prelabel_evidence_artifact", "").strip()
@@ -48,6 +49,24 @@ def validate(root: Path, ledger_path: Path) -> dict:
         errors.extend(f"cluster row {line} ({cluster}): {message}" for message in document_errors)
         if document_errors:
             continue
+        broad_family_table_hash = ""
+        if v2_contract:
+            if document.get("schema_version") != "2.0":
+                errors.append(f"cluster row {line} ({cluster}) does not use v2 prelabel evidence")
+            manifest_ref = document.get("broad_family_evidence_manifest")
+            validation_ref = document.get("broad_family_evidence_validation")
+            if not isinstance(manifest_ref, dict) or not isinstance(validation_ref, dict):
+                errors.append(f"cluster row {line} ({cluster}) lacks v2 broad-family evidence bindings")
+            else:
+                manifest_path, manifest_errors = validate_evidence_artifact(root, manifest_ref, f"cluster row {line} family evidence manifest")
+                validation_path, validation_errors = validate_evidence_artifact(root, validation_ref, f"cluster row {line} family evidence validation")
+                errors.extend(manifest_errors + validation_errors)
+                if manifest_path and validation_path and not manifest_errors and not validation_errors:
+                    family_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    family_validation = json.loads(validation_path.read_text(encoding="utf-8"))
+                    if family_validation.get("status") != "PASS" or family_validation.get("manifest_sha256") != sha256(manifest_path):
+                        errors.append(f"cluster row {line} broad-family evidence validation is failed or stale")
+                    broad_family_table_hash = str(family_manifest.get("evidence_table", {}).get("sha256", ""))
         if not expected_hash or sha256(artifact) != expected_hash:
             errors.append(f"cluster row {line} ({cluster}) has a stale prelabel evidence hash")
         if document["source_cluster"] != cluster:
@@ -135,6 +154,20 @@ def validate(root: Path, ledger_path: Path) -> dict:
                     root, evidence, f"cluster row {line} {hypothesis['candidate_id']} evidence {index}"
                 )
                 errors.extend(evidence_errors)
+            if v2_contract:
+                absolute_families = hypothesis.get("absolute_supported_families", [])
+                if int(hypothesis.get("absolute_family_support_count", -1)) != len(absolute_families):
+                    errors.append(f"cluster row {line} v2 absolute-family count is inconsistent for {hypothesis['candidate_id']}")
+                if hypothesis.get("comparative_score_role") != "comparative_not_absence_gate":
+                    errors.append(f"cluster row {line} v2 hypothesis permits comparative absence gating for {hypothesis['candidate_id']}")
+                absolute = hypothesis.get("absolute_detection_evidence")
+                if not isinstance(absolute, dict):
+                    errors.append(f"cluster row {line} v2 hypothesis lacks family evidence for {hypothesis['candidate_id']}")
+                else:
+                    _, absolute_errors = validate_evidence_artifact(root, absolute, f"cluster row {line} {hypothesis['candidate_id']} absolute evidence")
+                    errors.extend(absolute_errors)
+                    if broad_family_table_hash and absolute.get("sha256") != broad_family_table_hash:
+                        errors.append(f"cluster row {line} {hypothesis['candidate_id']} is not bound to the v2 family evidence table")
         if not truth(row.get("prelabel_evidence_frozen", "")):
             errors.append(f"cluster row {line} is not marked prelabel_evidence_frozen")
         validated += 1

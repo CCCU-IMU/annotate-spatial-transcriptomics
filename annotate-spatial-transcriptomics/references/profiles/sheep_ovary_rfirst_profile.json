@@ -1,7 +1,7 @@
 {
-  "profile_id": "ovis_aries_ovary_rfirst_v5",
+  "profile_id": "ovis_aries_ovary_rfirst_v6",
   "profile_role": "workflow_preprocessing",
-  "profile_schema_version": "1.7",
+  "profile_schema_version": "2.0",
   "species_aliases": ["Ovis aries", "sheep", "ovine", "羊", "绵羊"],
   "tissue_aliases": ["ovary", "ovarian", "卵巢"],
   "workflow": {
@@ -16,6 +16,14 @@
     "minimum_resolution": 0.1,
     "allow_below_minimum": false,
     "rule": "use the same normal candidate range for every sheep-ovary broad-class or targeted cohort; adapt the selected resolution, PCs and k within current-cohort evidence, never recluster final QC, and never lower resolution to compensate for a defective graph"
+  },
+  "whole_tissue_partition_contract": {
+    "fresh_r_first_grid": [0.1, 0.2, 0.3, 0.4, 0.6],
+    "upstream_banksy_grid_policy": "use every resolution actually present in the hash-bound BANKSY input; do not silently replace it with the query-reclustering grid",
+    "minimum_candidates": 3,
+    "required_review_window": "selected plus the next two higher available resolutions; if fewer exist, review every higher candidate and record the upstream-grid limitation",
+    "selection_endpoint": "broad-lineage recall and cluster purity across the complete catalog, not cluster count or agreement with a prior annotation",
+    "separate_from_cohort_reclustering": true
   },
   "stereopy_cellbin_pped_contract": {
     "trigger_all": [
@@ -71,6 +79,17 @@
     "reusable_fixed_reference_index_required": true,
     "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Vascular-associated", "Immune"],
     "primary_public_atlas_exclusions": ["Oocyte", "Theca", "Epithelial/mesothelial"],
+    "primary_public_atlas_label_crosswalk": {
+      "Granulosa": "Granulosa",
+      "Stromal/mesenchymal": "Stromal/mesenchymal",
+      "Stromal": "Stromal/mesenchymal",
+      "Immune": "Immune",
+      "Immune/plasma": "Immune",
+      "Vascular-associated": "Vascular-associated",
+      "Vascular/endothelial": "Vascular-associated",
+      "Vascular/perivascular": "Vascular-associated",
+      "Pericyte/mural": "Vascular-associated"
+    },
     "atlas_rescue_ceiling": "broad_only",
     "accepted_calibrated_tiers": ["high", "moderate_only"],
     "moderate_or_higher_target_precision": 0.9,
@@ -78,6 +97,9 @@
     "qc_direct_return_safety_gates": ["calibrated_moderate_or_higher", "unlabeled_frozen_qc", "non_ood", "no_ontology_conflict", "candidate_within_atlas_scope"],
     "marker_spatial_evidence_role": "mandatory audit and coherent-group challenge; not a duplicate per-observation prerequisite after query-anchor calibration",
     "calibration_origin": "query_like_heldout_current_query_anchors",
+    "minimum_heldout_observations_per_return_class": 30,
+    "maximum_expected_calibration_error": 0.05,
+    "classwise_calibration_required": true,
     "forbidden_calibration_origin": "reference_self_classification"
   },
   "release_policy": {
