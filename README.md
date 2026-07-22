@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcrip
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcriptomics/main/install.sh \
-  | bash -s -- --ref v2.0.0
+  | bash -s -- --ref v2.0.1
 ```
 
 克隆后本地安装（适合内网或需要审查源码的环境）：
@@ -380,7 +380,7 @@ GitHub Actions 的 PR 验证与 Release 打包均使用 Python 3.11 和仓库内
 
 ## 版本
 
-当前版本：`2.0.0`。这是一次 fail-closed 合同升级：旧项目必须显式迁移并重建 v2 证据门，历史标签和旧 completion PASS 不会被自动继承。发布包的校验和将在 GitHub Release 中提供。
+当前版本：`2.0.1`。这是 v2 合同的兼容性修订：项目 schema 仍为 `2.0.0`，但补齐了独立 SCT+BANKSY 输入边界、全细胞 Atlas 映射绑定、零锚点/压缩 membership、报告双视图和发布审计等运行边界。旧项目仍须按 v2 迁移规则重建证据门。
 
 ## 许可
 

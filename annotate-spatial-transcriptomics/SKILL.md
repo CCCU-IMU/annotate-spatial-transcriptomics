@@ -45,13 +45,13 @@ Start every project with:
 2. `scripts/inspect_r_object.R` for R objects plus `scripts/check_runtime.py` and `scripts/check_r_runtime.R`
 3. `scripts/init_annotation_project.py --sample SAMPLE --input-root INPUT_ROOT --project-root PROJECT_ROOT --modality spatial|single-cell`
 4. `scripts/register_input_snapshot.py` for every active object and reused clustering table
-5. freeze `config/annotation_contract.json` with `build_annotation_contract_v2.py` after choosing whether the whole-tissue partition is a fresh project grid or a hash-bound upstream BANKSY grid; `bound_upstream_input` must include a machine-readable grid JSON artifact whose resolutions exactly match the contract; validate it to `provenance/annotation_contract_validation.json`
+5. freeze `config/annotation_contract.json` with `build_annotation_contract_v2.py` after choosing whether the whole-tissue partition is a fresh SCT+BANKSY project grid or a hash-bound upstream grid; the builder copies workflow/biological profiles and the candidate catalog into project-local `config/contract_profiles/`, so a shared Skill update cannot mutate an active project; every BANKSY partition must include a machine-readable grid JSON artifact whose resolutions exactly match the contract; validate it to `provenance/annotation_contract_validation.json`
 6. `scripts/audit_feature_scope.R`; if Seurat `Spatial@data` is absent or equals counts, build a separate validation-only LogNormalize object with `scripts/prepare_seurat_full_feature_validation.R`
-7. freeze exact analysis membership and SHA256 in `provenance/analysis_scope_policy.json`
+7. freeze exact full-object/analysis membership with `build_analysis_scope_policy.py`; do not hand-write `provenance/analysis_scope_policy.json`
 8. register every project-local normalized/SCT/full-feature validation object with raw-count and analysis-set ancestry; never read another annotation project's derived expression object as query evidence
 9. run `validate_broad_marker_family_contract.py` against the complete review catalog, then materialize the complete cluster × candidate × positive-family raw evidence matrix with `run_broad_family_evidence.R` and validate it with `validate_broad_family_evidence.py` before initial broad decisions
 
-When a readable full-feature Seurat RDS exists or R is requested, read `references/r-first-workflow.md` and use Seurat/SCT graphs as the computational backbone. BANKSY is an optional spatial clustering adapter/corroborating view, not the controller. Reuse computation only after object/cell hashes, feature scope, parameters and outputs pass; never reuse historical labels.
+When a readable full-feature Seurat RDS exists or R is requested, read `references/r-first-workflow.md`. For a verified same-batch StereoPy `cellbin_PPed` raw-count carrier, use the fixed SCT+BANKSY whole-tissue graph; for other R inputs use a declared context-appropriate R graph. BANKSY controls only the whole-tissue partition, while the biological controller remains evidence-first and label-blind. Reuse computation only after object/cell hashes, feature scope, parameters and outputs pass; never reuse historical labels.
 
 When a Seurat RDS was converted from StereoPy `cellbin_PPed`, read `references/seurat-cellbin-preprocessing.md`. Treat it as a raw-count carrier, not an SCT object; never reuse imported StereoPy PCA/UMAP as the R graph.
 
@@ -75,9 +75,9 @@ Sheep/Ovis/ovine/羊 plus ovary/ovarian/卵巢 activates the sheep evidence prof
 - `references/profiles/sheep_ovary_rfirst_case_reference.md` as a sanitized strategy regression trace only
 - `references/profiles/sheep_ovary_oocyte_rfirst_route.md` before any Oocyte decision
 
-The same-batch R-first preset freezes technical preprocessing, not biological outcomes. Use `--strategy-preset sheep_ovary_same_batch_rfirst`, resolve `config/active_strategy_preset.json`, and independently select whole-tissue/cohort resolutions and labels.
+The legacy-named same-batch R-first preset now freezes the validated SCT+BANKSY whole-tissue preprocessing contract, not biological outcomes. Use `--strategy-preset sheep_ovary_same_batch_rfirst`, resolve `config/active_strategy_preset.json`, and independently select whole-tissue/cohort resolutions and labels.
 
-For a StereoPy cellbin RDS, activate the same-batch contract only after the workflow profile, explicit preset, object/layer/marker/coordinate audits and conversion provenance are hash-verified. Path names and feature counts are nonbinding hints. A fresh Seurat R-first whole-tissue graph and every query-derived broad/targeted reclustering cohort use `0.1,0.2,0.3,0.4,0.6`; below 0.1 is a graph-repair trigger. An input that already contains BANKSY memberships instead uses its complete hash-bound upstream resolution grid for the initial broad-resolution choice. Never silently substitute the cohort grid for that BANKSY grid. Final QC is not reclustered.
+For a StereoPy cellbin RDS, activate the same-batch contract only after the workflow profile, explicit preset, object/layer/marker/coordinate audits and conversion provenance are hash-verified. Path names and feature counts are nonbinding hints. Fresh whole-tissue preprocessing uses SCT v2 `glmGamPoi` Pearson residuals from 4,000 HVGs followed by BANKSY `M=0`, `k_geom=30`, `lambda=0.2`, 30 BANKSY PCs, Leiden `k_neighbors=50` and the complete `0.2,0.4,0.6,0.8` grid. An input that already contains BANKSY memberships uses its complete hash-bound upstream grid. Every query-derived broad/targeted reclustering cohort remains separate and uses `0.1,0.2,0.3,0.4,0.6` with adaptive PCs and k; final QC is not reclustered. Never substitute either grid for the other.
 
 Run `init_open_world_lineage_audit.py` and `validate_open_world_lineage_audit.py`. Review all candidate boundaries even when absent. The catalog is non-exhaustive: coherent unexplained programs require added review. `Stromal/mesenchymal` is an honest parent; standalone Theca, Smooth muscle, Mesenchymal progenitor-like, luteal, Neural/Schwann/glia or other context-dependent broad classes require their own complete programs and morphology. Use `Vascular-associated` as the shared broad parent for blood endothelial, lymphatic endothelial and pericyte/mural identities; these remain optional high-confidence fine labels, while mature Smooth muscle stays separate. Do not use `Theca/follicular wall` or `Stromal/perivascular` as catch-all release labels.
 
@@ -91,7 +91,7 @@ Read `references/matched-single-cell-reference.md`. A count-level matched, stage
 
 Calibration uses disjoint query-like held-out current-query anchors. External reference self-splitting is diagnostic only. Default target-precision tiers are moderate-or-higher 0.90 and high 0.95; these are calibration targets, not universal per-cell score cutoffs. Report mutually exclusive `high`, `moderate_only`, `low_reject` and require `moderate_or_higher_n = high_n + moderate_only_n`.
 
-Use `route_global_atlas_v2.py` as the single authoritative Atlas router. Its calibration manifest must hash-bind the query mapping, classwise held-out validation and current-query calibration origin; arbitrary command-line exclusion lists are not policy. `adjudicate_multichannel_broad_rescue.py` is only for a genuinely uncalibrated non-Atlas proposal and must never be layered on a calibrated Atlas tier. Every accepted return participates in final broad DEG/dotplots but cannot seed fine discovery. Precompute the Atlas transform, representation and ANN index once; never form a full query-by-reference distance matrix or repeat joint integration per sample. Treat low margin, mixed neighbors, failed classwise calibration and coherent OOD programs as QC/unknown review signals.
+Use `route_global_atlas_v2.py` as the single authoritative Atlas router. Its calibration manifest must hash-bind the query mapping, classwise held-out validation and current-query calibration origin; use `bind_atlas_routing_mapping.py` to bind the exact disjoint union of calibrated target rows and held-out current-query rows before all-cell routing. Arbitrary command-line exclusion lists are not policy. `adjudicate_multichannel_broad_rescue.py` is only for a genuinely uncalibrated non-Atlas proposal and must never be layered on a calibrated Atlas tier. Every accepted return participates in final broad DEG/dotplots but cannot seed fine discovery. Precompute the Atlas transform, representation and ANN index once; never form a full query-by-reference distance matrix or repeat joint integration per sample. Treat low margin, mixed neighbors, failed classwise calibration and coherent OOD programs as QC/unknown review signals.
 
 ## State, autonomy and multiple samples
 
@@ -120,12 +120,12 @@ Do not spend compute on final assets before confirmation. After confirmation, fo
 - broad DEG, UMAP/spatial maps and per-node highlights using every final broad member, including direct and Atlas returns;
 - high-confidence fine DEG/maps only when real fine labels exist;
 - separate canonical and current-data-specific broad tree dotplots, plus fine tree dotplots when applicable, in PNG/PDF/source TSV;
-- dotplot absolute values plus display size/color normalized within gene;
+- switchable dotplot views from one source table: absolute detection/expression and display size/color normalized within gene;
 - marker spatial maps grouped by supported cell type;
 - Chinese/requested-language interactive HTML with annotated overview, expandable tree, node jumps, evidence, workflow timeline and raw state;
 - cell/cluster/cohort/direct-return/route/run/incident registries, manifests, session information and checksums.
 
-Run `build_release_manifest.py` and `audit_release.py`. Completion requires `autopilot_status.py` = `COMPLETE` and release audit PASS.
+Run `build_release_session_info.py`, `build_release_manifest.py` and `audit_release.py`. Completion requires `autopilot_status.py` = `COMPLETE` and release audit PASS.
 
 ## Execution and testing
 

@@ -132,7 +132,10 @@ make_source <- function(label_col, level_name, panel_name) {
       n_observations = sum(use)
     ); z <- z + 1L
   }
-  ds <- merge(rbindlist(rows), panel_dt[, .(gene, marker_group)], by = "gene", all.x = TRUE, sort = FALSE)
+  # A canonical gene may intentionally support more than one released label.
+  # Preserve every declared gene→marker_group pair; this controlled one-to-many
+  # expansion is required for subtype catalogs with shared lineage markers.
+  ds <- merge(rbindlist(rows), panel_dt[, .(gene, marker_group)], by = "gene", all.x = TRUE, sort = FALSE, allow.cartesian = TRUE)
   ds[!is.finite(avg_expression), avg_expression := 0]
   ds[!is.finite(pct_expressed_absolute), pct_expressed_absolute := 0]
   ds[, avg_expression_scaled_within_gene := {
@@ -179,10 +182,36 @@ make_source <- function(label_col, level_name, panel_name) {
   stem <- file.path(arg$out, paste0(level_name, "_", panel_name, "_marker_dotplot_with_tree"))
   fwrite(ds, paste0(stem, "_source.tsv"), sep = "\t", quote = FALSE)
   fwrite(data.table(tree_order = ord), paste0(stem, "_tree_order.tsv"), sep = "\t", quote = FALSE)
-  save_both(combined, stem, max(12, 0.17 * length(unique(panel_dt[["gene"]])) + 7), max(7, 0.32 * length(ord) + 4))
+  plot_width <- max(12, 0.17 * length(unique(panel_dt[["gene"]])) + 7)
+  plot_height <- max(7, 0.32 * length(ord) + 4)
+  save_both(combined, stem, plot_width, plot_height)
+
+  # Build the absolute companion from the same source table, so normalized
+  # and absolute views cannot drift and no project-local renderer is needed.
+  cap <- quantile(ds$avg_expression, 0.995, na.rm = TRUE)
+  if (!is.finite(cap) || cap <= 0) cap <- max(ds$avg_expression, na.rm = TRUE)
+  if (!is.finite(cap) || cap <= 0) cap <- 1
+  p_abs <- ggplot(ds[pct_expressed_absolute > 0], aes(gene, label)) +
+    geom_point(aes(size = pct_expressed_absolute, colour = pmin(avg_expression, cap)), alpha = 0.92) +
+    scale_size_area(max_size = 5.5, limits = c(0, 100), oob = scales::squish,
+                    breaks = c(25, 50, 75, 100), name = "Absolute detection (%)") +
+    scale_colour_viridis_c(option = "magma", trans = "sqrt", limits = c(0, cap),
+                           oob = scales::squish, name = "Absolute mean expression") +
+    facet_grid(. ~ marker_group, scales = "free_x", space = "free_x",
+               labeller = labeller(marker_group = as_labeller(wrap_marker_group))) +
+    scale_x_discrete(drop = TRUE) + scale_y_discrete(drop = FALSE) +
+    labs(x = "Marker genes grouped by supported cell type/program", y = paste(level_name, "label"),
+         subtitle = paste0("Absolute values; mean-expression q99.5 clip=", signif(cap, 3))) +
+    theme_bw(base_size = 7) +
+    theme(axis.text.x = element_text(angle = 55, hjust = 1, vjust = 1), panel.grid = element_blank(),
+          strip.text.x = element_text(face = "bold", size = 7))
+  absolute_stem <- paste0(stem, "_absolute")
+  save_both((p_tree | p_abs) + plot_layout(widths = c(1.2, 8)), absolute_stem, plot_width, plot_height)
   data.table(level = level_name, panel = panel_name, n_labels = length(ord), n_genes = length(unique(panel_dt[["gene"]])),
              analysis_view=level_view,evidence_cohort=level_cohort,
-             png = paste0(stem, ".png"), pdf = paste0(stem, ".pdf"), source = paste0(stem, "_source.tsv"))
+             png = paste0(stem, ".png"), pdf = paste0(stem, ".pdf"),
+             absolute_png = paste0(absolute_stem, ".png"), absolute_pdf = paste0(absolute_stem, ".pdf"),
+             source = paste0(stem, "_source.tsv"))
 }
 
 assets <- list(); z <- 1L

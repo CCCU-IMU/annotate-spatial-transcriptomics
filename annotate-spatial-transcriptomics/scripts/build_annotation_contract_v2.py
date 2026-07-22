@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 from pathlib import Path
 
 from evidence_schema_lib import sha256
@@ -15,6 +16,19 @@ def artifact(path: Path) -> dict[str, str]:
     if not path.is_file():
         raise SystemExit(f"missing contract artifact: {path}")
     return {"path": str(path.resolve()), "sha256": sha256(path)}
+
+
+def freeze_artifact(source: Path, root: Path, role: str) -> dict[str, str]:
+    """Copy mutable installed profiles into the immutable project contract."""
+    if not source.is_file():
+        raise SystemExit(f"missing contract artifact: {source}")
+    suffix = "".join(source.suffixes) or ".txt"
+    destination = root / "config/contract_profiles" / f"{role}{suffix}"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    if sha256(destination) != sha256(source):
+        raise SystemExit(f"failed to freeze {role} into the project")
+    return artifact(destination)
 
 
 def resolutions(value: str) -> list[float]:
@@ -70,7 +84,9 @@ def main() -> int:
         raise SystemExit("biological profile lacks the v2 query-reclustering grid")
     if args.grid_source == "bound_upstream_input" and not args.whole_tissue_grid_artifact:
         raise SystemExit("bound_upstream_input requires --whole-tissue-grid-artifact")
-    fresh_grid = biological.get("resolution_policy", {}).get("fresh_r_first_whole_tissue_candidate_resolutions", [])
+    if args.whole_tissue_method == "BANKSY" and not args.whole_tissue_grid_artifact:
+        raise SystemExit("BANKSY whole-tissue computation requires --whole-tissue-grid-artifact")
+    fresh_grid = biological.get("resolution_policy", {}).get("fresh_sct_banksy_whole_tissue_candidate_resolutions", [])
     if args.grid_source == "fresh_project_computation" and fresh_grid and whole_grid != sorted({float(value) for value in fresh_grid}):
         raise SystemExit("fresh whole-tissue grid differs from the bound biological profile")
     contract = {
@@ -79,9 +95,9 @@ def main() -> int:
         "project_id": project["project_id"],
         "sample_id": project["sample_id"],
         "project_config": artifact(project_path),
-        "workflow_profile": artifact(args.workflow_profile),
-        "biological_profile": artifact(args.biological_profile),
-        "candidate_catalog": artifact(args.candidate_catalog),
+        "workflow_profile": freeze_artifact(args.workflow_profile, root, "workflow_profile"),
+        "biological_profile": freeze_artifact(args.biological_profile, root, "biological_profile"),
+        "candidate_catalog": freeze_artifact(args.candidate_catalog, root, "candidate_catalog"),
         "selected_input_snapshot": {"registry_path": str(snapshot_registry.resolve()), "snapshot_id": args.snapshot_id, "sha256": matches[0]["sha256"]},
         "expression_ancestry_policy": {
             "project_local_query_evidence": True,

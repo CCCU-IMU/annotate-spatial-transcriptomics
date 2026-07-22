@@ -10,7 +10,7 @@ Record whether each object is full-feature, HVG-only or targeted. Run `scripts/a
 
 When a readable full-feature Seurat RDS is available, prefer it as the primary computational object unless the user chooses another backbone or the object fails validation. Prefer RNA/Spatial raw counts for DEG and absolute detection. Record active assay, layer names, object dimensions, reductions and metadata columns. Do not assume SCT residuals are suitable for absolute marker detection. Read `r-first-workflow.md` before using existing Seurat clustering or cohort artifacts.
 
-For a StereoPy `cellbin_PPed` batch-converted RDS, read `seurat-cellbin-preprocessing.md`. The converter may preserve StereoPy reductions but does not thereby create an SCT-processed Seurat object. Use the `Spatial` count layer and generate a fresh SCT/PCA/neighbour/UMAP result with `scripts/run_seurat_sct_preprocess.R`; require its manifest before calling preprocessing comparable across the batch.
+For a StereoPy `cellbin_PPed` batch-converted RDS, read `seurat-cellbin-preprocessing.md`. The converter may preserve StereoPy reductions but does not thereby create an SCT-processed Seurat object. Use the `Spatial` count layer and generate a fresh SCT+BANKSY whole-tissue result with `scripts/run_seurat_sct_preprocess.R`; require its manifest and `banksy_grid.json` before calling preprocessing comparable across the batch. The script name is retained for compatibility and no longer constructs a Seurat SNN.
 
 ## AnnData/Scanpy
 

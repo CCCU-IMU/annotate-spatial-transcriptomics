@@ -2,7 +2,7 @@
 
 Collect species, tissue, stage/condition, platform, observation unit, section anatomy, biological questions and reference datasets before choosing broad/targeted cohorts or subtype resolutions. Missing age/cycle information must reduce confidence for stage-specific ovarian labels.
 
-After input inspection, run `scripts/resolve_workflow_profile.py`. Sheep/Ovis/ovine/羊 plus ovary/ovarian/卵巢 selects the sheep-ovary profile; a readable full-feature Seurat RDS selects R-first, and confirmed StereoPy `cellbin_PPed` provenance plus a full-feature `Spatial` assay activates the fixed batch preprocessing contract. Resolver output is workflow provenance only and cannot assign cell identities.
+After input inspection, run `scripts/resolve_workflow_profile.py`. Sheep/Ovis/ovine/羊 plus ovary/ovarian/卵巢 selects the sheep-ovary profile; a readable full-feature Seurat RDS selects the R workflow, and confirmed StereoPy `cellbin_PPed` provenance plus a full-feature `Spatial` assay activates the fixed SCT+BANKSY batch preprocessing contract. Resolver output is workflow provenance only and cannot assign cell identities.
 
 If the user explicitly requests the same-batch standard process, pass `--strategy-preset sheep_ovary_same_batch_rfirst` and write the resolver result to `config/active_strategy_preset.json`. This binds a deidentified successful decision process, not a sample answer: phase order and safeguards are fixed, while resolutions, memberships and biological labels remain current-query decisions.
 

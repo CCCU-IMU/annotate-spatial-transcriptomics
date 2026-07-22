@@ -3,7 +3,7 @@
   "preset_schema_version": "2.0",
   "profile_role": "strategy_preset",
   "activation": "explicit_only",
-  "purpose": "Reuse the validated deidentified sheep-ovary R-first decision process for same-batch samples without copying sample-specific parameters, cluster labels or outcomes.",
+  "purpose": "Reuse the validated deidentified sheep-ovary SCT+BANKSY whole-tissue preprocessing and evidence-first R decision process for same-batch samples without copying sample-specific resolution choices, cluster labels or outcomes.",
   "requires": {
     "species_tissue": "sheep ovary",
     "preferred_input": "full-feature Seurat RDS",
@@ -55,8 +55,8 @@
   "fixed_when_same_batch_contract_is_verified": [
     "entry_qc_contract",
     "SCT_v2_glmGamPoi_contract",
-    "PCA_and_neighbor_construction_contract",
-    "normal_candidate_resolution_grid",
+    "BANKSY_M0_kgeom30_lambda0.2_PCA30_k50_contract",
+    "whole_tissue_BANKSY_resolution_grid_0.2_0.4_0.6_0.8",
     "route_order_and_evidence_gates",
     "state_and_report_contract"
   ],

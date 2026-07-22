@@ -40,9 +40,9 @@ def main() -> int:
         errors.append("selected input snapshot registry is missing")
     whole = contract.get("whole_tissue_partition", {})
     query = contract.get("query_reclustering", {})
-    if whole.get("method") == "BANKSY" and whole.get("candidate_grid_source") != "bound_upstream_input":
-        errors.append("BANKSY whole-tissue selection must use the bound upstream grid")
-    if whole.get("candidate_grid_source") == "bound_upstream_input":
+    if whole.get("method") == "BANKSY" and whole.get("candidate_grid_source") not in {"bound_upstream_input", "fresh_project_computation"}:
+        errors.append("BANKSY whole-tissue selection requires a declared fresh or bound-upstream grid source")
+    if whole.get("candidate_grid_source") == "bound_upstream_input" or whole.get("method") == "BANKSY":
         grid_path, grid_errors = validate_artifact_ref(root, whole.get("grid_artifact", {}), "whole-tissue grid artifact")
         errors.extend(grid_errors)
         if grid_path:
@@ -55,7 +55,7 @@ def main() -> int:
                 errors.append("whole-tissue grid artifact is not valid resolution JSON")
     if whole.get("candidate_grid_source") == "fresh_project_computation" and "biological_profile" in resolved:
         biological = json.loads(resolved["biological_profile"].read_text(encoding="utf-8"))
-        fresh = biological.get("resolution_policy", {}).get("fresh_r_first_whole_tissue_candidate_resolutions", [])
+        fresh = biological.get("resolution_policy", {}).get("fresh_sct_banksy_whole_tissue_candidate_resolutions", [])
         if fresh and sorted({float(value) for value in fresh}) != whole.get("candidate_resolutions"):
             errors.append("fresh whole-tissue resolutions differ from the bound biological profile")
     if whole.get("method") == "BANKSY" and whole.get("candidate_resolutions") == query.get("candidate_resolutions"):

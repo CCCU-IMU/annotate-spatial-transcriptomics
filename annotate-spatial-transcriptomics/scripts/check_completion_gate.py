@@ -94,7 +94,7 @@ def main():
         else:
             preset_record=json.loads(preset_path.read_text())
             if preset_record.get("strategy_preset_status")!="ACTIVE" or preset_record.get("strategy_preset_id")!=preset_requested:errors.append("active strategy preset does not match the requested preset")
-            if preset_record.get("strategy_preset_preprocessing_mode")!="fixed_verified_same_batch_contract" or preset_record.get("fixed_cellbin_preprocessing_required") is not True:errors.append("same-batch R-first preset lacks independently verified fixed cellbin preprocessing provenance")
+            if preset_record.get("strategy_preset_preprocessing_mode")!="fixed_verified_same_batch_contract" or preset_record.get("fixed_cellbin_preprocessing_required") is not True:errors.append("same-batch SCT+BANKSY preset lacks independently verified fixed cellbin preprocessing provenance")
             bindings=preset_record.get("strategy_preset_bindings") or {}
             for key,expected in bindings.items():
                 if not key.endswith("_sha256"):continue
@@ -113,6 +113,21 @@ def main():
     else:context=json.loads(context_path.read_text())
     cv=r/"provenance/biological_context_validation.json"
     if not cv.exists() or json.loads(cv.read_text()).get("status")!="PASS":errors.append("biological-context validation has not passed")
+    if project.get("project_input_boundary_validation_required",False) is True:
+        scope_policy=r/"provenance/analysis_scope_policy.json"
+        if not scope_policy.is_file():errors.append("missing frozen analysis-scope policy")
+        else:
+            try:
+                scope=json.loads(scope_policy.read_text(encoding="utf-8"));membership=Path(scope.get("membership_path", ""))
+                membership=membership if membership.is_absolute() else r/membership
+                if scope.get("status")!="PASS" or not membership.is_file() or scope.get("membership_sha256")!=sha256(membership):
+                    errors.append("analysis-scope policy is failed or stale")
+            except (OSError,json.JSONDecodeError):errors.append("analysis-scope policy is unreadable")
+    if project.get("annotation_workflow_completion_required",False) is True:
+        workflow_events=read(r/"state/workflow_event_registry.tsv")
+        if not workflow_events:errors.append("workflow event registry is empty")
+        event_ids=[row.get("event_id","") for row in workflow_events]
+        if "" in event_ids or len(event_ids)!=len(set(event_ids)):errors.append("workflow event registry has empty or duplicate event_id")
     if queue:errors.append(f"next-action queue still contains {len(queue)} items")
     review_gate_path=r/"provenance/annotation_review_gate.json"
     if review_gate_path.exists():

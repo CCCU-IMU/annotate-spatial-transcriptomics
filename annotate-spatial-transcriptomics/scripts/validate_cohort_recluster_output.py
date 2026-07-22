@@ -45,24 +45,29 @@ def main() -> int:
         root / "run_manifest.tsv",
         root / "sessionInfo.txt",
         root / "cohort_reclustered_query_seurat.rds",
-        root / "joint_query_anchor_pca_seurat.rds",
         root / "tables/analyzed_membership.tsv.gz",
-        root / "tables/query_anchor_distance_evidence.tsv",
-        root / "tables/cluster_anchor_distance_summary.tsv",
         root / "tables/cluster_source_state_composition.tsv",
         root / "tables/cluster_QC_summary.tsv",
     ]
+    if args.expected_anchors > 0:
+        required.extend([
+            root / "joint_query_anchor_pca_seurat.rds",
+            root / "tables/query_anchor_distance_evidence.tsv",
+            root / "tables/cluster_anchor_distance_summary.tsv",
+        ])
     for path in required:
         if not path.exists() or path.stat().st_size == 0:
             errors.append(f"missing_or_empty:{path.relative_to(root)}")
     mf = manifest(root / "run_manifest.tsv") if (root / "run_manifest.tsv").exists() else {}
-    if not truthy(mf.get("anchor_assisted", "")): errors.append("manifest_anchor_assisted_not_true")
+    anchor_assisted = truthy(mf.get("anchor_assisted", ""))
+    if args.expected_anchors > 0 and not anchor_assisted: errors.append("manifest_anchor_assisted_not_true")
+    if args.expected_anchors == 0 and anchor_assisted: errors.append("manifest_anchor_assisted_unexpected_for_zero_anchors")
     if not truthy(mf.get("query_only_graph_umap_deg", "")): errors.append("manifest_query_only_not_true")
     if int(float(mf.get("n_query_analyzed", -1))) != args.expected_query: errors.append("manifest_query_count_mismatch")
     if int(float(mf.get("n_anchors_analyzed", -1))) != args.expected_anchors: errors.append("manifest_anchor_count_mismatch")
     expected_ids: set[str] | None = None
     evidence = root / "tables/query_anchor_distance_evidence.tsv"
-    if evidence.exists():
+    if args.expected_anchors > 0 and evidence.exists():
         ev = read_tsv(evidence); expected_ids = {row.get("cell_id", "") for row in ev}
         if len(expected_ids) != args.expected_query: errors.append("anchor_evidence_query_count_mismatch")
     summary = []

@@ -1,6 +1,6 @@
-# Seurat/R-first annotation workflow
+# R-first annotation workflow
 
-Use this path whenever a readable full-feature Seurat RDS is available or R is selected as the primary framework. Seurat is the computational backbone; the biological controller is `direct-lineage-controller.md`.
+Use this path whenever a readable full-feature Seurat RDS is available or R is selected as the primary framework. For verified same-batch StereoPy cellbin inputs, R/Seurat carries expression and BANKSY supplies the whole-tissue partition; the biological controller is `direct-lineage-controller.md`.
 
 ## 1. Freeze and inspect the object
 
@@ -16,7 +16,7 @@ Existing whole-tissue or cohort clustering is reusable only when source-object a
 
 ## 3. Whole-tissue broad pass
 
-When no valid clustering is reusable, run SCTransform, PCA and an adaptive Seurat resolution grid. Sheep ovary fresh R-first graphs use `0.1,0.2,0.3,0.4,0.6`; never lower below 0.1 to compensate for a defective graph. A reusable BANKSY input retains its own complete bound resolution grid for the initial broad choice. Other tissues use a declared context-appropriate grid.
+When no valid clustering is reusable for a verified same-batch sheep-ovary cellbin input, run `run_seurat_sct_preprocess.R`: entry QC, all-gene auxiliary LogNormalize, SCT v2 `glmGamPoi` with 4,000 HVGs, then BANKSY `M=0`, `k_geom=30`, `lambda=0.2`, 30 PCs, Leiden `k_neighbors=50` and `0.2,0.4,0.6,0.8`. BANKSY consumes only SCT Pearson residuals; the LogNormalize layer is never graph input. A reusable BANKSY input retains its complete bound grid. Other tissues or unverified batches use a declared context-appropriate graph rather than silently inheriting this batch contract.
 
 Generate per-resolution one-vs-rest DEG, canonical and data-specific marker summaries, UMAP, whole-section spatial maps and per-cluster highlights. Select the integrated-evidence optimum that preserves supported lineages before avoiding state-only fragmentation; use lower complexity only when evidence is otherwise equivalent.
 
@@ -26,7 +26,7 @@ At that resolution, perform open-world lineage review. Supported clusters receiv
 
 Create one immutable `broad_class_recluster` cohort for every supported initial broad class. A genuinely underpowered class may remain broad-only only after a recorded `not_applicable_reviewed` decision. Use `run_seurat_cohort_recluster.R` and register its output in `recluster_cohort_registry.tsv`.
 
-Fit normalization/PCA jointly with frozen anchors when they are needed, while constructing graph, clusters, UMAP, DEG and outcome counts from query observations only. Select cohort PCs, k and resolution from the current membership; for sheep ovary run the full formal grid for every broad or targeted cohort.
+Fit normalization/PCA jointly with frozen anchors when they are needed, while constructing graph, clusters, UMAP, DEG and outcome counts from query observations only. Select cohort PCs, k and resolution from the current membership; for sheep ovary run the full `0.1,0.2,0.3,0.4,0.6` cohort grid. The fixed whole-tissue BANKSY parameters do not transfer automatically to subset reclustering.
 
 Adjudicate every subcluster as exactly one of:
 

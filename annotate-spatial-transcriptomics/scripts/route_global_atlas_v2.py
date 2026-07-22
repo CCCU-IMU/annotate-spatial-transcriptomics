@@ -68,6 +68,19 @@ def validate_calibration(manifest_path: Path, mapping_path: Path, policy: dict) 
     query_record = artifacts.get("query_mapping", {})
     if Path(query_record.get("path", "")).resolve() != mapping_path.resolve() or query_record.get("sha256") != sha256(mapping_path):
         raise SystemExit("Atlas mapping is not the hash-bound calibrated query mapping")
+    binding = manifest.get("routing_mapping_binding", {})
+    if binding.get("status") != "PASS" or int(binding.get("overlap_n", -1)) != 0:
+        raise SystemExit("all-cell Atlas routing mapping lacks a valid disjoint-union binding")
+    source_manifest = Path(binding.get("source_calibration_manifest", ""))
+    if not source_manifest.is_file() or sha256(source_manifest) != binding.get("source_calibration_manifest_sha256"):
+        raise SystemExit("Atlas routing source calibration manifest is missing or stale")
+    for key in ("target_mapping", "heldout_mapping", "combined_mapping"):
+        record = binding.get(key, {})
+        path = Path(record.get("path", ""))
+        if not path.is_file() or sha256(path) != record.get("sha256"):
+            raise SystemExit(f"Atlas routing {key} binding is missing or stale")
+    if Path(binding["combined_mapping"]["path"]).resolve() != mapping_path.resolve():
+        raise SystemExit("Atlas routing combined mapping differs from the routed mapping")
     cumulative_path = Path(artifacts["heldout_cumulative_validation"]["path"])
     rows = read_tsv(cumulative_path)
     result: dict[str, dict] = {}

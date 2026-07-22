@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.1 — 2026-07-22
+
+- 将本地验证过的独立 SCT+BANKSY 原始计数重建合同同步到发布版：BANKSY 使用 SCT Pearson residuals，导入对象的归一化、降维、聚类和历史标签不再作为当前项目计算输入；全基因 LogNormalize 仅用于 marker 验证。
+- 修复零锚点 query-only cohort、压缩 membership、稀疏矩阵求和、坐标重复合并、共享 marker 一对多展开、绝对 dotplot 单列树顺序等 6 类可复现运行缺陷。
+- 新增 Atlas 路由映射绑定器，要求全细胞路由输入是校准 target 与 disjoint held-out 当前 query 的精确哈希绑定并集；任意临时合并表 fail closed。
+- 将分析范围策略、release sessionInfo、review 目录、非空 workflow timeline 和绝对/归一化 dotplot 双视图纳入 stock builder 与发布审计。
+- annotation contract 现在把 workflow/biological profile 与候选目录冻结为项目内副本，避免共享安装目录在另一会话更新后改变在跑项目；调度预检同时校验 scheduler-visible job name 和实际 Python/R 环境依赖。HNAICC AIP 明确使用标准输入提交，completion audit 在终态后登记，避免自注册死锁。
+- 保留 v2 的开放谱系架构：全候选 selected-plus-two 扫描、大类内嵌 1–5% 程序、零 census、亚群跨谱系重建、Oocyte 完整通过簇和全细胞 Atlas challenger 均继续作为完成门。
+
 ## 2.0.0 — 2026-07-22
 
 - 新增项目级不可变 `annotation_contract.json`，在任何生物学命名前冻结输入快照、表达对象边界、workflow/biological profile、候选谱系目录、全组织初始聚类网格、query 重聚类网格、Atlas 路由和发布 taxonomy；后续证据与完成门按 SHA256 绑定。

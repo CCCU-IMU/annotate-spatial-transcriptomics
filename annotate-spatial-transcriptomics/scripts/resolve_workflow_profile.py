@@ -96,9 +96,9 @@ def main() -> int:
     preset_bindings = None
     if args.strategy_preset != "none":
         if not sheep_ovary:
-            raise SystemExit("the sheep-ovary same-batch R-first preset requires verified sheep ovary context")
+            raise SystemExit("the sheep-ovary same-batch SCT+BANKSY preset requires verified sheep ovary context")
         if not (inspected_seurat and full_feature):
-            raise SystemExit("the sheep-ovary same-batch R-first preset requires a full-feature Seurat RDS inspection")
+            raise SystemExit("the sheep-ovary same-batch SCT+BANKSY preset requires a full-feature Seurat RDS inspection")
         preset_path = skill_root / "references/profiles/sheep_ovary_same_batch_rfirst_preset.json"
         preset = load(preset_path)
         reference_root = preset_path.parent
@@ -110,11 +110,14 @@ def main() -> int:
             preset_bindings[key] = str(path.resolve())
             preset_bindings[f"{key}_sha256"] = sha256(path)
 
-    if sheep_ovary and inspected_seurat and full_feature:
-        backbone = "seurat_r_first"
+    if fixed_contract:
+        backbone = "seurat_sct_banksy_whole_tissue_r_evidence"
+        status = "RESOLVED"
+    elif sheep_ovary and inspected_seurat and full_feature:
+        backbone = "seurat_r_first_context_adaptive_graph"
         status = "RESOLVED"
     elif sheep_ovary:
-        backbone = "inspect_inputs_then_prefer_r_first_if_full_feature_rds_exists"
+        backbone = "inspect_inputs_then_prefer_sct_banksy_if_verified_cellbin_else_context_adaptive_r"
         status = "NEEDS_INPUT_INSPECTION"
     else:
         backbone = "generic_context_adaptive"
@@ -147,7 +150,7 @@ def main() -> int:
     args.out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     workflow_record = {
         "status": "ACTIVE" if fixed_contract else "PENDING_PROVENANCE",
-        "workflow_profile_id": "seurat_stereopy_cellbin_same_batch_rfirst" if fixed_contract else profile.get("profile_id"),
+        "workflow_profile_id": "seurat_stereopy_cellbin_same_batch_sct_banksy" if fixed_contract else profile.get("profile_id"),
         "workflow_profile": str(profile_path.resolve()),
         "workflow_profile_sha256": sha256(profile_path),
         "candidate_resolution_grid": profile["stereopy_cellbin_pped_contract"]["clustering"]["candidate_resolutions"] if fixed_contract else [],

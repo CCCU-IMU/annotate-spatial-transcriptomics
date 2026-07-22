@@ -74,7 +74,7 @@ def main() -> int:
     required_canonical = {("broad", "canonical")} | ({("subtype", "canonical")} if subtype_required else set())
     req(required_canonical.issubset(combos), "required canonical broad/high-confidence subtype dotplots are missing")
     for r in assets:
-        for key in ["png", "pdf", "source"]:
+        for key in ["png", "pdf", "absolute_png", "absolute_pdf", "source"]:
             p = Path(r.get(key, "")); p = p if p.is_absolute() else root / p
             req(p.exists() and p.stat().st_size > (5000 if key != "source" else 100), f"invalid dotplot {key}: {p}")
         src = Path(r.get("source", "")); src = src if src.is_absolute() else root / src

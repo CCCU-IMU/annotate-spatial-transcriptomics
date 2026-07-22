@@ -17,14 +17,14 @@ Therefore:
 - do not treat an imported StereoPy PCA/UMAP as an R preprocessing result;
 - keep the full `Spatial` assay for marker detection, anti-marker checks and
   rare-lineage validation;
-- create a fresh `SCT` assay and fresh PCA/neighbour/UMAP reductions for each
-  whole-tissue analysis;
+- create a fresh `SCT` assay and fresh BANKSY PCA/UMAP plus complete BANKSY
+  cluster grid for each whole-tissue analysis;
 - do not infer preprocessing from the presence of an assay or reduction name;
   require a matching preprocessing manifest.
 
 ## Frozen whole-tissue profile for this production batch
 
-For samples intended to be directly comparable with the validated R workflow,
+For samples intended to be directly comparable with the validated SCT+BANKSY workflow,
 use the following fixed numerical preprocessing profile unless a recorded
 batch-level exception is approved:
 
@@ -38,35 +38,43 @@ batch-level exception is approved:
 | doublet handling | hard deletion | none at entry; preserve a review flag |
 | SCTransform | input/new assay | `Spatial` / `SCT` |
 | SCTransform | flavour/method | `v2` / `glmGamPoi` |
-| SCTransform | variable features | `3000` |
+| SCTransform | variable features | `4000` |
 | SCTransform | fitting observations | `min(50000, n_observations)` |
 | SCTransform | memory/feature policy | `conserve.memory=TRUE`, `return.only.var.genes=TRUE` |
-| PCA | components computed | `50` on SCT variable features |
-| neighbours | components used | first `30` |
-| neighbours | graph | `k=30`, Annoy, `n.trees=50`, cosine |
-| clustering | algorithm | Leiden (`algorithm=4`) |
-| broad grid | candidate resolutions | `0.1,0.2,0.3,0.4,0.6` |
-| Leiden execution | parallel unit | one single-threaded Leiden optimization per resolution; run candidate resolutions concurrently with `future` workers |
-| UMAP | geometry | `n.neighbors=30`, `min.dist=0.3`, cosine |
+| BANKSY input | matrix | `SCT/scale.data` Pearson residuals for the `4000` SCT HVGs |
+| BANKSY spatial moments | AGF / M | `compute_agf=FALSE`, `M=0` |
+| BANKSY spatial neighbours | geometry | `k_geom=30`, `spatial_mode="kNN_median"`, `dimensions="all"`, `center=TRUE` |
+| BANKSY mixing | lambda | `0.2` |
+| BANKSY PCA | components/scaling | `30`, `scale=TRUE` |
+| BANKSY clustering | graph/algorithm | `k_neighbors=50`, Leiden |
+| broad grid | candidate resolutions | `0.2,0.4,0.6,0.8` |
+| BANKSY UMAP | geometry | `n_neighbors=30`, `min_dist=0.3`, `spread=1`, `n_epochs=300` |
+| reproducibility | seed | `20260717` |
+| auxiliary marker layer | expression | `Spatial` LogNormalize, `scale.factor=10000`; never used by BANKSY |
 
 The reference implementation is `scripts/run_seurat_sct_preprocess.R`. It
-writes a cell-scope table, preprocessing manifest, all candidate cluster
-memberships and an SCT/PCA/UMAP Seurat object. It deliberately does not choose
-a final resolution or assign biological labels.
+writes a cell-scope table, JSON/TSV preprocessing manifests, a machine-readable
+`banksy_grid.json`, every candidate membership and an SCT/BANKSY Seurat object.
+It deliberately does not choose a final resolution or assign biological labels.
 
 The runner enforces these values. Any numerical override requires both
 `--allow-batch-exception` and a substantive `--batch-exception-reason`; the
 manifest records the exception. Missing SHA256 support is fatal rather than
 silently emitting an unverifiable manifest.
 
-Computational parallelism is provenance, not a biological parameter. On Linux compute nodes, set `--resolution-workers` to at most the number of candidate resolutions and request the same number of scheduler CPUs; `--resolution-future-plan auto` selects `multicore` when supported. One Leiden optimization remains single-threaded, but the five candidate resolutions run concurrently. The same worker count is exposed to `uwot` UMAP. Do not request 64 CPUs for a five-resolution grid or for a sequential `FindAllMarkers` call. When whole-grid evidence is produced by a wrapper, prefer one one-CPU job per resolution plus a dependency-gated aggregation job unless the wrapper contains verified cluster-level parallelism.
+Computational parallelism is provenance, not a biological parameter. Set
+`--analysis-threads` no higher than the scheduler allocation; it is passed to
+BANKSY UMAP. Do not claim that all BANKSY or Leiden stages use every requested
+CPU. Size memory from the full 4,000-feature Pearson-residual matrix and submit
+the production run to a compute node.
 
 ## Separate full-feature validation object
 
 The converted `Spatial@data` layer may be missing or may be an exact copy of
-raw counts. Such a layer is not valid input for Wilcoxon DEG, even though the
-SCT graph and clusters remain valid. Do not normalize or otherwise mutate the
-frozen SCT clustering object to repair this.
+raw counts. The fixed runner adds an auxiliary all-gene LogNormalize layer, but
+authoritative DEG/marker evidence still requires an independently registered,
+analysis-set-bound validation artifact. Never use SCT residuals or the BANKSY
+HVG matrix to establish marker absence.
 
 On a compute node, run `scripts/prepare_seurat_full_feature_validation.R` from
 the immutable raw-count RDS plus the frozen analysis-set membership. It creates
@@ -82,7 +90,7 @@ points to another object, has a mismatched analysis-set hash, or when
 `data == counts`. Detection percentages and marker presence continue to use
 raw counts; Wilcoxon rank evidence uses the verified LogNormalize `data`
 layer. This validation job can be deferred until DEG/marker evidence is
-needed, which is why a running SCT/PCA job may not encounter the issue yet.
+needed, which is why a running SCT+BANKSY job may not encounter the issue yet.
 
 ## Parameters that remain adaptive
 
@@ -134,9 +142,10 @@ the SCT model would break batch comparability.
 
 ## Required provenance
 
-Every run must record the input checksum, assay/count layer, exact QC rule,
-SCT flavour and method, variable-feature count, SCT fitting sample size, PCA
-components computed/used, neighbour metric and implementation, candidate
-resolutions, seeds, software versions, analysis-set observation IDs and their
-hash. Keep initial QC exclusions in the full ledger; do not relabel them as a
-post-clustering biological population.
+Every whole-tissue run must record the input checksum, assay/count layer, exact
+QC rule, SCT flavour/method, variable-feature count, SCT fitting sample size,
+BANKSY input layer, `M`, `k_geom`, spatial mode, lambda, PCs, Leiden
+`k_neighbors`, candidate resolutions, UMAP parameters, seed, software versions,
+analysis-set observation IDs and their hash. Cohort runs separately record their
+adaptive PCA/neighbour parameters. Keep initial QC exclusions in the full ledger;
+do not relabel them as a post-clustering biological population.

@@ -30,6 +30,34 @@ def registry_membership(root: Path, row: dict[str, str], prefix: str = "membersh
     return membership_ids(root, ref, prefix)
 
 
+def registry_membership_allow_empty(
+    root: Path, row: dict[str, str], prefix: str
+) -> tuple[set[str], list[str]]:
+    """Validate a membership reference while permitting an explicit zero-size set.
+
+    A calibrated Atlas route may legitimately accept no residual-QC observations.
+    The generic evidence helper intentionally rejects empty memberships, so the
+    partition audit handles this one typed terminal boundary explicitly.
+    """
+    try:
+        expected_n = int(float(row.get(f"{prefix}_n_observations", "") or 0))
+    except ValueError:
+        expected_n = -1
+    if expected_n != 0:
+        return registry_membership(root, row, prefix)
+    value = row.get(f"{prefix}_path", "") or row.get(f"{prefix}_artifact", "")
+    expected_hash = row.get(f"{prefix}_sha256", "")
+    path = path_at(root, value) if value else Path()
+    errors: list[str] = []
+    if not value or not path.is_file():
+        errors.append(f"{prefix}: zero-size membership artifact is missing")
+    elif not expected_hash or sha256(path) != expected_hash:
+        errors.append(f"{prefix}: zero-size membership artifact SHA256 is stale")
+    elif read_tsv(path):
+        errors.append(f"{prefix}: declared zero-size membership contains observations")
+    return set(), errors
+
+
 def audit(root: Path) -> dict:
     errors: list[str] = []
     cell_path = root / "state/cell_ledger.tsv.gz"
@@ -106,7 +134,14 @@ def audit(root: Path) -> dict:
         errors.extend(f"targeted cohort {cohort_id}: {message}" for message in member_errors)
         expected = targeted_sources.get(cohort_id)
         if expected is None:
-            errors.append(f"targeted cohort {cohort_id} is not linked to one explicit source subcluster")
+            all_cell_gate = (
+                cohort.get("question_mode") == "targeted_mixture"
+                and cohort.get("source_cluster_ids") == "all_cell_multi_module_gate"
+            )
+            if not all_cell_gate:
+                errors.append(f"targeted cohort {cohort_id} is not linked to one explicit source subcluster")
+            elif not actual <= analysis_ids:
+                errors.append(f"all-cell targeted cohort {cohort_id} contains observations outside the analysis set")
         elif actual != expected:
             errors.append(f"targeted cohort {cohort_id} membership differs from its source subcluster")
 
@@ -152,8 +187,18 @@ def audit(root: Path) -> dict:
             if len(matches) != 1:
                 errors.append(f"return outcome {cohort_id}/{key[1]} must have exactly one direct-return record")
                 continue
-            if direct_members.get(matches[0].get("return_id", ""), set()) != outcome_memberships.get(key, set()):
-                errors.append(f"direct-return membership differs from source outcome: {cohort_id}/{key[1]}")
+            effective = direct_members.get(matches[0].get("return_id", ""), set())
+            source = outcome_memberships.get(key, set())
+            if not effective <= source:
+                errors.append(f"direct-return membership contains cells outside source outcome: {cohort_id}/{key[1]}")
+                continue
+            omitted = source - effective
+            covered_elsewhere = set().union(*[
+                members for return_id, members in direct_members.items()
+                if return_id != matches[0].get("return_id", "")
+            ]) if direct_members else set()
+            if not omitted <= covered_elsewhere:
+                errors.append(f"effective direct-return omissions are not covered by another terminal return: {cohort_id}/{key[1]}")
 
     # Reconstruct the pre-Atlas terminal residual QC membership from the
     # current ledger. Accepted Atlas returns have a final broad label now, but
@@ -203,7 +248,7 @@ def audit(root: Path) -> dict:
             errors.extend(f"global Atlas QC: {message}" for message in qc_errors)
             if frozen_qc != terminal_qc:
                 errors.append("global Atlas frozen QC membership differs from terminal residual QC")
-            accepted, accepted_errors = registry_membership(root, atlas, "accepted_membership")
+            accepted, accepted_errors = registry_membership_allow_empty(root, atlas, "accepted_membership")
             rejected, rejected_errors = registry_membership(root, atlas, "rejected_membership")
             errors.extend(f"global Atlas accepted: {message}" for message in accepted_errors)
             errors.extend(f"global Atlas rejected: {message}" for message in rejected_errors)

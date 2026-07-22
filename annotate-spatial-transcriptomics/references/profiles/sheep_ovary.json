@@ -265,7 +265,7 @@
   },
   "resolution_policy": {
     "principle": "choose the resolution with the best integrated evidence for the current biological question; preserve stable lineages or true subtypes first, avoid state/technical fragmentation second, and use lower complexity only as a tie-breaker",
-    "fresh_r_first_whole_tissue_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
+    "fresh_sct_banksy_whole_tissue_candidate_resolutions": [0.2, 0.4, 0.6, 0.8],
     "query_reclustering_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
     "upstream_banksy_whole_tissue_policy": "audit the complete resolution grid stored in the bound BANKSY input, then select for broad recall/purity; this upstream grid is not replaced by the query-reclustering grid",
     "formal_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],

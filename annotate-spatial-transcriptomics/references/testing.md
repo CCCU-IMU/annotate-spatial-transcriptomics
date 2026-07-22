@@ -23,11 +23,12 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 - No hard-coded sample paths in reusable scripts.
 - No example-specific labels or thresholds in execution defaults.
 - Every initial cluster decision has a hash-bound label-blind prelabel evidence artifact. It must compare every declared candidate lineage, bind positive and anti-DEG, record winner/runner-up margin and reject a moderate/high broad call based on fewer than two marker families or unresolved contradictions. Loading paper labels before this freeze fails.
-- The same-batch Seurat cellbin test writes the frozen SCT profile to its manifest: entry QC `nCount>=100 AND nFeature>=75`, SCT v2/`glmGamPoi`, 3,000 variable features, at most 50,000 fitting observations, 50 computed/30 used PCs, k=30 cosine Annoy with 50 trees, and the candidate grid `0.1,0.2,0.3,0.4,0.6`.
+- The same-batch Seurat cellbin test writes the frozen SCT+BANKSY profile to its manifest: entry QC `nCount>=100 AND nFeature>=75`, SCT v2/`glmGamPoi`, 4,000 variable features, at most 50,000 fitting observations, BANKSY `M=0`, `k_geom=30`, `lambda=0.2`, 30 PCs, Leiden `k_neighbors=50`, grid `0.2,0.4,0.6,0.8`, and UMAP `n_neighbors=30,min_dist=0.3,spread=1,n_epochs=300`.
 - The Seurat cellbin runner never reuses imported StereoPy PCA/UMAP, never silently falls back from `glmGamPoi`, never auto-selects a final resolution and never auto-reassigns a small cluster.
 - Sheep/Ovis/ovine/羊 plus ovary/ovarian/卵巢 and a full-feature Seurat RDS automatically resolves to R-first. A confirmed StereoPy cellbin_PPed conversion activates the exact fixed profile; unrecorded numerical drift and missing SHA256 support fail.
 - Broad/targeted cohort SCT tests require query-only graph/Leiden/UMAP/DEG, explicit SCT v2 provenance, adaptive k/PC controls, the complete active grid and a fail-closed `glmGamPoi` dependency.
 - Broad dotplots always exist with PNG, PDF and valid source TSV; subtype dotplots are required only when at least one real high-confidence fine label is released.
+- Every dotplot asset has normalized and absolute PNG/PDF views from one source table; marker labels containing spaces remain one-column tree-order values.
 - Every cell/observation is accounted for exactly once.
 - State validator and release audit pass.
 - The full release audit must run on every runtime declared compatible by `check_runtime.py`, including Python 3.8; do not rely on newer-only `pathlib` helpers for checksum path containment.
@@ -83,6 +84,11 @@ Do not pass prior final metadata, mapping tables or expected answer. Case-study 
 - Biological benchmarks report macro-F1, per-class precision/recall/F1, rare-type false positives, unresolved fraction and cross-sample stability. Ablations must show lower macro-F1 after removing anti-marker, spatial or broad-cohort review evidence.
 - A held-out benchmark dataset is forbidden in reference, route and Atlas registries until annotation is hash-frozen. When GSE233801 is the held-out target, any GSE233801 reference occurrence fails before unblinding.
 - Failed scheduler runs and logs remain registered; repaired executions use new run IDs.
+- Scheduler regression fixtures reject an invalid stage name before submission, require AIP standard-input submission, and prevent completion-audit self-registration deadlock.
+- Query-only cohort fixtures with zero anchors pass without anchor-only artifacts; positive-anchor fixtures still require and validate them.
+- Membership readers accept both TSV and TSV.GZ; spatial morphology ignores duplicate coordinate copies in clustering exports; broad-family evidence uses the base sparse-matrix `sum()` generic.
+- Atlas routing rejects an unbound combined map and accepts only a hash-bound exact disjoint target-plus-heldout union.
+- Release manifests include `review/`; completion and release both reject empty workflow-event provenance, and release audit requires `release_sessionInfo.txt`.
 - The HTML is visibly preliminary whenever the completion gate is absent or blocked.
 - `autopilot_status.py` remains `CONTINUE` after a successful first pass, a stale completion gate, missing explicit final-annotation user confirmation, missing final assets, a stale report or a missing/full-release audit, and returns `COMPLETE` only after the confirmed current release is audited.
 - Before confirmation, `autopilot_status.py` must require the completion gate, frozen broad spatial/canonical-marker assets, then a post-completion main-Agent biological quality approval, and only then a self-contained lightweight HTML. Requesting master approval after broad annotation alone or requesting user confirmation without the master approval fails; pre-confirmation output may not contain final DEG or full release assets.

@@ -5,17 +5,22 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import json
 from pathlib import Path
 
 
+def open_text(path: Path):
+    return gzip.open(path, "rt", newline="", encoding="utf-8") if path.suffix == ".gz" else path.open(newline="", encoding="utf-8")
+
+
 def ids(path: Path, column: str) -> set[str]:
-    with path.open(newline="", encoding="utf-8") as handle:
+    with open_text(path) as handle:
         return {str(row[column]) for row in csv.DictReader(handle, delimiter="\t")}
 
 
 def rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
+    with open_text(path) as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
 
 

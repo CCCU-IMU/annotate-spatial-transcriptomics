@@ -19,15 +19,17 @@ SCRIPTS = SKILL / "scripts"
 class SheepOvaryReleaseContract(unittest.TestCase):
     def test_profile_has_rfirst_fixed_parameters_and_atlas_policy(self) -> None:
         profile = json.loads((SKILL / "references/profiles/sheep_ovary_rfirst_profile.json").read_text())
-        self.assertEqual(profile["workflow"]["preferred_backbone"], "seurat_r_first")
+        self.assertEqual(profile["workflow"]["preferred_backbone"], "seurat_r_first_context_adaptive_graph")
         fixed = profile["stereopy_cellbin_pped_contract"]
         self.assertEqual(fixed["entry_qc"]["minimum_counts"], 100)
         self.assertEqual(fixed["entry_qc"]["minimum_features"], 75)
         self.assertEqual(fixed["sctransform"]["method"], "glmGamPoi")
-        self.assertEqual(fixed["sctransform"]["variable_features"], 3000)
-        self.assertEqual(fixed["pca"], {"computed_components": 50, "neighbor_components": 30})
-        self.assertEqual(fixed["neighbors"], {"k": 30, "method": "annoy", "trees": 50, "metric": "cosine"})
-        self.assertEqual(fixed["clustering"]["candidate_resolutions"], [0.1, 0.2, 0.3, 0.4, 0.6])
+        self.assertEqual(fixed["sctransform"]["variable_features"], 4000)
+        self.assertEqual(fixed["banksy"]["input"], "SCT scale.data Pearson residuals for 4000 SCT variable features")
+        self.assertEqual(fixed["banksy"]["k_geom"], 30)
+        self.assertEqual(fixed["banksy"]["lambda"], 0.2)
+        self.assertEqual(fixed["banksy"]["k_neighbors"], 50)
+        self.assertEqual(fixed["clustering"]["candidate_resolutions"], [0.2, 0.4, 0.6, 0.8])
         self.assertEqual(profile["external_reference_policy"]["primary_public_atlas"], "GSE233801")
         self.assertEqual(profile["external_reference_policy"]["calibration_origin"], "query_like_heldout_current_query_anchors")
         self.assertEqual(profile["external_reference_policy"]["accepted_calibrated_tiers"], ["high", "moderate_only"])
@@ -64,7 +66,7 @@ class SheepOvaryReleaseContract(unittest.TestCase):
                 text=True,
             )
             result = json.loads(output.read_text())
-            self.assertEqual(result["preferred_backbone"], "seurat_r_first")
+            self.assertEqual(result["preferred_backbone"], "seurat_r_first_context_adaptive_graph")
             self.assertFalse(result["fixed_cellbin_preprocessing_required"])
             self.assertTrue(result["stereopy_cellbin_path_or_feature_hint"])
             self.assertEqual(result["primary_public_atlas"], "GSE233801")
@@ -93,19 +95,19 @@ class SheepOvaryReleaseContract(unittest.TestCase):
         text = (SCRIPTS / "run_seurat_sct_preprocess.R").read_text()
         self.assertIn("allow-batch-exception", text)
         self.assertIn("batch-exception-reason", text)
-        self.assertIn("digest is required for fail-closed", text)
-        for token in ["v2", "glmGamPoi", "3000", "50000", "pca-npcs", "annoy-trees", "0.1,0.2,0.3,0.4,0.6"]:
+        self.assertIn('for (package in c("glmGamPoi", "digest"))', text)
+        for token in ["v2", "glmGamPoi", "4000", "50000", "banksy-k-geom", "banksy-lambda", "0.2,0.4,0.6,0.8"]:
             self.assertIn(token, text)
+        self.assertIn("imported normalization/PCA/UMAP/clusters/labels ignored", text)
 
     def test_seurat_resolution_grids_expose_real_parallel_workers(self) -> None:
         whole = (SCRIPTS / "run_seurat_sct_preprocess.R").read_text()
         cohort = (SCRIPTS / "run_seurat_cohort_recluster_impl.R").read_text()
-        for runner in [whole, cohort]:
-            self.assertIn("resolution-workers", runner)
-            self.assertIn("resolution-future-plan", runner)
-            self.assertIn("future::multicore", runner)
-            self.assertIn("resolution_workers_used", runner)
-            self.assertIn("umap_threads", runner)
+        for token in ["resolution-workers", "resolution-future-plan", "future::multicore", "resolution_workers_used", "umap_threads"]:
+            self.assertIn(token, cohort)
+        for token in ["analysis-threads", "clusterBanksy", "k_neighbors = k_neighbors", "n_threads = analysis_threads"]:
+            self.assertIn(token, whole)
+        self.assertNotIn('FindNeighbors(', whole)
         self.assertIn('by_cols<-c("cluster",as.character(sc))', cohort)
         self.assertNotIn('by=c("cluster",sc)', cohort)
         self.assertIn('resolution = resolutions', whole)

@@ -39,7 +39,7 @@ def main() -> int:
     ap.add_argument("--project-id", help="stable provenance ID; defaults to project-root basename")
     args = ap.parse_args()
     root = args.project_root.resolve()
-    for d in ["config", "state", "inputs", "runs", "tables", "figures", "spatial_nodes", "spatial_genes", "report", "provenance", "provenance/incidents", "logs"]:
+    for d in ["config", "state", "inputs", "runs", "tables", "figures", "spatial_nodes", "spatial_genes", "review", "report", "provenance", "provenance/incidents", "logs"]:
         (root / d).mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     config = {

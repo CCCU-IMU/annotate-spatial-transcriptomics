@@ -55,6 +55,9 @@ class V2ContractTests(unittest.TestCase):
                         "--whole-tissue-grid-artifact", grid)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             contract = json.loads((root / "config/annotation_contract.json").read_text())
+            self.assertEqual(Path(contract["workflow_profile"]["path"]).parent, root / "config/contract_profiles")
+            self.assertEqual(Path(contract["biological_profile"]["path"]).parent, root / "config/contract_profiles")
+            self.assertEqual(Path(contract["candidate_catalog"]["path"]).parent, root / "config/contract_profiles")
             self.assertEqual(contract["whole_tissue_partition"]["candidate_resolutions"], [0.2, 0.4, 0.8])
             self.assertEqual(contract["whole_tissue_partition"]["grid_artifact"]["sha256"], sha(grid))
             self.assertEqual(contract["query_reclustering"]["candidate_resolutions"], [0.1, 0.2, 0.3, 0.4, 0.6])
@@ -144,16 +147,22 @@ class V2ContractTests(unittest.TestCase):
                 {"predicted_label": "Stromal", "cumulative_tier": "moderate_or_higher", "validation_n": 40, "validation_precision": 0.95, "target_precision": 0.9},
                 {"predicted_label": "Immune", "cumulative_tier": "moderate_or_higher", "validation_n": 10, "validation_precision": 1.0, "target_precision": 0.9},
             ])
+            target_mapping = root / "target_mapping.tsv.gz"
+            write_tsv(target_mapping, ["cell_id", "predicted_label", "mapping_tier", "out_of_distribution", "ontology_conflict"], [])
             placeholders = {}
-            for name, path in {"query_mapping": mapping, "heldout_cumulative_validation": cumulative}.items():
+            for name, path in {"query_mapping": target_mapping, "heldout_cumulative_validation": cumulative}.items():
                 placeholders[name] = {"path": str(path), "sha256": sha(path)}
-            calibration = root / "calibration.json"
-            calibration.write_text(json.dumps({
+            calibration_source = root / "calibration_source.json"
+            calibration_source.write_text(json.dumps({
                 "schema_version": "2.0", "status": "CALIBRATED_TIERED_EVIDENCE_ONLY",
                 "heldout_origin": "query_like_heldout_current_query_anchors",
                 "calibration_origin_manifest": str(origin), "calibration_origin_manifest_sha256": sha(origin),
                 "artifacts": placeholders,
             }))
+            calibration = root / "calibration.json"
+            bound = run(SCRIPTS / "bind_atlas_routing_mapping.py", "--calibration-manifest", calibration_source,
+                        "--heldout-mapping", mapping, "--combined-mapping", mapping, "--out", calibration)
+            self.assertEqual(bound.returncode, 0, bound.stdout + bound.stderr)
             result = run(SCRIPTS / "route_global_atlas_v2.py", "--cell-ledger", ledger, "--atlas-mapping", mapping,
                          "--calibration-manifest", calibration, "--workflow-profile", WORKFLOW, "--out", root / "out")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -192,16 +201,22 @@ class V2ContractTests(unittest.TestCase):
                 "predicted_label": "Stromal", "cumulative_tier": "moderate_or_higher",
                 "validation_n": 40, "validation_precision": 0.95,
             }])
-            calibration = root / "calibration.json"
-            calibration.write_text(json.dumps({
+            target_mapping = root / "target_mapping.tsv.gz"
+            write_tsv(target_mapping, list(mapping_rows[0]), [])
+            calibration_source = root / "calibration_source.json"
+            calibration_source.write_text(json.dumps({
                 "schema_version": "2.0", "status": "CALIBRATED_TIERED_EVIDENCE_ONLY",
                 "heldout_origin": "query_like_heldout_current_query_anchors",
                 "calibration_origin_manifest": str(origin), "calibration_origin_manifest_sha256": sha(origin),
                 "artifacts": {
-                    "query_mapping": {"path": str(mapping), "sha256": sha(mapping)},
+                    "query_mapping": {"path": str(target_mapping), "sha256": sha(target_mapping)},
                     "heldout_cumulative_validation": {"path": str(cumulative), "sha256": sha(cumulative)},
                 },
             }))
+            calibration = root / "calibration.json"
+            bound = run(SCRIPTS / "bind_atlas_routing_mapping.py", "--calibration-manifest", calibration_source,
+                        "--heldout-mapping", mapping, "--combined-mapping", mapping, "--out", calibration)
+            self.assertEqual(bound.returncode, 0, bound.stdout + bound.stderr)
             result = run(
                 SCRIPTS / "route_global_atlas_v2.py", "--cell-ledger", ledger, "--atlas-mapping", mapping,
                 "--calibration-manifest", calibration, "--workflow-profile", WORKFLOW, "--out", root / "out",
@@ -219,6 +234,77 @@ class V2ContractTests(unittest.TestCase):
             reviewed = [row for row in routes if row["review_required"] == "true"]
             self.assertEqual({row["cell_id"] for row in reviewed}, {"c0", "c1"})
             self.assertTrue(all(row["review_id"] == queue[0]["review_id"] for row in reviewed))
+
+    def test_query_only_cohort_validator_accepts_zero_anchors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "tables").mkdir(); (root / "figures").mkdir()
+            for name in ("RUN_COMPLETE.tsv", "sessionInfo.txt", "cohort_reclustered_query_seurat.rds"):
+                (root / name).write_text("ok\n")
+            write_tsv(root / "run_manifest.tsv", ["parameter", "value"], [
+                {"parameter": "anchor_assisted", "value": "false"},
+                {"parameter": "query_only_graph_umap_deg", "value": "true"},
+                {"parameter": "n_query_analyzed", "value": "2"},
+                {"parameter": "n_anchors_analyzed", "value": "0"},
+            ])
+            write_tsv(root / "tables/analyzed_membership.tsv.gz", ["cell_id"], [{"cell_id": "a"}, {"cell_id": "b"}])
+            write_tsv(root / "tables/cluster_source_state_composition.tsv", ["cluster", "n"], [{"cluster": "0", "n": "2"}])
+            write_tsv(root / "tables/cluster_QC_summary.tsv", ["cluster", "n"], [{"cluster": "0", "n": "2"}])
+            write_tsv(root / "tables/framework_res0p1_clusters.tsv", ["cell_id", "cluster"], [{"cell_id": "a", "cluster": "0"}, {"cell_id": "b", "cluster": "0"}])
+            write_tsv(root / "tables/framework_res0p1_DEG_all.tsv", ["gene", "cluster"], [{"gene": "G", "cluster": "0"}])
+            write_tsv(root / "tables/framework_res0p1_DEG_top100.tsv", ["gene", "cluster"], [{"gene": "G", "cluster": "0"}])
+            (root / "figures/framework_res0p1_UMAP.png").write_bytes(b"png")
+            (root / "figures/framework_res0p1_UMAP.pdf").write_bytes(b"pdf")
+            result = run(SCRIPTS / "validate_cohort_recluster_output.py", root,
+                         "--expected-query", 2, "--expected-anchors", 0, "--resolutions", "0.1")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_oocyte_context_validator_reads_gzip_memberships(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            canonical = root / "canonical.tsv.gz"; context = root / "context.tsv.gz"
+            write_tsv(canonical, ["cell_id"], [{"cell_id": "a"}])
+            write_tsv(context, ["cell_id"], [{"cell_id": "a"}, {"cell_id": "b"}])
+            outcomes = root / "outcomes.tsv"
+            write_tsv(outcomes, ["cell_id", "final_broad_label"], [
+                {"cell_id": "a", "final_broad_label": "Oocyte"},
+                {"cell_id": "b", "final_broad_label": "Granulosa"},
+            ])
+            out = root / "validation.json"
+            result = run(SCRIPTS / "validate_oocyte_context_boundary.py",
+                         "--canonical-membership", canonical, "--context-membership", context,
+                         "--outcomes", outcomes, "--out", out)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_analysis_scope_policy_is_hash_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); membership = root / "scope.tsv.gz"
+            write_tsv(membership, ["cell_id", "analysis_scope"], [
+                {"cell_id": "a", "analysis_scope": "analysis_set"},
+                {"cell_id": "b", "analysis_scope": "excluded_initial_qc"},
+            ])
+            result = run(SCRIPTS / "build_analysis_scope_policy.py", root, "--membership", membership)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            payload = json.loads((root / "provenance/analysis_scope_policy.json").read_text())
+            self.assertEqual(payload["analysis_set_n"], 1)
+            self.assertEqual(payload["excluded_initial_qc_n"], 1)
+            self.assertEqual(payload["membership_sha256"], sha(membership))
+
+    def test_preflight_rejects_invalid_scheduler_stage_before_submission(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "job.py"; source.write_text("print('ok')\n")
+            result = run(SCRIPTS / "preflight_generated_job.py", source,
+                         "--scheduler-job-name", "S1__P74_COMPLETION__A01")
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("scheduler_job_name", result.stdout)
+
+    def test_preflight_checks_the_declared_python_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "job.py"; source.write_text("print('ok')\n")
+            result = run(SCRIPTS / "preflight_generated_job.py", source,
+                         "--python", sys.executable, "--python-imports", "module_that_cannot_exist_v201")
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("python_imports", result.stdout)
 
 
 if __name__ == "__main__":

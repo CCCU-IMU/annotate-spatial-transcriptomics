@@ -14,7 +14,7 @@ from validate_prelabel_broad_evidence import validate as validate_prelabel_broad
 from workflow_contract_lib import active_workflow_contract
 
 
-FORMAL_GRID = [0.1, 0.2, 0.3, 0.4, 0.6]
+FORMAL_COHORT_GRID = [0.1, 0.2, 0.3, 0.4, 0.6]
 TERMINAL = {"validated_done", "not_applicable_reviewed"}
 CANONICAL_CONFIDENCE = {"low", "moderate", "high"}
 ATLAS_CONFIDENCE = {"high", "moderate_only", "low_reject"}
@@ -149,11 +149,11 @@ def audit(root: Path) -> dict:
         if (
             whole_grid.get("status") != "PASS"
             or whole_grid.get("scope") != "whole_tissue"
-            or whole_grid.get("candidate_resolutions") != FORMAL_GRID
+            or whole_grid.get("candidate_resolutions") != contract.get("whole_tissue_resolution_grid")
             or embedded.get("workflow_profile_sha256") != contract.get("workflow_profile_sha256")
             or embedded.get("strategy_preset_id") != contract.get("strategy_preset_id")
         ):
-            add("WHOLE_TISSUE_GRID_AUDIT_MISSING", "whole_tissue", "whole_tissue", "validate_complete_active_workflow_grid", "verified same-batch StereoPy cellbin project lacks a current whole-tissue 0.1,0.2,0.3,0.4,0.6 grid audit")
+            add("WHOLE_TISSUE_GRID_AUDIT_MISSING", "whole_tissue", "whole_tissue", "validate_complete_active_workflow_grid", f"verified same-batch StereoPy cellbin project lacks the current whole-tissue grid audit: {contract.get('whole_tissue_resolution_grid')}")
 
     for direct in returns:
         return_id = direct.get("return_id", "")

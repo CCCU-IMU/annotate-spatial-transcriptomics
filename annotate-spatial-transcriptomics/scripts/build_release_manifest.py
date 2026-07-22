@@ -13,7 +13,7 @@ from dependency_manifest import build as build_dependency_manifest
 
 DEFAULT_ROOTS = (
     "config", "state", "tables", "figures", "spatial_nodes",
-    "spatial_genes", "report", "provenance",
+    "spatial_genes", "review", "report", "provenance",
 )
 EXCLUDED = {
     "provenance/release_manifest.tsv",

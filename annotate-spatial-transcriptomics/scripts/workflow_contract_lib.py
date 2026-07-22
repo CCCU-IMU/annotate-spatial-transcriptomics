@@ -63,7 +63,7 @@ def active_workflow_contract(root: Path) -> dict[str, Any]:
     same_batch = (
         workflow.get("status") == "ACTIVE"
         and workflow_binding_valid
-        and workflow.get("workflow_profile_id") == "seurat_stereopy_cellbin_same_batch_rfirst"
+        and workflow.get("workflow_profile_id") == "seurat_stereopy_cellbin_same_batch_sct_banksy"
         and preset.get("strategy_preset_status") == "ACTIVE"
         and preset.get("strategy_preset_id") == project.get("strategy_preset_requested") == "sheep_ovary_same_batch_rfirst"
         and preset_binding_valid
@@ -72,7 +72,7 @@ def active_workflow_contract(root: Path) -> dict[str, Any]:
         and checks_pass
     )
     grid = workflow.get("candidate_resolution_grid", [])
-    if same_batch and grid != [0.1, 0.2, 0.3, 0.4, 0.6]:
+    if same_batch and grid != [0.2, 0.4, 0.6, 0.8]:
         same_batch = False
     bound_profile = load_json(workflow_profile_path) if workflow_binding_valid else {}
     whole_tissue_grid = []

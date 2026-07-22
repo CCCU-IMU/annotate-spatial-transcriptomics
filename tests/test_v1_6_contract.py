@@ -190,6 +190,10 @@ class V160ActiveContract(unittest.TestCase):
                 "--input-contract-out", str(root / "provenance/input_contract_validation.json"),
             ], capture_output=True, text=True)
             self.assertEqual(resolved.returncode, 0, resolved.stdout + resolved.stderr)
+            self.assertEqual(
+                json.loads((root / "config/active_strategy_preset.json").read_text())["preferred_backbone"],
+                "seurat_sct_banksy_whole_tissue_r_evidence",
+            )
             grid = subprocess.run([
                 sys.executable, str(SCRIPTS / "validate_resolution_grid.py"), "--project-root", str(root),
                 "--workflow-profile", str(SKILL / "references/profiles/sheep_ovary_rfirst_profile.json"),
@@ -199,7 +203,7 @@ class V160ActiveContract(unittest.TestCase):
             whole_grid = subprocess.run([
                 sys.executable, str(SCRIPTS / "validate_resolution_grid.py"), "--project-root", str(root),
                 "--workflow-profile", str(SKILL / "references/profiles/sheep_ovary_rfirst_profile.json"),
-                "--scope", "whole_tissue", "--resolutions", "0.1,0.2,0.3,0.4,0.6",
+                "--scope", "whole_tissue", "--resolutions", "0.2,0.4,0.6,0.8",
                 "--out", str(root / "provenance/whole_tissue_resolution_grid_validation.json"),
             ], capture_output=True, text=True)
             self.assertEqual(whole_grid.returncode, 0, whole_grid.stdout + whole_grid.stderr)

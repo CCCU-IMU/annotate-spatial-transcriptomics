@@ -108,7 +108,9 @@ for (candidate in specs) {
         hits_per_obs <- Matrix::colSums(raw > 0)
         marker_totals <- Matrix::rowSums(raw)
         pseudobulk <- sum(marker_totals)
-        mean_norm <- as.numeric(Matrix::sum(dat)) / (length(available) * length(ids))
+        # Matrix implements the base sum() generic but does not export
+        # Matrix::sum on all supported releases.
+        mean_norm <- as.numeric(sum(dat)) / (length(available) * length(ids))
         any_fraction <- mean(hits_per_obs > 0)
         median_hits <- median(hits_per_obs)
         detected_marker_count <- sum(marker_totals > 0)

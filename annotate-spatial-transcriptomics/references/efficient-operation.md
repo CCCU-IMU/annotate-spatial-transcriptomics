@@ -4,7 +4,7 @@ Use deterministic scripts and compact manifests to save Agent context, scheduler
 
 - The master reads only cohort/sample checkpoints, censuses, gate JSON and incident summaries. A sample worker alone reads its expression object and evidence tables.
 - Maintain one compact `provenance/agent_handoff.json` per sample containing current phase, active job, open incidents, frozen hashes, next gate and user decisions. Do not reconstruct progress from all logs on every turn.
-- Run the complete profile grid once. Reuse validated SCT/PCA/SNN and memberships by hash for downstream evidence; never refit them for a plotting, aggregation or syntax-only repair.
+- Run the complete profile grid once. Reuse validated SCT/BANKSY PCA/UMAP and memberships by hash for downstream evidence; never refit them for a plotting, aggregation or syntax-only repair.
 - Split compute by real parallel unit. Use one worker per concurrent resolution; give serial Leiden/DEG units one CPU. Aggregate only after dependencies pass.
 - Inspect log tails and scheduler metrics first. Read full logs only when the tail cannot identify the failure.
 - Before confirmation generate only one broad spatial PNG, one canonical broad marker dotplot PNG and a self-contained lightweight review HTML. Generate final DEG, full dotplots, per-node/per-gene spatial assets and release HTML once, after confirmation. Publish one final annotation rather than three duplicate views.

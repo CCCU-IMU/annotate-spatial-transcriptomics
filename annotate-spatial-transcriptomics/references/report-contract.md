@@ -30,13 +30,13 @@ If the completion gate is absent or blocked, no master quality approval, confirm
 
 Always produce broad-class tree dotplots. Produce subtype tree dotplots only when at least one high-confidence fine label is released; zero subtypes is a valid outcome and must not trigger synthetic labels. For every released level produce canonical and data-specific versions when data-specific markers are available.
 
-After all report assets and session files are stable, run `scripts/build_release_manifest.py`, followed by `scripts/audit_release.py --profile full`. The checksum list must cover the report, ledgers, DEG tables, dotplot sources and rendered figures. The manifest, checksum file and release-audit output are intentionally excluded from their own hash set to avoid a circular release dependency.
+After all report assets are stable, run `scripts/build_release_session_info.py`, then `scripts/build_release_manifest.py`, followed by `scripts/audit_release.py --profile full`. The checksum list must cover the report, review package, ledgers, DEG tables, dotplot sources and rendered figures. The manifest, checksum file and release-audit output are intentionally excluded from their own hash set to avoid a circular release dependency.
 
 Completion, confirmation/review assets, final HTML and release assets write a sibling `.deps.json` content-hash manifest. The controller may inspect mtime as a cheap scheduling hint for lightweight state, but it must decide whether an expensive asset is stale from the recorded target/dependency hashes. A touched-but-identical dependency does not trigger recomputation; a content change does, even when mtime is preserved.
 
 Each source TSV must include `gene`, `label`, `avg_expression`, `pct_expressed_absolute`, `n_observations`, `marker_group`, `avg_expression_scaled_within_gene`, `pct_expressed_scaled_within_gene`, `analysis_view` and `evidence_cohort`.
 
-Point size uses within-gene normalized detection from 0 to 100. Color uses within-gene scaled average expression with a documented clip. Absolute detection and average expression remain in the source table and report legend.
+Point size uses within-gene normalized detection from 0 to 100. Color uses within-gene scaled average expression with a documented clip. The same report card must switch between this view and an absolute detection/average-expression view built from the same source table; the release audit requires both PNG/PDF pairs.
 
 Render the label dendrogram on the left. Put marker genes on the x axis and facet/group them by the current cell type or program they support. Every final broad label and every high-confidence final fine label must occur as both a dotplot label and a marker group in canonical and data-specific panels.
 
