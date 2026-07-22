@@ -1,6 +1,6 @@
 {
   "preset_id": "sheep_ovary_same_batch_rfirst",
-  "preset_schema_version": "1.1",
+  "preset_schema_version": "2.0",
   "profile_role": "strategy_preset",
   "activation": "explicit_only",
   "purpose": "Reuse the validated deidentified sheep-ovary R-first decision process for same-batch samples without copying sample-specific parameters, cluster labels or outcomes.",
@@ -20,6 +20,7 @@
     "input_and_expression_audit",
     "fresh_same_batch_preprocessing",
     "adaptive_whole_tissue_resolution",
+    "complete_full_feature_broad_family_evidence_matrix",
     "label_blind_all_candidate_broad_evidence_freeze",
     "clusterwise_open_world_initial_broad_annotation",
     "initial_low_information_to_qc_holdout_without_intermediate_cohort",
@@ -28,10 +29,11 @@
     "direct_cross_lineage_return_when_another_lineage_is_supported",
     "targeted_recluster_or_calibrated_rctd_only_for_interpretable_mixture",
     "irreducible_or_low_information_to_final_qc_holdout",
-    "single_global_all_cell_calibrated_atlas_concordance_without_qc_reclustering",
+    "single_global_all_cell_classwise_calibrated_atlas_routing_without_qc_reclustering",
     "qc_only_direct_broad_writeback_and_defined_label_discrepancy_review",
     "final_broad_writeback_and_optional_high_confidence_fine_labels",
     "completion_gate",
+    "read_only_project_results_audit",
     "post_completion_main_agent_quality_approval",
     "lightweight_user_confirmation",
     "final_deg_figures_and_release_report"

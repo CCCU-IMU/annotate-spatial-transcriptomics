@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/residual_qc_audit.schema.json",
+  "title": "V2 large residual-QC upstream recall audit",
+  "type": "object",
+  "required": [
+    "schema_version", "status", "cell_ledger_sha256", "residual_qc_n",
+    "residual_qc_reason_census", "completed_reviews", "unresolved_query_lineage_signals",
+    "evidence_artifacts", "conclusion"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "status": {"enum": ["PASS", "CLOSED"]},
+    "cell_ledger_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "residual_qc_n": {"type": "integer", "minimum": 0},
+    "residual_qc_reason_census": {"type": "object", "minProperties": 1},
+    "completed_reviews": {
+      "type": "array", "minItems": 4, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "unresolved_query_lineage_signals": {"const": 0},
+    "evidence_artifacts": {
+      "type": "array", "minItems": 4,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "conclusion": {"type": "string", "minLength": 30}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.0 — 2026-07-22
+
+- 新增项目级不可变 `annotation_contract.json`，在任何生物学命名前冻结输入快照、表达对象边界、workflow/biological profile、候选谱系目录、全组织初始聚类网格、query 重聚类网格、Atlas 路由和发布 taxonomy；后续证据与完成门按 SHA256 绑定。
+- 明确区分“已有 BANKSY 输入的原始候选网格”和“项目内 fresh R-first/query 重聚类网格”，禁止把 Seurat 固定网格反向套到上游 BANKSY，也禁止用子集 Leiden 参数解释全组织 BANKSY 分辨率。
+- 将大类发现从少数示例 marker 扩展为所有 review-required 候选的完整 `cluster × candidate × positive-family` 全基因绝对证据矩阵；中心化分数与 one-vs-rest DEG 仅作比较证据，不能单独否定组织主体或弱而相干的谱系。
+- 统一为单一全细胞 Atlas router：无原标签的冻结 QC 在类别级校准中高置信、非 OOD 且本体兼容时直接 broad-only 回写；已有大类只比较并对群体性差异触发一次正交复核。校准、crosswalk、状态和 mapping 均哈希绑定。
+- 发布 taxonomy 统一血管相关 broad 为 `Vascular-associated`，并强制 broad/fine 层级、历史别名拒绝、QC/low-information/candidate 等非生物学 fine 语义拒绝。
+- 新增 typed residual-QC 审计和只读项目结果审计；大规模 QC 必须给出逐类原因与上游召回证据，结果目录中的未提交 ledger、旧 completion PASS 冲突、非终态任务、跨项目表达复用和旧 taxonomy 均 fail closed。
+- 提供 v1.10→v2 项目迁移器与非破坏性 taxonomy 迁移器。迁移会使旧完成状态失效并要求重新计算 v2 证据，不会把历史标签 grandfather 为可信结果。
+- 删除两个未接入但与现行 Atlas/taxonomy 冲突的旧 adjudicator，避免 Agent 在多个近似脚本之间选择到过时路线。
+- 新增 v2 合同、完整 marker-family 矩阵、Atlas 路由、残余 QC、结果审计 schema/validator 及回归测试。
+
+## 1.10.0 — 2026-07-21
+
+- 修复同一 SCT+BANKSY 输入在新版中出现大规模 QC 的规则回归：默认大类必须先声明至少两个显式、互不重叠的阳性 marker family；绝对全基因检出率/伪 bulk 用于判断大类是否存在，中心化 module score 与 one-vs-rest DEG 不得单独否定组织主体连续谱。
+- 新增 `validate_broad_marker_family_contract.py`。羊卵巢 Stromal、Granulosa、Vascular、Immune、Epithelial 和 Oocyte 默认候选均补齐显式 marker family，阻止“规则要求两 family、profile 却只有一个 program”的不可满足配置。
+- 恢复 Atlas 的状态感知写回：无原生物学标签的冻结 QC 若校准为中/高置信、非 OOD、无本体冲突且位于 Atlas 适用范围，可直接回写 broad-only；已有标签只做一致性比较或触发群体复核。marker/空间证据保留为审计与群体挑战，不再成为重复的逐细胞门槛。
+- 新增 `route_calibrated_atlas_by_primary_state.py`，并新增 `validate_residual_qc_audit.py`：残余 QC 达到 10% 或 50,000 时必须回查初始大类分辨率、selected-plus-two-higher 全目录扫描和大簇内嵌信号，不能仅以 Atlas low confidence 结案。
+- 卵母细胞规则回退到“严格种子判簇、通过簇完整纳入”的语义。新增 `materialize_oocyte_cluster_membership.py`，并强化 `validate_oocyte_context_boundary.py`，禁止用 strict seed 或 spatial object ID 逐细胞缩小已通过 Oocyte 簇。
+- 上皮大类拆分 keratin backbone 与 surface/adhesion support 两个 family；空间连续性按通过 cluster/component 复核，最终纳入完整通过成员，而非仅 marker-positive seeds。
+- 依据 2025 *Science* 人鼠卵巢图谱关于内皮与周细胞共同构成卵巢血管系统的定义，将血管相关细胞统一发布为 `Vascular-associated`；保留 `Blood endothelial`、`Lymphatic endothelial`、`Pericyte/mural` 为可选细分，成熟 Smooth muscle 仍独立。
+
 ## 1.9.2 — 2026-07-21
 
 - Make state validation understand P00 frozen full-object membership tables containing both `analysis_set` and `excluded_initial_qc`, with compatible `_count` and `_n` policy fields.

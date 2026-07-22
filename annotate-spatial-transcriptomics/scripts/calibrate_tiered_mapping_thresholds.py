@@ -16,6 +16,14 @@ def hash_ids(values: pd.Series) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def select_threshold(
     frame: pd.DataFrame,
     truth_col: str,
@@ -210,7 +218,8 @@ def main() -> None:
         "exclusive_precision",
     ]
     thresholds = pd.DataFrame(threshold_rows, columns=threshold_columns)
-    thresholds.to_csv(args.out / "mapping_thresholds.tsv", sep="\t", index=False)
+    thresholds_path = args.out / "mapping_thresholds.tsv"
+    thresholds.to_csv(thresholds_path, sep="\t", index=False)
 
     query["mapping_tier"] = "low_reject"
     for row in threshold_rows:
@@ -236,8 +245,9 @@ def main() -> None:
     }
     query["mapping_status"] = query["mapping_tier"].map(status_map)
     query["fine_anchor_eligible"] = False
+    query_path = args.out / "calibrated_query_mapping.tsv.gz"
     query.to_csv(
-        args.out / "calibrated_query_mapping.tsv.gz",
+        query_path,
         sep="\t",
         index=False,
         compression="gzip",
@@ -246,8 +256,9 @@ def main() -> None:
     heldout["meets_moderate_or_higher"] = heldout["mapping_tier"].isin(
         ["high", "moderate_only"]
     )
+    heldout_path = args.out / "heldout_tier_assignments.tsv.gz"
     heldout.to_csv(
-        args.out / "heldout_tier_assignments.tsv.gz",
+        heldout_path,
         sep="\t",
         index=False,
         compression="gzip",
@@ -268,7 +279,8 @@ def main() -> None:
         )
         .reset_index()
     )
-    validation.to_csv(args.out / "heldout_tier_validation.tsv", sep="\t", index=False)
+    validation_path = args.out / "heldout_tier_validation.tsv"
+    validation.to_csv(validation_path, sep="\t", index=False)
 
     cumulative_rows: list[dict] = []
     for label in sorted(heldout["predicted_label"].astype(str).unique()):
@@ -295,12 +307,12 @@ def main() -> None:
                     "target_precision": target,
                 }
             )
-    pd.DataFrame(cumulative_rows).to_csv(
-        args.out / "heldout_cumulative_validation.tsv", sep="\t", index=False
-    )
+    cumulative_path = args.out / "heldout_cumulative_validation.tsv"
+    pd.DataFrame(cumulative_rows).to_csv(cumulative_path, sep="\t", index=False)
 
     counts = query["mapping_tier"].value_counts().to_dict()
     manifest = {
+        "schema_version": "2.0",
         "status": "CALIBRATED_TIERED_EVIDENCE_ONLY",
         "high_target_precision": args.high_target_precision,
         "moderate_target_precision": args.moderate_target_precision,
@@ -322,8 +334,16 @@ def main() -> None:
         "fine_anchor_eligible": False,
         "heldout_origin": origin["heldout_origin"],
         "calibration_origin_manifest": str(args.calibration_origin_manifest.resolve()),
+        "calibration_origin_manifest_sha256": sha256_file(args.calibration_origin_manifest),
+        "artifacts": {
+            "thresholds": {"path": str(thresholds_path.resolve()), "sha256": sha256_file(thresholds_path)},
+            "query_mapping": {"path": str(query_path.resolve()), "sha256": sha256_file(query_path)},
+            "heldout_assignments": {"path": str(heldout_path.resolve()), "sha256": sha256_file(heldout_path)},
+            "heldout_tier_validation": {"path": str(validation_path.resolve()), "sha256": sha256_file(validation_path)},
+            "heldout_cumulative_validation": {"path": str(cumulative_path.resolve()), "sha256": sha256_file(cumulative_path)}
+        },
         "calibration_semantics": "Nested cumulative thresholds: high is a subset of moderate-or-higher; mapping_tier uses canonical mutually exclusive high/moderate_only/low_reject values.",
-        "warning": "High and moderate_only are mutually exclusive output tiers, but every high row also meets the cumulative moderate-or-higher gate. Neither tier authorizes writeback without independent marker/anti-marker and spatial or internal-anchor support.",
+        "warning": "High and moderate_only are mutually exclusive output tiers, but every high row also meets the cumulative moderate-or-higher gate. For an unlabeled frozen-QC observation, state-aware broad-only writeback additionally requires non-OOD, ontology-compatible and profile-scope-safe status; marker/spatial evidence remains an audit and coherent-group challenge.",
     }
     if sum(counts.values()) != len(query):
         raise SystemExit("tier counts do not partition query")

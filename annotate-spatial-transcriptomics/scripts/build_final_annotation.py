@@ -8,6 +8,7 @@ import csv
 import fcntl
 import gzip
 import hashlib
+import json
 import os
 import tempfile
 from collections import Counter
@@ -52,7 +53,19 @@ def main() -> int:
     parser.add_argument("--sample", required=True)
     parser.add_argument("--version", default="v001")
     parser.add_argument("--migration-mode", action="store_true", help="read legacy confidence aliases and immediately write canonical values")
+    parser.add_argument("--biological-profile", type=Path)
     args = parser.parse_args()
+    project = json.loads((args.project_root / "config/project.json").read_text(encoding="utf-8"))
+    v2 = str(project.get("framework_version", "")).startswith("2.")
+    profile = {}
+    if v2:
+        if not args.biological_profile:
+            raise SystemExit("v2 final annotation requires --biological-profile")
+        profile = json.loads(args.biological_profile.read_text(encoding="utf-8"))
+    taxonomy = profile.get("release_taxonomy", {})
+    broad_aliases = set(taxonomy.get("broad_aliases", {}))
+    forbidden_fine = [str(value).lower() for value in taxonomy.get("forbidden_fine_semantics", [])]
+    fine_parents = {fine: set(parents) for fine, parents in taxonomy.get("fine_parent_allowlist", {}).items()}
     final_fields = [
         "analysis_scope", "final_state", "final_broad_label", "final_fine_label", "final_confidence",
         "final_broad_confidence", "final_fine_confidence",
@@ -67,6 +80,8 @@ def main() -> int:
         fields = reader.fieldnames or []
         required = {"cell_id", "state", "broad_label", "fine_label", "confidence", "fine_anchor_eligible"}
         missing = sorted(required - set(fields))
+        if v2 and "qc_reason" not in fields:
+            missing.append("qc_reason")
         if missing:
             raise SystemExit("cell ledger lacks final-annotation fields: " + ",".join(missing))
         output_fields = fields + [field for field in final_fields if field not in fields]
@@ -93,6 +108,15 @@ def main() -> int:
                 else:
                     retained_state = "pending_review" if state in BIOLOGICAL else (state or "pending_review")
                     final_state, broad, fine, tier = retained_state, "", "", "retained_or_unresolved"
+                if v2:
+                    if broad in broad_aliases:
+                        raise SystemExit(f"cell {row.get('cell_id','')}: legacy broad alias is forbidden in v2: {broad}")
+                    if fine and any(token in fine.lower() for token in forbidden_fine):
+                        raise SystemExit(f"cell {row.get('cell_id','')}: QC/uncertainty semantics cannot be a fine label: {fine}")
+                    if fine in fine_parents and broad not in fine_parents[fine]:
+                        raise SystemExit(f"cell {row.get('cell_id','')}: invalid broad-fine hierarchy: {broad} -> {fine}")
+                    if final_state in {"qc_holdout", "low_information_qc_holdout", "pending_qc", "unknown_candidate"} and not row.get("qc_reason", "").strip():
+                        raise SystemExit(f"cell {row.get('cell_id','')}: v2 retained QC requires a typed qc_reason")
                 row.update({
                     "final_state": final_state, "final_broad_label": broad, "final_fine_label": fine,
                     "final_confidence": broad_confidence,

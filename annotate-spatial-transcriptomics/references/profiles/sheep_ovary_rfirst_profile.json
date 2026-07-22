@@ -1,7 +1,7 @@
 {
-  "profile_id": "ovis_aries_ovary_rfirst_v5",
+  "profile_id": "ovis_aries_ovary_rfirst_v6",
   "profile_role": "workflow_preprocessing",
-  "profile_schema_version": "1.7",
+  "profile_schema_version": "2.0",
   "species_aliases": ["Ovis aries", "sheep", "ovine", "羊", "绵羊"],
   "tissue_aliases": ["ovary", "ovarian", "卵巢"],
   "workflow": {
@@ -16,6 +16,14 @@
     "minimum_resolution": 0.1,
     "allow_below_minimum": false,
     "rule": "use the same normal candidate range for every sheep-ovary broad-class or targeted cohort; adapt the selected resolution, PCs and k within current-cohort evidence, never recluster final QC, and never lower resolution to compensate for a defective graph"
+  },
+  "whole_tissue_partition_contract": {
+    "fresh_r_first_grid": [0.1, 0.2, 0.3, 0.4, 0.6],
+    "upstream_banksy_grid_policy": "use every resolution actually present in the hash-bound BANKSY input; do not silently replace it with the query-reclustering grid",
+    "minimum_candidates": 3,
+    "required_review_window": "selected plus the next two higher available resolutions; if fewer exist, review every higher candidate and record the upstream-grid limitation",
+    "selection_endpoint": "broad-lineage recall and cluster purity across the complete catalog, not cluster count or agreement with a prior annotation",
+    "separate_from_cohort_reclustering": true
   },
   "stereopy_cellbin_pped_contract": {
     "trigger_all": [
@@ -69,14 +77,29 @@
     "defined_label_atlas_policy": "concordance_challenge_only_until_orthogonal_query_evidence_review",
     "open_set_ood_required": true,
     "reusable_fixed_reference_index_required": true,
-    "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Vascular/endothelial", "Pericyte/mural candidate", "Immune"],
+    "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Vascular-associated", "Immune"],
     "primary_public_atlas_exclusions": ["Oocyte", "Theca", "Epithelial/mesothelial"],
+    "primary_public_atlas_label_crosswalk": {
+      "Granulosa": "Granulosa",
+      "Stromal/mesenchymal": "Stromal/mesenchymal",
+      "Stromal": "Stromal/mesenchymal",
+      "Immune": "Immune",
+      "Immune/plasma": "Immune",
+      "Vascular-associated": "Vascular-associated",
+      "Vascular/endothelial": "Vascular-associated",
+      "Vascular/perivascular": "Vascular-associated",
+      "Pericyte/mural": "Vascular-associated"
+    },
     "atlas_rescue_ceiling": "broad_only",
     "accepted_calibrated_tiers": ["high", "moderate_only"],
     "moderate_or_higher_target_precision": 0.9,
     "high_target_precision": 0.95,
-    "required_independent_channels": ["current_query_marker_and_antimarker", "internal_anchor_or_observed_density_spatial"],
+    "qc_direct_return_safety_gates": ["calibrated_moderate_or_higher", "unlabeled_frozen_qc", "non_ood", "no_ontology_conflict", "candidate_within_atlas_scope"],
+    "marker_spatial_evidence_role": "mandatory audit and coherent-group challenge; not a duplicate per-observation prerequisite after query-anchor calibration",
     "calibration_origin": "query_like_heldout_current_query_anchors",
+    "minimum_heldout_observations_per_return_class": 30,
+    "maximum_expected_calibration_error": 0.05,
+    "classwise_calibration_required": true,
     "forbidden_calibration_origin": "reference_self_classification"
   },
   "release_policy": {
@@ -89,7 +112,9 @@
     "post_completion_master_quality_approval": "required_after_all_routes_and_final_writeback_before_user_confirmation",
     "quality_reference_semantics": "compare biological evidence quality with the validated deidentified R-first case; do not require matching labels or subtype depth",
     "broad_only_rescues_enter_fine_marker_discovery": false,
-    "oocyte_rule": "send the complete multi-module starting candidate cohort to adaptive query-only reclustering; use strict marker/anti-program seeds and spatial foci as support rather than a membership filter; release only non-ZP/maternal-enriched, somatic-cleared, morphology-compatible cluster(s) and return somatic neighbours directly to supported lineages with ambient tags",
+    "oocyte_rule": "send the complete multi-module starting candidate cohort to adaptive query-only reclustering; use strict marker/anti-program seeds and spatial foci to adjudicate clusters, never as a per-cell membership filter; after a cluster passes non-ZP/maternal, somatic-clearance and object-ensemble morphology review, release every canonical member except explicit hard-exclusion cells and return somatic neighbours directly to supported lineages with ambient tags",
+    "vascular_release_rule": "use Vascular-associated as the shared broad parent of blood endothelial, lymphatic endothelial and pericyte/mural cells; keep mature Smooth muscle separate",
+    "large_residual_qc_rule": "10% or 50000 residual observations triggers upstream broad-recall re-audit before completion",
     "neural_candidate_rule": "SOX10/S100B/PLP1/MPZ-like glial backbone or a coherent neuronal program plus track-like morphology; DLG2 or another single neuronal gene is insufficient. Candidate discovery is required even when the reference case lacked this class."
   }
 }

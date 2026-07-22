@@ -13,7 +13,7 @@ from pathlib import Path
 
 ACCEPTED_TIERS = {"high", "moderate_only"}
 ALL_TIERS = ACCEPTED_TIERS | {"low_reject"}
-QC_STATES = {"qc_holdout", "qc_reject", "pending_review"}
+QC_STATES = {"qc_holdout", "low_information_qc_holdout", "qc_reject", "pending_review", "pending_qc"}
 
 
 def truth(value: object) -> bool:
@@ -72,6 +72,9 @@ def main() -> int:
     parser.add_argument("--min-discordant-fraction", type=float, default=0.20)
     parser.add_argument("--ood-min-n", type=int, default=5)
     parser.add_argument("--ood-min-fraction", type=float, default=0.50)
+    parser.add_argument("--qc-routing-policy", choices=["state_aware_calibrated", "legacy_multichannel"],
+                        default="state_aware_calibrated")
+    parser.add_argument("--atlas-direct-return-excluded-label", action="append", default=[])
     args = parser.parse_args()
     if args.min_discordant_n < 1 or not 0 < args.min_discordant_fraction <= 1:
         raise SystemExit("invalid material-disagreement threshold")
@@ -83,7 +86,9 @@ def main() -> int:
     ledger_by_id = require_unique(ledger_rows, args.cell_id_col, "cell ledger")
     mapping_by_id = require_unique(mapping_rows, args.cell_id_col, "Atlas mapping")
     required_ledger = {args.analysis_scope_col, args.primary_state_col, args.primary_broad_col, args.cluster_col}
-    required_mapping = {args.atlas_label_col, args.atlas_tier_col, args.consensus_col, args.ood_col}
+    required_mapping = {args.atlas_label_col, args.atlas_tier_col, args.ood_col}
+    if args.qc_routing_policy == "legacy_multichannel":
+        required_mapping.add(args.consensus_col)
     if not required_ledger.issubset(ledger_rows[0]):
         raise SystemExit(f"cell ledger lacks columns: {sorted(required_ledger - set(ledger_rows[0]))}")
     if not required_mapping.issubset(mapping_rows[0]):
@@ -113,9 +118,15 @@ def main() -> int:
         consensus = truth(mapping.get(args.consensus_col, ""))
         ood = truth(mapping.get(args.ood_col, ""))
         ontology = truth(mapping.get(args.ontology_conflict_col, "")) if args.ontology_conflict_col in mapping else False
+        atlas_scope_pass = atlas_broad.lower() not in {
+            label.strip().lower() for label in args.atlas_direct_return_excluded_label
+        }
         is_qc = not primary_broad and primary_state in QC_STATES
         if is_qc:
-            if accepted_tier and consensus and atlas_broad and not ood and not ontology:
+            confidence_gate = accepted_tier and (
+                consensus if args.qc_routing_policy == "legacy_multichannel" else True
+            )
+            if confidence_gate and atlas_broad and not ood and not ontology and atlas_scope_pass:
                 status = "qc_writeback_candidate"
             else:
                 status = "qc_reject"
@@ -143,6 +154,7 @@ def main() -> int:
             "atlas_broad": atlas_broad,
             "atlas_tier": tier,
             "consensus_pass": str(consensus).lower(),
+            "atlas_scope_pass": str(atlas_scope_pass).lower(),
             "out_of_distribution": str(ood).lower(),
             "ontology_conflict": str(ontology).lower(),
             "comparison_status": status,
@@ -241,6 +253,8 @@ def main() -> int:
         "status": "REVIEW_REQUIRED" if review_rows else "PASS_NO_REVIEW",
         "query_scope": "complete_analysis_set",
         "mapping_mode": "single_all_cell_broad_mapping",
+        "qc_writeback_policy": args.qc_routing_policy,
+        "atlas_direct_return_excluded_labels": args.atlas_direct_return_excluded_label,
         "cell_ledger": str(args.cell_ledger.resolve()),
         "cell_ledger_sha256": sha256(args.cell_ledger),
         "atlas_mapping": str(args.atlas_mapping.resolve()),

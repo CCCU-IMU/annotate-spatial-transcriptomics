@@ -221,7 +221,7 @@ def audit(root: Path) -> dict:
         if route.get("calibration_origin") != "query_like_heldout_current_query_anchors":
             add("ATLAS_CALIBRATION_INVALID", "route", route_id, "calibrate_on_disjoint_query_like_anchors", "Atlas calibration origin is invalid")
         if not truth(route.get("depth_matched_validation", "")) or (not is_global and not truth(route.get("observed_density_spatial_prior", ""))):
-            add("ATLAS_CONSENSUS_INCOMPLETE", "route", route_id, "complete_depth_marker_internal_anchor_spatial_consensus", "Atlas lacks required consensus channels")
+            add("ATLAS_CALIBRATION_OR_LEGACY_CONSENSUS_INCOMPLETE", "route", route_id, "complete_query_anchor_calibration_or_legacy_consensus", "Atlas lacks required query-anchor calibration or a legacy residual-QC route lacks its declared spatial prior")
         required_artifacts = ["calibration_manifest", "validation_artifact", "outcome_artifact"]
         if is_global:
             required_artifacts.extend(["parameters_artifact", "concordance_artifact", "cluster_concordance_artifact", "discrepancy_review_artifact"])

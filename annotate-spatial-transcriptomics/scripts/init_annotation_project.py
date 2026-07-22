@@ -43,7 +43,7 @@ def main() -> int:
         (root / d).mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     config = {
-        "framework_version": "1.9.2", "project_id": args.project_id or root.name, "sample_id": args.sample,
+        "framework_version": "2.0.0", "project_id": args.project_id or root.name, "sample_id": args.sample,
         "input_root": str(args.input_root.resolve()), "project_root": str(root),
         "modality": args.modality, "observation_unit": args.observation_unit,
         "decision_version": "v001", "status": "initialized", "created_at_utc": now,
@@ -75,6 +75,16 @@ def main() -> int:
         "broad_class_completeness_review_stage": "post_atlas_pre_master_quality",
         "banksy_broad_resolution_selection_evidence_required_when_applicable": True,
         "oocyte_context_membership_separation_required": True,
+        "broad_marker_family_contract_required": True,
+        "residual_qc_upstream_recall_audit_required": True,
+        "residual_qc_fraction_trigger": 0.10,
+        "residual_qc_count_trigger": 50000,
+        "atlas_qc_state_router": "calibrated_moderate_or_higher_unlabeled_qc_direct_broad",
+        "annotation_contract_required": True,
+        "broad_family_evidence_matrix_required": True,
+        "atlas_authoritative_router": "route_global_atlas_v2.py",
+        "release_taxonomy_hierarchy_validation_required": True,
+        "project_results_readonly_audit_required": True,
     }
     (root / "config/project.json").write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     for filename, fields in REGISTRIES.items():
@@ -95,7 +105,7 @@ def main() -> int:
     state_md = root / "state/annotation_state.md"
     if not state_md.exists():
         state_md.write_text(
-            f"# {args.sample} annotation state\n\n- framework: 1.9.0\n- modality: {args.modality}\n"
+            f"# {args.sample} annotation state\n\n- framework: 2.0.0\n- modality: {args.modality}\n"
             f"- observation unit: {args.observation_unit}\n- status: initialized\n- created: {now}\n\n"
             "## Current gate\n\nInput discovery and immutable snapshot are pending.\n",
             encoding="utf-8",

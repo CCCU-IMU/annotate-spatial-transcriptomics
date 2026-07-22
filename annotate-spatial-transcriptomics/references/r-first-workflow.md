@@ -16,7 +16,7 @@ Existing whole-tissue or cohort clustering is reusable only when source-object a
 
 ## 3. Whole-tissue broad pass
 
-When no valid clustering is reusable, run SCTransform, PCA and an adaptive Seurat resolution grid. Sheep ovary uses the formal grid `0.1,0.2,0.3,0.4,0.6`; never lower below 0.1 to compensate for a defective graph. Other tissues use a declared context-appropriate grid.
+When no valid clustering is reusable, run SCTransform, PCA and an adaptive Seurat resolution grid. Sheep ovary fresh R-first graphs use `0.1,0.2,0.3,0.4,0.6`; never lower below 0.1 to compensate for a defective graph. A reusable BANKSY input retains its own complete bound resolution grid for the initial broad choice. Other tissues use a declared context-appropriate grid.
 
 Generate per-resolution one-vs-rest DEG, canonical and data-specific marker summaries, UMAP, whole-section spatial maps and per-cluster highlights. Select the integrated-evidence optimum that preserves supported lineages before avoiding state-only fragmentation; use lower complexity only when evidence is otherwise equivalent.
 
@@ -51,7 +51,7 @@ For sheep ovary without a usable matched count-level reference, GSE233801 is the
 Before closing a generic stromal parent, independently test generic stromal/fibroblast, mesenchymal-progenitor-like, mature smooth muscle, pericyte/mural, blood/lymphatic endothelial and steroidogenic-theca programs.
 
 - Mature Smooth muscle requires a coherent `MYH11/CNN1/ACTG2` plus `TAGLN/ACTA2/MYL9/DES` backbone and compatible tracks.
-- Pericyte/mural requires `RGS5/PDGFRB/CSPG4/NOTCH3/MCAM`-like support and vascular adjacency.
+- Pericyte/mural requires `RGS5/PDGFRB/CSPG4/NOTCH3/MCAM`-like support and vascular adjacency and is released as a fine child of `Vascular-associated`.
 - Steroidogenic Theca requires a coherent steroidogenic/androgenic program; ECM or `LHCGR` alone is insufficient.
 - ECM-rich `ACTA2/TAGLN` without a mature backbone remains structural/contractile stroma.
 - `Mesenchymal progenitor-like` is separate only when a stable progenitor/fibroblast program and morphology pass; otherwise use `Stromal/mesenchymal`.
@@ -62,7 +62,7 @@ Negative audits are valid outcomes and must not be repaired by lowering gates.
 
 Broad classes are the default endpoint for cellbin spatial data. Merge subclusters driven mainly by depth, LOC/ribosomal/mitochondrial expression, ECM amount, stress, cell cycle, generic contractility or spatial position. Keep those characteristics as tags.
 
-Adult sheep ovary permits only evidence-supported shallow functional labels: selected Granulosa states, steroidogenic Theca, blood/lymphatic endothelial, mature Smooth muscle, Pericyte/mural and depth-supported immune divisions. Zero fine labels is valid.
+Adult sheep ovary permits only evidence-supported shallow functional labels: selected Granulosa states, steroidogenic Theca, blood/lymphatic endothelial and Pericyte/mural under `Vascular-associated`, mature Smooth muscle, and depth-supported immune divisions. Zero fine labels is valid.
 
 ## 8. Quality and release
 

@@ -72,6 +72,15 @@ def main() -> int:
         SKILL / "scripts" / "validate_annotation_support_registry.py",
         SKILL / "scripts" / "validate_prelabel_broad_evidence.py",
         SKILL / "scripts" / "build_global_atlas_concordance.py",
+        SKILL / "scripts" / "route_global_atlas_v2.py",
+        SKILL / "scripts" / "validate_global_atlas_v2.py",
+        SKILL / "scripts" / "build_annotation_contract_v2.py",
+        SKILL / "scripts" / "validate_annotation_contract_v2.py",
+        SKILL / "scripts" / "run_broad_family_evidence.R",
+        SKILL / "scripts" / "validate_broad_family_evidence.py",
+        SKILL / "scripts" / "audit_project_results_v2.py",
+        SKILL / "scripts" / "migrate_project_v1_10_to_v2.py",
+        SKILL / "scripts" / "migrate_release_taxonomy_v2.py",
         SKILL / "scripts" / "validate_global_atlas_concordance.py",
         SKILL / "scripts" / "validate_atlas_index_manifest.py",
         SKILL / "scripts" / "audit_annotation_membership_partition.py",
@@ -84,6 +93,9 @@ def main() -> int:
         SKILL / "schemas" / "prelabel_broad_evidence.schema.json",
         SKILL / "schemas" / "atlas_index_manifest.schema.json",
         SKILL / "schemas" / "atlas_discrepancy_decision.schema.json",
+        SKILL / "schemas" / "annotation_contract.schema.json",
+        SKILL / "schemas" / "broad_family_evidence.schema.json",
+        SKILL / "schemas" / "residual_qc_audit.schema.json",
         SKILL / "scripts" / "validate_direct_lineage_workflow.py",
         SKILL / "scripts" / "register_recluster_cohort.py",
         SKILL / "scripts" / "register_direct_return.py",
@@ -153,6 +165,8 @@ def main() -> int:
         problems.append("missing v1.9 broad-completeness regression tests")
     if not (ROOT / "tests/test_legacy_migration_contract.py").is_file():
         problems.append("missing legacy migration regression tests")
+    if not (ROOT / "tests/test_v2_contract.py").is_file():
+        problems.append("missing v2 contract regression tests")
 
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     readme = (ROOT / "README.md").read_text(encoding="utf-8")

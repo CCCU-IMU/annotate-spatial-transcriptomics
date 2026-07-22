@@ -6,7 +6,7 @@ Use this reference only after the biological context resolves to sheep ovary. It
 
 1. Current-query full-feature marker, anti-marker, stability and spatial evidence remains authoritative.
 2. A matched count-level sheep single-cell object is the strongest external channel after auditing its labels and provenance.
-3. Without such an object, GSE233801 is the primary public adult-sheep somatic atlas. Its scope is mainly Granulosa, Stromal/mesenchymal, Vascular/endothelial, Pericyte/mural candidates and Immune; it is not a sufficient source for Oocyte, steroidogenic Theca or surface Epithelium.
+3. Without such an object, GSE233801 is the primary public adult-sheep somatic atlas. Its scope is mainly Granulosa, Stromal/mesenchymal, Vascular-associated candidates and Immune; it is not a sufficient source for Oocyte, steroidogenic Theca or surface Epithelium.
 4. Sheep developmental atlases and the 2026 sheep-human atlas provide complementary lineage and state evidence.
 5. Human/mouse ovary studies provide conserved boundary, anti-marker and morphology hypotheses only. They cannot transfer cells or require the sheep section to contain the same classes or subtypes.
 
@@ -15,6 +15,7 @@ Use this reference only after the biological context resolves to sheep ovary. It
 Gaylord et al., *Comparative analysis of human and mouse ovaries across age*, Science (2025), DOI `10.1126/science.adx0659`.
 
 - The whole-ovary broad taxonomy contains Oocyte, Granulosa, Theca, Fibroblast, Smooth muscle, Pericyte, Epithelia, Endothelia, Immune and Glia; mouse additionally contains Luteal cells in the sampled state.
+- The paper explicitly treats endothelial cells and pericytes together as forming the ovarian vasculature, then resolves endothelial, lymphatic-endothelial and pericyte subtypes. The sheep release hierarchy therefore uses `Vascular-associated` as their shared broad parent and preserves `Blood endothelial`, `Lymphatic endothelial` and `Pericyte/mural` as evidence-supported fine children. Mature Smooth muscle remains a separate broad lineage.
 - Cross-species broad identities are more conserved than fine identities. Granulosa, fibroblast and endothelial subtypes were relatively conserved, whereas theca, pericyte and epithelial subtypes showed stronger species specificity.
 - Ovarian glia are biologically plausible but rare and were supported by a coherent `S100B/SOX10`-like glial program and nerve-associated morphology. A neuronal-looking single gene is not sufficient.
 - Theca requires a steroidogenic program such as `CYP17A1`, not follicular-wall location or ECM alone. Pericytes require a mural program and neurovascular/vascular adjacency.

@@ -11,7 +11,7 @@
     "technical_flags", "frozen_before_initial_label"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"enum": ["1.0", "2.0"]},
     "freeze_id": {"type": "string", "minLength": 1},
     "source_cluster": {"type": "string", "minLength": 1},
     "n_observations": {"type": "integer", "minimum": 1},
@@ -41,6 +41,13 @@
             "type": "array", "uniqueItems": true,
             "items": {"type": "string", "minLength": 1}
           },
+          "absolute_family_support_count": {"type": "integer", "minimum": 0},
+          "absolute_supported_families": {
+            "type": "array", "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "absolute_detection_evidence": {"$ref": "#/$defs/artifact"},
+          "comparative_score_role": {"enum": ["comparative_not_absence_gate"]},
           "anti_program_burden": {"type": "number", "minimum": 0},
           "contradiction_count": {"type": "integer", "minimum": 0},
           "evidence_artifacts": {
@@ -58,6 +65,9 @@
     "anti_deg_artifact": {"$ref": "#/$defs/artifact"},
     "technical_flags": {"type": "object", "minProperties": 1},
     "frozen_before_initial_label": {"const": true}
+    ,
+    "broad_family_evidence_manifest": {"$ref": "#/$defs/artifact"},
+    "broad_family_evidence_validation": {"$ref": "#/$defs/artifact"}
   },
   "$defs": {
     "artifact": {

@@ -55,9 +55,11 @@ def main() -> int:
     ap.add_argument("metadata", type=Path)
     ap.add_argument("--profile", required=True, type=Path)
     ap.add_argument("--broad-column", default="broad_label")
+    ap.add_argument("--fine-column", default="fine_label")
     ap.add_argument("--cohort-column", default="recluster_cohort_id")
     ap.add_argument("--pool-column", help="legacy alias for projects being migrated")
     ap.add_argument("--status-column", default="annotation_status")
+    ap.add_argument("--require-v2", action="store_true")
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
@@ -67,10 +69,17 @@ def main() -> int:
     retained_names = {norm(x) for x in taxonomy.get("non_biological_retained_states", [])}
     allowed = {norm(x) for x in taxonomy.get("default_biological_broad_classes", [])}
     allowed.update(norm(x) for x in taxonomy.get("evidence_dependent_standalone_classes", {}).keys())
+    broad_aliases = {norm(k): v for k, v in taxonomy.get("broad_aliases", {}).items()}
+    fine_parents = {
+        norm(fine): {norm(parent) for parent in parents}
+        for fine, parents in taxonomy.get("fine_parent_allowlist", {}).items()
+    }
+    forbidden_fine = [str(value).strip().lower() for value in taxonomy.get("forbidden_fine_semantics", [])]
 
     errors = []
     warnings = []
     biological = Counter()
+    fine_census = Counter()
     retained = Counter()
     statuses = Counter()
     copied_provenance = Counter()
@@ -80,6 +89,8 @@ def main() -> int:
         reader = csv.DictReader(handle, delimiter=dialect(args.metadata))
         fields = set(reader.fieldnames or [])
         required = {args.broad_column, args.status_column}
+        if args.require_v2:
+            required.add(args.fine_column)
         missing = sorted(required - fields)
         if missing:
             errors.append("missing required columns: " + ", ".join(missing))
@@ -91,6 +102,7 @@ def main() -> int:
         for row in reader:
             total += 1
             label = (row.get(args.broad_column) or "").strip()
+            fine = (row.get(args.fine_column) or "").strip()
             status = (row.get(args.status_column) or "").strip()
             provenance_id = (row.get(provenance_column) or "").strip() if has_provenance else ""
             statuses[status or "<empty>"] += 1
@@ -99,23 +111,40 @@ def main() -> int:
 
             if status in BIOLOGICAL_STATUSES:
                 biological[label or "<empty>"] += 1
+                if fine:
+                    fine_census[(label, fine)] += 1
                 if not label:
                     errors.append("biological row has empty broad label")
                 if nlabel in forbidden:
                     errors.append(f"forbidden biological broad label: {label}")
+                if nlabel in broad_aliases:
+                    message = f"legacy broad alias must be migrated: {label} -> {broad_aliases[nlabel]}"
+                    (errors if args.require_v2 else warnings).append(message)
                 if nlabel in retained_names:
                     errors.append(f"retained-state name used as biological broad label: {label}")
                 if allowed and nlabel not in allowed:
                     errors.append(f"biological broad label is outside the profile release vocabulary: {label}")
                 if any(nlabel.endswith(s) for s in NON_BIOLOGICAL_SUFFIXES):
                     errors.append(f"workflow-state suffix used in biological broad label: {label}")
+                if args.require_v2:
+                    lower_fine = fine.lower()
+                    if any(token in lower_fine for token in forbidden_fine):
+                        errors.append(f"non-biological/QC semantics used as fine label: {fine}")
+                    if status in {"defined_broad_only", "broad_defined", "broad_only"} and fine:
+                        errors.append(f"broad-only row carries a fine label: {label} -> {fine}")
+                    if status in {"defined_fine", "fine_defined"} and not fine:
+                        errors.append(f"fine-defined row has no fine label: {label}")
+                    if norm(fine) in fine_parents and nlabel not in fine_parents[norm(fine)]:
+                        errors.append(f"fine label has an invalid broad parent: {label} -> {fine}")
                 if provenance_id and nlabel == nprovenance:
                     copied_provenance[label] += 1
             elif status in RETAINED_STATUSES:
                 retained[label or status or "<empty>"] += 1
+                if args.require_v2 and (label or fine):
+                    errors.append(f"retained-state row carries a biological label: {status} | {label} | {fine}")
             else:
                 retained[label or status or "<empty>"] += 1
-                warnings.append(f"unrecognized annotation status: {status or '<empty>'}")
+                (errors if args.require_v2 else warnings).append(f"unrecognized annotation status: {status or '<empty>'}")
 
     for label, count in copied_provenance.items():
         errors.append(f"cohort/provenance identifier copied directly into biological label ({count} rows): {label}")
@@ -129,6 +158,10 @@ def main() -> int:
         "profile_sha256": sha256(args.profile),
         "total_observations": total,
         "biological_broad_census": dict(sorted(biological.items())),
+        "biological_fine_census": {
+            f"{broad} -> {fine}": count for (broad, fine), count in sorted(fine_census.items())
+        },
+        "v2_contract_required": args.require_v2,
         "retained_state_census": dict(sorted(retained.items())),
         "annotation_status_census": dict(sorted(statuses.items())),
         "errors": sorted(set(errors)),

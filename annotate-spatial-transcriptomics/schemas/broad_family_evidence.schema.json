@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/broad_family_evidence.schema.json",
+  "title": "V2 full-feature broad marker-family evidence",
+  "type": "object",
+  "required": [
+    "schema_version", "feature_scope", "source_object", "cluster_membership",
+    "biological_profile", "candidate_catalog", "evidence_table", "validation_manifest",
+    "n_observations", "n_clusters", "candidate_ids", "complete_cartesian_product",
+    "decision_performed", "centered_scores_can_establish_absence"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "feature_scope": {"const": "full_feature"},
+    "source_object": {"$ref": "#/$defs/artifact"},
+    "cluster_membership": {"$ref": "#/$defs/artifact"},
+    "biological_profile": {"$ref": "#/$defs/artifact"},
+    "candidate_catalog": {"$ref": "#/$defs/artifact"},
+    "evidence_table": {"$ref": "#/$defs/artifact"},
+    "validation_manifest": {"$ref": "#/$defs/artifact"},
+    "n_observations": {"type": "integer", "minimum": 1},
+    "n_clusters": {"type": "integer", "minimum": 1},
+    "candidate_ids": {
+      "type": "array", "minItems": 2, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "complete_cartesian_product": {"const": true},
+    "decision_performed": {"const": false},
+    "centered_scores_can_establish_absence": {"const": false}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

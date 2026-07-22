@@ -16,13 +16,13 @@ Sheep immunoglobulin LOC aliases were resolved. A multi-locus immunoglobulin pro
 
 Each supported initial broad class received one immutable query-only reclustering cohort. Subclusters were merged unless an independent functional/lineage program would be lost. Outcomes were direct parent-broad return, high-confidence shallow fine label, direct cross-lineage return, one decision-specific targeted cohort, or QC.
 
-The Oocyte targeted cohort used the complete multi-module recall set while high-specificity marker/anti-program observations and spatial foci served only as seeds/support. Final Oocyte required multiple non-zona identity/maternal genes, somatic anti-program clearance and compatible object morphology. Zona-positive coherent Granulosa or stromal neighbours returned directly to those somatic lineages with ambient/adjacent tags.
+The Oocyte targeted cohort used the complete multi-module recall set while high-specificity marker/anti-program observations and spatial foci served only as seeds/support. Cluster identity required multiple non-zona identity/maternal genes, somatic anti-program clearance and compatible object-ensemble morphology; final broad membership then included every canonical member of a passing cluster except explicit hard-exclusion observations. Zona-positive coherent Granulosa or stromal neighbours returned directly to those somatic lineages with ambient/adjacent tags.
 
 Local interfaces used targeted reclustering first. RCTD was lower priority: canonical high plus independent evidence could support fine, moderate supported broad-only, and low entered QC. A cross-lineage return was not placed in a new intermediate cohort and was not automatically reclustered again.
 
 ## 4. Residual QC rescue
 
-After every broad and targeted cohort closed, residual QC was frozen once and was not reclustered. The external Atlas was mapped over the complete analysis set for a single broad concordance audit. Current-query marker/anti-marker and internal-anchor or observed-density spatial channels gated direct QC writeback; `high` and `moderate_only` returns entered final broad membership with `fine_anchor_eligible=false`, while `low_reject`/OOD calls remained QC. Defined broad labels were challenged but never overwritten by Atlas alone. Atlas self-splitting was never accepted as query calibration.
+After every broad and targeted cohort closed, residual QC was frozen once and was not reclustered. The external Atlas was mapped over the complete analysis set for a single broad concordance audit. This historical trace used marker/anti-marker plus internal-anchor/spatial gates for direct QC writeback. Version 1.10 retains those channels as audit/challenge evidence but replaces the duplicate per-cell gate with the active state-aware rule: an unlabeled frozen-QC `high` or `moderate_only` prediction returns broad-only when non-OOD, ontology-compatible and within the Atlas scope. Defined broad labels remain challenge-only and Atlas self-splitting is never accepted as query calibration.
 
 ## 5. Boundary safeguards
 

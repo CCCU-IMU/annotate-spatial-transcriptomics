@@ -38,6 +38,13 @@ def active_workflow_contract(root: Path) -> dict[str, Any]:
     workflow = load_json(root / "config/active_workflow_profile.json")
     preset = load_json(root / "config/active_strategy_preset.json")
     provenance = load_json(root / "provenance/input_contract_validation.json")
+    annotation_contract_path = root / "config/annotation_contract.json"
+    annotation_contract = load_json(annotation_contract_path)
+    annotation_contract_valid = (
+        annotation_contract.get("schema_version") == "2.0"
+        and annotation_contract.get("framework_version") == "2.0.0"
+        and annotation_contract.get("project_id") == project.get("project_id")
+    )
     checks = provenance.get("checks", {}) if isinstance(provenance.get("checks"), dict) else {}
     checks_pass = all(checks.get(key) is True for key in REQUIRED_INPUT_CHECKS)
     workflow_profile_path = Path(str(workflow.get("workflow_profile", "")))
@@ -71,7 +78,9 @@ def active_workflow_contract(root: Path) -> dict[str, Any]:
     whole_tissue_grid = []
     cohort_grid = []
     if workflow_binding_valid:
-        if same_batch:
+        if annotation_contract_valid:
+            whole_tissue_grid = annotation_contract.get("whole_tissue_partition", {}).get("candidate_resolutions", [])
+        elif same_batch:
             whole_tissue_grid = bound_profile.get("stereopy_cellbin_pped_contract", {}).get("clustering", {}).get("candidate_resolutions", [])
         else:
             whole_tissue_grid = bound_profile.get("whole_tissue_contract", {}).get("candidate_resolutions", [])
@@ -90,4 +99,7 @@ def active_workflow_contract(root: Path) -> dict[str, Any]:
         "workflow_profile_binding_valid": workflow_binding_valid,
         "strategy_preset_binding_valid": preset_binding_valid,
         "path_and_feature_hints_are_nonbinding": True,
+        "annotation_contract": str(annotation_contract_path.resolve()) if annotation_contract_valid else "",
+        "annotation_contract_sha256": sha256(annotation_contract_path) if annotation_contract_valid else "",
+        "whole_tissue_grid_source": annotation_contract.get("whole_tissue_partition", {}).get("candidate_grid_source") if annotation_contract_valid else ("fresh_same_batch_profile" if same_batch else "workflow_profile"),
     }
