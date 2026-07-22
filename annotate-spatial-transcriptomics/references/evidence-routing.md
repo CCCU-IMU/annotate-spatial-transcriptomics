@@ -12,7 +12,7 @@ Before initial broad interpretation, freeze a label-blind evidence matrix coveri
 
 Every credible initial broad class receives exactly one immutable `broad_class_recluster` cohort, except a formally documented underpowered skip. Run the complete active workflow grid and audit purity, hidden lineages and defensible subtypes.
 
-Use `question_mode=broad_purity_audit`. Its expected minimum compartment count is one. A cohort is not penalized for remaining one stable biological population. If the full grid shows no stable mixture or true subtype, close it successfully as `homogeneous_parent_confirmed` and return every observation to the parent broad class.
+Use `question_mode=broad_purity_audit`. Its expected minimum compartment count is one. A cohort is not penalized for remaining one stable biological population. If the full grid shows no stable mixture or true subtype and the exact membership passes the same two-family, competitor, contradiction and observation-level purity checks, close it successfully as `homogeneous_parent_confirmed` and return every observation to the parent broad class. Cohort provenance alone cannot establish homogeneity.
 
 Select the resolution with the best integrated evidence for the current biological question. Preserve stable lineages or true subtypes first; avoid state-only and technical fragmentation second. Use lower complexity only when candidates are otherwise equivalent.
 

@@ -46,6 +46,7 @@ REQUIRED = (
     "scripts/validate_direct_return_evidence.py",
     "scripts/validate_annotation_support_registry.py",
     "scripts/validate_prelabel_broad_evidence.py",
+    "scripts/lineage_decision_lib.py",
     "scripts/build_global_atlas_concordance.py",
     "scripts/route_global_atlas_v2.py",
     "scripts/validate_global_atlas_v2.py",

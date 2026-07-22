@@ -194,6 +194,33 @@ def main() -> int:
             if rid not in superseded and row.get("validation_status")=="passed":
                 vp=Path(row.get("validation_artifact",""));vp=vp if vp.is_absolute() else args.project_root/vp
                 require(vp.exists(),f"line {i}: passed validation artifact missing",errors)
+    active_return_ids = set()
+    direct_path = state / "direct_return_registry.tsv"
+    if direct_workflow and direct_path.exists():
+        direct_rows = list(rows(direct_path))
+        replaced = {
+            value for row in direct_rows
+            for value in re.split(r"[|,;\s]+", row.get("supersedes", "")) if value
+        }
+        active_return_ids = {
+            row.get("return_id", "") for row in direct_rows
+            if row.get("status") == "validated_done" and row.get("return_id", "") not in replaced
+        }
+    active_route_decision_ids = set()
+    route_path = state / "route_attempt_registry.tsv"
+    if workflow_required and route_path.exists():
+        route_rows = list(rows(route_path))
+        replaced = {
+            value for row in route_rows
+            for value in re.split(r"[|,;\s]+", row.get("supersedes", "")) if value
+        }
+        active_route_decision_ids = {
+            row.get("decision_id", "") for row in route_rows
+            if row.get("status") in {"validated_done", "not_applicable_reviewed"}
+            and row.get("route_attempt_id", "") not in replaced
+            and row.get("decision_id", "")
+        }
+    active_cell_decision_ids = active_ids | active_return_ids | active_route_decision_ids
     if cell_ledger:
         seen = set(); n = 0; it=iter(rows(cell_ledger));first=next(it,None);required_fields={"sample_id","cell_id","decision_id","state","broad_label","fine_label","validation_feature_scope"}
         if workflow_required:
@@ -213,7 +240,13 @@ def main() -> int:
                 require(row.get("confidence", "").strip().lower() in CANONICAL, f"cell line {i}: noncanonical confidence in new project", errors)
             if row.get("state") == "defined_broad_only":
                 require(row.get("fine_anchor_eligible", "").lower() in {"false", "0", "no"}, f"cell line {i}: broad-only is fine anchor", errors)
-            if "decision_id" in fields:require(row.get("decision_id") in active_ids,f"cell line {i}: decision_id is not active",errors)
+            if "decision_id" in fields:
+                terminal_residual = (
+                    row.get("assignment_mode") == "terminal_residual_qc_freeze"
+                    and row.get("decision_id", "").startswith(f"{configured_sample}_terminal_residual_qc_")
+                    and row.get("state") == "qc_holdout"
+                )
+                require(row.get("decision_id") in active_cell_decision_ids or terminal_residual,f"cell line {i}: decision_id is not active",errors)
             if "oocyte" in (row.get("broad_label","")+row.get("fine_label","")).lower() and not row.get("spatial_object_id"):oocyte_object_missing=True
             if workflow_required:
                 scope=row.get("analysis_scope","");require(scope in {"analysis_set","excluded_initial_qc"},f"cell line {i}: invalid analysis_scope",errors)
@@ -245,7 +278,11 @@ def main() -> int:
                 if row.get("route") in {"depth_matched_atlas_anchor_mapping_fullfeature_rescue","qc_anchor_recluster_broad_rescue","interface_rctd_broad_return","residual_qc_atlas_broad_rescue"} or row.get("assignment_mode") == "atlas_broad_rescue":
                     require(row.get("fine_anchor_eligible","").lower() in {"false","0","no"},f"cell line {i}: rescue route is a fine anchor",errors)
                     require(not row.get("final_fine_label"),f"cell line {i}: broad-only rescue leaked into final fine annotation",errors)
-        require(not oocyte_object_missing,"Oocyte-associated cellbins lack spatial_object_id",errors)
+        require(
+            not oocyte_object_missing or (direct_workflow and config.get("spatial_object_id_required_for_oocyte") is not True),
+            "Oocyte-associated cellbins lack spatial_object_id",
+            errors,
+        )
         if workflow_required:
             if expected_analysis_ids is not None:
                 require(analysis_ids_seen == expected_analysis_ids, "cell-ledger analysis_set differs from frozen analysis-scope membership", errors)

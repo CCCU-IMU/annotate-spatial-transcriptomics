@@ -44,12 +44,18 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def membership_set(path: Path) -> set[str]:
+def membership_set(path: Path, *, allow_empty: bool = False) -> set[str]:
     opener = gzip.open if path.suffix == ".gz" else open
     with opener(path, "rt", newline="", encoding="utf-8") as handle:
-        rows = list(csv.DictReader(handle, delimiter="\t"))
+        reader = csv.DictReader(handle, delimiter="\t")
+        rows = list(reader)
+        fields = reader.fieldnames or []
+    if "cell_id" not in fields:
+        raise ValueError("membership lacks a cell_id column")
+    if not rows and not allow_empty:
+        raise ValueError("membership is empty")
     ids = [row.get("cell_id", "").strip() for row in rows]
-    if not rows or "cell_id" not in rows[0] or any(not item for item in ids) or len(ids) != len(set(ids)):
+    if any(not item for item in ids) or len(ids) != len(set(ids)):
         raise ValueError("membership is not a unique nonempty cell_id table")
     return set(ids)
 
@@ -149,10 +155,11 @@ def validate_terminal(root: Path, record: dict) -> list[str]:
             if not expected_hash or sha256(path) != expected_hash:
                 errors.append(f"{prefix}_sha256 mismatch")
             try:
-                partitions[prefix] = membership_set(path)
+                expected_count = int(float(expected_n or 0))
+                partitions[prefix] = membership_set(path, allow_empty=expected_count == 0)
                 observed_n = len(partitions[prefix])
                 registry_n = int(float(record.get(f"{prefix}_n_observations", expected_n) or 0))
-                if observed_n != registry_n or observed_n != int(float(expected_n or 0)):
+                if observed_n != registry_n or observed_n != expected_count:
                     errors.append(f"{prefix} count mismatch")
             except (ValueError, TypeError):
                 errors.append(f"invalid {prefix} membership/count")
@@ -209,8 +216,9 @@ def validate_terminal(root: Path, record: dict) -> list[str]:
             if not expected_hash or sha256(path) != expected_hash:
                 errors.append(f"{prefix}_sha256 mismatch")
             try:
-                partitions[prefix] = membership_set(path)
-                if len(partitions[prefix]) != int(float(record.get(count_field, 0) or 0)):
+                expected_count = int(float(record.get(count_field, 0) or 0))
+                partitions[prefix] = membership_set(path, allow_empty=expected_count == 0)
+                if len(partitions[prefix]) != expected_count:
                     errors.append(f"{prefix} count mismatch")
             except (ValueError, TypeError):
                 errors.append(f"invalid {prefix} membership/count")

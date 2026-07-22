@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcrip
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcriptomics/main/install.sh \
-  | bash -s -- --ref v2.0.1
+  | bash -s -- --ref v2.0.3
 ```
 
 克隆后本地安装（适合内网或需要审查源码的环境）：
@@ -380,7 +380,7 @@ GitHub Actions 的 PR 验证与 Release 打包均使用 Python 3.11 和仓库内
 
 ## 版本
 
-当前版本：`2.0.1`。这是 v2 合同的兼容性修订：项目 schema 仍为 `2.0.0`，但补齐了独立 SCT+BANKSY 输入边界、全细胞 Atlas 映射绑定、零锚点/压缩 membership、报告双视图和发布审计等运行边界。旧项目仍须按 v2 迁移规则重建证据门。
+当前版本：`2.0.3`。这是 v2 的运行边界与报告一致性修订，项目 framework schema 仍为 `2.0.0`：保留 v2.0.2 的初始大类、全候选 cohort 和 purity-gated writeback 生物学规则，同时统一 context 别名、v2 residual-QC 列、direct-return/terminal-residual decision 域、零计数 Atlas 分区、最终资产文件名与全 analysis-set marker 空间范围。最终报告在每个大类/亚群高亮旁显示既有定量支撑和 current-data DEG；没有增加新的公开完成门。
 
 ## 许可
 

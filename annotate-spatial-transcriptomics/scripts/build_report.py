@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 from dependency_manifest import build as build_dependency_manifest
 from evidence_schema_lib import active_registry_rows
+from project_context import resolve_context_path
 
 
 def read_tsv(path: Path):
@@ -76,6 +77,44 @@ def node_id(level: str, label: str, parent: str = "") -> str:
     return "node-" + (clean or "unlabeled")
 
 
+def parse_json_text(value: str):
+    try:
+        return json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return value
+
+
+def readable_evidence(value: str) -> str:
+    parsed = parse_json_text(value)
+    if isinstance(parsed, dict):
+        parts = []
+        for key, item in parsed.items():
+            if isinstance(item, list):
+                rendered = ", ".join(map(str, item))
+            elif isinstance(item, dict):
+                rendered = "; ".join(f"{k}={v}" for k, v in item.items())
+            else:
+                rendered = str(item)
+            parts.append(f"{key}: {rendered}")
+        return "；".join(parts)
+    if isinstance(parsed, list):
+        return "；".join(map(str, parsed))
+    return str(parsed or "未记录")
+
+
+def top_deg_by_label(rows, limit=5):
+    result = {}
+    for row in rows:
+        label = row.get("label", "")
+        gene = row.get("gene", "")
+        if not label or not gene:
+            continue
+        genes = result.setdefault(label, [])
+        if gene not in genes and len(genes) < limit:
+            genes.append(gene)
+    return result
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(); ap.add_argument("project_root", type=Path); ap.add_argument("--language", default="zh"); args = ap.parse_args()
     root = args.project_root.resolve(); cfg = json.loads((root / "config/project.json").read_text())
@@ -95,7 +134,7 @@ def main() -> int:
     annotation_views = [row for row in read_tsv(root / "state/annotation_view_registry.tsv") if row.get("view") == "final"]
     workflow_audit_path = root / "provenance/direct_lineage_workflow_audit.json"
     workflow_audit = json.loads(workflow_audit_path.read_text()) if workflow_audit_path.exists() else {"status":"NOT_RUN","gaps":[]}
-    context_path = root / "config/biological_context.json"
+    context_path = resolve_context_path(root)
     context = json.loads(context_path.read_text(encoding="utf-8")) if context_path.exists() else {}
     gate_path = root / "provenance/completion_gate.json"
     gate = json.loads(gate_path.read_text(encoding="utf-8")) if gate_path.exists() else {"status":"NOT_RUN","errors":["completion gate has not run"]}
@@ -118,11 +157,50 @@ def main() -> int:
     final_status = "最终版（completion gate 已通过）" if gate.get("status") == "PASS" else "初步版（仍需迭代，禁止作为最终注释）"
     nodes = read_tsv(root / "tables/spatial_node_asset_index.tsv")
     genes = read_tsv(root / "tables/spatial_gene_asset_index.tsv")
+    support_rows = active_registry_rows(
+        read_tsv(root / "state/annotation_support_registry.tsv"), "support_id"
+    )
+    support_by_key = {}
+    for row in support_rows:
+        if row.get("status") != "validated":
+            continue
+        key = (
+            row.get("label_level", ""),
+            row.get("broad_label", ""),
+            row.get("fine_label", ""),
+        )
+        support_by_key[key] = row
+    broad_deg = top_deg_by_label(read_tsv(root / "tables/final_broad_DEG_top100.tsv"))
+    subtype_deg = top_deg_by_label(read_tsv(root / "tables/final_subtype_DEG_top100.tsv"))
     def table(rows, cols):
         if not rows: return "<p>暂无记录</p>"
         return "<table><thead><tr>" + "".join(f"<th>{html.escape(c)}</th>" for c in cols) + "</tr></thead><tbody>" + "".join(
             "<tr>" + "".join(f"<td>{html.escape(str(r.get(c,'')))}</td>" for c in cols) + "</tr>" for r in rows
         ) + "</tbody></table>"
+    def support_block(level: str, label: str, parent: str = "") -> str:
+        registry_level = "fine" if level == "subtype" else level
+        key = (registry_level, label, "") if level == "broad" else (registry_level, parent, label)
+        support = support_by_key.get(key)
+        deg = broad_deg.get(label, []) if level == "broad" else subtype_deg.get(label, [])
+        deg_text = "、".join(deg) if deg else "当前比较中无稳定 top DEG"
+        if not support:
+            return (
+                "<div class='support'><b>典型 DEG：</b>"
+                f"{html.escape(deg_text)}<br><b>注释支撑：</b>未找到经验证的支撑记录。</div>"
+            )
+        source = support.get("support_artifact") or support.get("full_feature_evidence") or "未记录"
+        rows = [
+            ("定义与路线", support.get("route_summary", "未记录")),
+            ("定量支撑", f"n={support.get('n_observations','')}；confidence={support.get('confidence','')}；{readable_evidence(support.get('positive_marker_evidence',''))}"),
+            ("排他验证", readable_evidence(support.get("anti_marker_evidence", ""))),
+            ("空间支撑", support.get("spatial_evidence", "未记录")),
+            ("典型 DEG", deg_text),
+            ("证据来源", source),
+        ]
+        return "<div class='support'><table><tbody>" + "".join(
+            f"<tr><th>{html.escape(title)}</th><td>{html.escape(str(value))}</td></tr>"
+            for title, value in rows
+        ) + "</tbody></table></div>"
     overview_cards = []
     for filename, title in [("final_broad_spatial.png","大类空间图"),("final_subtype_spatial.png","亚群空间图"),("final_broad_UMAP.png","大类 UMAP"),("final_subtype_UMAP.png","亚群 UMAP")]:
         p = root / "figures" / filename
@@ -141,7 +219,13 @@ def main() -> int:
         parent = r.get("parent_label", "")
         path_label = f"{parent} → {r.get('label','')}" if r.get("level") == "subtype" and parent else r.get("label", "")
         nid = node_id(r.get("level", ""), r.get("label", ""), parent)
-        if p.exists(): node_cards.append(f"<details id='{html.escape(nid)}' class='node-card' data-search='{html.escape(path_label.lower())}'><summary>{html.escape(r.get('level',''))} → {html.escape(path_label)} (n={html.escape(r.get('n_observations',''))})</summary><p><a class='button' href='#tree'>返回注释树</a></p><img src='../{html.escape(rel(str(p), report_dir))}'></details>")
+        if p.exists():
+            node_cards.append(
+                f"<details id='{html.escape(nid)}' class='node-card' data-search='{html.escape(path_label.lower())}'>"
+                f"<summary>{html.escape(r.get('level',''))} → {html.escape(path_label)} (n={html.escape(r.get('n_observations',''))})</summary>"
+                f"<p><a class='button' href='#tree'>返回注释树</a></p><img src='../{html.escape(rel(str(p), report_dir))}'>"
+                f"{support_block(r.get('level',''), r.get('label',''), parent)}</details>"
+            )
     fine_parent = {}
     for r in active_clusters:
         if r.get("broad_label") and r.get("fine_label"): fine_parent.setdefault(r["fine_label"], set()).add(r["broad_label"])
@@ -155,8 +239,8 @@ def main() -> int:
             if broad not in parents: continue
             sp = asset_path(sr.get("png", ""), root)
             subtype_id = node_id("subtype", sr.get("label", ""), broad or "")
-            children.append(f"<details class='tree-node' data-search='{html.escape((broad+' '+sr.get('label','')).lower())}'><summary>{html.escape(sr.get('label',''))} (n={html.escape(sr.get('n_observations',''))})</summary><p><a class='button' href='#{html.escape(subtype_id)}'>跳转到该亚群空间高亮</a></p>" + (f"<img src='../{html.escape(rel(str(sp),report_dir))}'>" if sp.exists() else "") + "</details>")
-        tree_parts.append(f"<details class='tree-node' data-search='{html.escape((broad or '未定义').lower())}'><summary><b>{html.escape(broad or '未定义')}</b> (n={html.escape(br.get('n_observations',''))})</summary><p><a class='button' href='#{html.escape(broad_id)}'>跳转到该大类空间高亮</a></p>" + (f"<img src='../{html.escape(rel(str(bp),report_dir))}'>" if bp.exists() else "") + "".join(children) + "</details>")
+            children.append(f"<details class='tree-node' data-search='{html.escape((broad+' '+sr.get('label','')).lower())}'><summary>{html.escape(sr.get('label',''))} (n={html.escape(sr.get('n_observations',''))})</summary><p><a class='button' href='#{html.escape(subtype_id)}'>跳转到该亚群空间高亮</a></p>" + (f"<img src='../{html.escape(rel(str(sp),report_dir))}'>" if sp.exists() else "") + support_block("subtype", sr.get("label", ""), broad) + "</details>")
+        tree_parts.append(f"<details class='tree-node' data-search='{html.escape((broad or '未定义').lower())}'><summary><b>{html.escape(broad or '未定义')}</b> (n={html.escape(br.get('n_observations',''))})</summary><p><a class='button' href='#{html.escape(broad_id)}'>跳转到该大类空间高亮</a></p>" + (f"<img src='../{html.escape(rel(str(bp),report_dir))}'>" if bp.exists() else "") + support_block("broad", broad or "") + "".join(children) + "</details>")
     gene_groups = {}
     for r in genes:
         p = asset_path(r.get("png", ""), root)
@@ -178,6 +262,7 @@ def main() -> int:
     downloads = []
     download_candidates = [
         ("Final broad DEG", root/"tables/final_broad_DEG_one_vs_rest_all.tsv"), ("Final subtype DEG", root/"tables/final_subtype_DEG_one_vs_rest_all.tsv"),
+        ("Final broad DEG top", root/"tables/final_broad_DEG_top100.tsv"), ("Final subtype DEG top", root/"tables/final_subtype_DEG_top100.tsv"),
         ("Broad DEG", root/"tables/broad_DEG_one_vs_rest_all.tsv"), ("Subtype DEG", root/"tables/subtype_DEG_one_vs_rest_all.tsv"),
         ("Broad DEG top", root/"tables/broad_DEG_top100.tsv"), ("Subtype DEG top", root/"tables/subtype_DEG_top100.tsv"),
         ("Cell ledger", root/"state/cell_ledger.tsv.gz"), ("Cell ledger", root/"tables/cell_ledger.tsv.gz"),
@@ -209,7 +294,10 @@ def main() -> int:
     seen_downloads = set()
     for label, p in download_candidates:
         if p.exists() and p not in seen_downloads:
-            seen_downloads.add(p); downloads.append(f"<li><a href='../{html.escape(rel(str(p), report_dir))}'>{html.escape(label)}</a></li>")
+            seen_downloads.add(p)
+            target = rel(str(p), report_dir)
+            href = target if target.startswith("file://") else "../" + target
+            downloads.append(f"<li><a href='{html.escape(href)}'>{html.escape(label)}</a></li>")
     sections = []
     for level, title in [("broad", "大类 marker 带树点图"), ("subtype", "亚群 marker 带树点图")]:
         cards = []
@@ -261,7 +349,7 @@ def main() -> int:
     writeback_counts = atlas_policy.get("writeback_counts", atlas_policy.get("nested_recalibration_writeback_counts", {}))
     atlas_writeback_rows = [writeback_counts] if writeback_counts else []
     body = f"""<!doctype html><html lang='zh'><head><meta charset='utf-8'><title>{html.escape(cfg['sample_id'])} 注释报告</title>
-<style>body{{font-family:Arial,'Noto Sans CJK SC',sans-serif;margin:0;background:#f5f7fa;color:#20242a}}header,main{{max-width:1500px;margin:auto;padding:24px}}header{{background:#17324d;color:white;max-width:none}}nav a{{color:#d8efff;margin-right:18px}}section{{background:white;margin:18px 0;padding:20px;border-radius:10px;scroll-margin-top:12px}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:16px}}.card{{border:1px solid #d9e0e8;padding:12px;border-radius:8px}}img{{width:100%;height:auto}}table{{border-collapse:collapse;width:100%;font-size:12px}}th,td{{border:1px solid #ccd4dd;padding:5px;text-align:left}}pre{{white-space:pre-wrap}}details{{margin:8px 0;padding:6px;border-left:3px solid #d9e0e8}}summary{{cursor:pointer}}.button,button{{display:inline-block;background:#176b87;color:white!important;border:0;border-radius:5px;padding:7px 10px;text-decoration:none;cursor:pointer;margin:3px}}input[type=search]{{padding:8px;min-width:320px;border:1px solid #9ca9b5;border-radius:5px}}</style></head>
+<style>body{{font-family:Arial,'Noto Sans CJK SC',sans-serif;margin:0;background:#f5f7fa;color:#20242a}}header,main{{max-width:1500px;margin:auto;padding:24px}}header{{background:#17324d;color:white;max-width:none}}nav a{{color:#d8efff;margin-right:18px}}section{{background:white;margin:18px 0;padding:20px;border-radius:10px;scroll-margin-top:12px}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(520px,1fr));gap:16px}}.card{{border:1px solid #d9e0e8;padding:12px;border-radius:8px}}img{{width:100%;height:auto}}table{{border-collapse:collapse;width:100%;font-size:12px}}th,td{{border:1px solid #ccd4dd;padding:5px;text-align:left;vertical-align:top}}pre{{white-space:pre-wrap}}details{{margin:8px 0;padding:6px;border-left:3px solid #d9e0e8}}summary{{cursor:pointer}}.support{{margin-top:10px;padding:8px;background:#f8fbfd;border:1px solid #dbe7ef;border-radius:6px}}.support th{{width:90px;background:#edf4f8}}.button,button{{display:inline-block;background:#176b87;color:white!important;border:0;border-radius:5px;padding:7px 10px;text-decoration:none;cursor:pointer;margin:3px}}input[type=search]{{padding:8px;min-width:320px;border:1px solid #9ca9b5;border-radius:5px}}</style></head>
 <body><header><h1>{html.escape(cfg['sample_id'])} 可追溯注释报告</h1><p>{html.escape(final_status)} · {html.escape(cfg['modality'])} · observation={html.escape(cfg['observation_unit'])} · framework={html.escape(cfg['framework_version'])}</p><nav><a href='#context'>生物学背景</a><a href='#overview'>注释空间图</a><a href='#final'>最终注释</a><a href='#selection'>聚类选择</a><a href='#tree'>注释树</a><a href='#routes'>cohort 与回归裁决</a><a href='#iterations'>迭代状态</a><a href='#uncertainty'>保留状态</a><a href='#dot-broad'>大类点图</a><a href='#dot-subtype'>亚群点图</a><a href='#rare-audit'>Oocyte/特异候选审计</a><a href='#nodes'>空间节点</a><a href='#genes'>空间基因</a><a href='#downloads'>下载与审计</a><a href='#workflow'>全流程详细版</a></nav></header><main>
 <section id='context'><h2>生物学背景与完成门</h2><p><b>报告状态：</b>{html.escape(final_status)}</p><p><b>主 Agent 注释质量审批：</b>{html.escape(str(master_quality.get('status')))}；{html.escape(str(master_quality.get('rationale','')))}</p><p><b>用户终审：</b>{html.escape(str(confirmation.get('status')))}；确认时间={html.escape(str(confirmation.get('confirmed_at','')))}；decision version={html.escape(str(confirmation.get('decision_version','')))}。</p><p><b>物种/组织：</b>{html.escape(str(context.get('species','未记录')))} / {html.escape(str(context.get('tissue','未记录')))}；<b>阶段：</b>{html.escape(str(context.get('developmental_or_reproductive_stage','未记录')))}；<b>平台/单位：</b>{html.escape(str(context.get('platform','未记录')))} / {html.escape(str(context.get('observation_unit',cfg.get('observation_unit',''))))}</p><p><b>主要问题：</b>{html.escape('；'.join(map(str,context.get('primary_questions',[]))))}</p><p><b>分析范围：</b>full object={html.escape(str(scope_policy.get('full_object_n','未记录')))}；analysis set={html.escape(str(scope_policy.get('analysis_set_n','未记录')))}；excluded initial QC={html.escape(str(scope_policy.get('excluded_initial_qc_n','未记录')))}。初始 QC 排除仍保留在完整账本和空间图，但不进入 DEG、marker、锚点或生物学比例。</p><p><b>全特征验证：</b>{html.escape(str(feature_audit.get('status')))}；features={html.escape(str(feature_audit.get('n_features','NA')))}；profile marker coverage={html.escape(str(feature_audit.get('profile_marker_coverage','NA')))}</p><p><b>completion gate：</b>{html.escape(str(gate.get('status')))}；{html.escape('；'.join(map(str,gate.get('errors',[]))))}</p></section>
 <section id='overview'><h2>{'最终' if gate.get('status') == 'PASS' else '当前'}注释总览</h2><div class='grid'>{''.join(overview_cards) or '<p>当前阶段尚未生成总览图。</p>'}</div></section>

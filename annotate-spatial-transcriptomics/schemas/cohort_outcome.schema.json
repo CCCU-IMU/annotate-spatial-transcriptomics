@@ -11,7 +11,7 @@
     "terminal_outcome", "homogeneous_parent_confirmed"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"enum": ["1.0", "2.0"]},
     "cohort_id": {"type": "string", "minLength": 1},
     "cohort_type": {"enum": ["broad_class_recluster", "targeted_recluster", "oocyte_targeted_recluster"]},
     "question_mode": {"enum": ["broad_purity_audit", "targeted_mixture"]},
@@ -27,8 +27,17 @@
     "rejected_alternatives": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["resolution", "reason"]}},
     "subcluster_outcomes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/subclusterOutcome"}},
     "terminal_outcome": {"enum": ["homogeneous_parent_confirmed", "subclusters_adjudicated"]},
-    "homogeneous_parent_confirmed": {"type": "boolean"}
+    "homogeneous_parent_confirmed": {"type": "boolean"},
+    "lineage_decision_table": {"$ref": "#/$defs/artifact"},
+    "broad_family_evidence_manifest": {"$ref": "#/$defs/artifact"},
+    "broad_family_evidence_validation": {"$ref": "#/$defs/artifact"}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"schema_version": {"const": "2.0"}}},
+      "then": {"required": ["lineage_decision_table", "broad_family_evidence_manifest", "broad_family_evidence_validation"]}
+    }
+  ],
   "$defs": {
     "membership": {
       "type": "object",
@@ -81,9 +90,13 @@
         "subcluster_id": {"type": "string", "minLength": 1},
         "outcome": {"enum": ["parent_return", "fine_return", "cross_lineage_return", "targeted_successor", "qc_successor"]},
         "membership": {"$ref": "#/$defs/membership"},
+        "target_candidate_id": {"type": "string"},
         "target_broad_label": {"type": "string"},
         "target_fine_label": {"type": "string"},
-        "target_cohort_id": {"type": "string"}
+        "target_cohort_id": {"type": "string"},
+        "confidence": {"enum": ["low", "moderate", "high"]},
+        "return_scope": {"enum": ["whole_subcluster", "supported_subset"]},
+        "observation_purity_evidence": {"$ref": "#/$defs/artifact"}
       }
     }
   }

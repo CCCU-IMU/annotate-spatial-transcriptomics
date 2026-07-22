@@ -15,6 +15,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from project_context import resolve_context_path
+
 from master_quality_lib import validate_bound_record, validate_master_approval
 from dependency_manifest import stale as content_hash_stale
 
@@ -143,7 +145,7 @@ def main() -> int:
         except json.JSONDecodeError:
             project_config = {}
     direct_workflow = project_config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts", "direct_cross_lineage_recluster_cohorts_global_atlas"}
-    context = root / "config/biological_context.json"
+    context = resolve_context_path(root)
     context_validation = root / "provenance/biological_context_validation.json"
     discovery = root / "input_discovery"
     cluster_ledger = root / "state/cluster_decision_ledger.tsv"
@@ -180,7 +182,7 @@ def main() -> int:
     if not discovery.exists() or not any(discovery.rglob("*")):
         add("discover", "discover_inputs.py", "frozen input discovery inventory is missing")
     if not context.exists():
-        add("context", "create config/biological_context.json", "species, tissue, stage, platform and priority lineages are required")
+        add("context", "create config/biological_context.json (or config/context.json)", "species, tissue, stage, platform and priority lineages are required")
     elif json_status(context_validation) != "PASS":
         add("context", "validate_biological_context.py", "biological context has not passed validation")
 
@@ -305,7 +307,19 @@ def main() -> int:
                 "final annotation has not received explicit user approval",
             )
 
-    final_metadata = newest_match(root, ["tables/final_cell_metadata.tsv", "tables/final_cell_metadata.tsv.gz", "tables/final_cell_metadata_v*.tsv", "tables/final_cell_metadata_v*.tsv.gz"])
+    final_metadata = newest_match(root, [
+        "tables/final_report_metadata.tsv", "tables/final_report_metadata.tsv.gz",
+        "tables/final_cell_metadata.tsv", "tables/final_cell_metadata.tsv.gz",
+        "tables/final_cell_metadata_v*.tsv", "tables/final_cell_metadata_v*.tsv.gz",
+    ])
+    broad_deg = newest_match(root, [
+        "tables/final_broad_DEG_one_vs_rest_all.tsv", "tables/final_broad_DEG_one_vs_rest_all.tsv.gz",
+        "tables/broad_DEG_one_vs_rest_all.tsv", "tables/broad_DEG_one_vs_rest_all.tsv.gz",
+    ])
+    subtype_deg = newest_match(root, [
+        "tables/final_subtype_DEG_one_vs_rest_all.tsv", "tables/final_subtype_DEG_one_vs_rest_all.tsv.gz",
+        "tables/subtype_DEG_one_vs_rest_all.tsv", "tables/subtype_DEG_one_vs_rest_all.tsv.gz",
+    ])
     has_final_fine = False
     if final_census.exists():
         try:
@@ -314,13 +328,13 @@ def main() -> int:
             has_final_fine = True
     required_assets = [
         final_metadata or root / "tables/final_cell_metadata.tsv.gz",
-        root / "tables/broad_DEG_one_vs_rest_all.tsv",
+        broad_deg or root / "tables/final_broad_DEG_one_vs_rest_all.tsv",
         root / "figures/marker_dotplots/marker_dotplot_asset_index.tsv",
         root / "figures/final_broad_UMAP.png",
         root / "provenance/release_sessionInfo.txt",
     ]
     if has_final_fine:
-        required_assets.extend([root / "tables/subtype_DEG_one_vs_rest_all.tsv", root / "figures/final_subtype_UMAP.png"])
+        required_assets.extend([subtype_deg or root / "tables/final_subtype_DEG_one_vs_rest_all.tsv", root / "figures/final_subtype_UMAP.png"])
     modality = ""
     if project.exists():
         try:

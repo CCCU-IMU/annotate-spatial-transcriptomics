@@ -15,6 +15,7 @@ from pathlib import Path
 from audit_annotation_membership_partition import audit as audit_membership_partition
 from dependency_manifest import build as build_dependency_manifest
 from validate_annotation_support_registry import validate as validate_support_registry
+from project_context import resolve_context_path
 
 
 def read_tsv(path: Path):
@@ -94,7 +95,7 @@ def main() -> int:
         req(config_path.exists(), "missing project config")
         def any_file(pattern, min_bytes=100):
             return any(p.is_file() and p.stat().st_size >= min_bytes for p in root.glob(pattern))
-        context_path = root / "config/biological_context.json"
+        context_path = resolve_context_path(root)
         context_validation = root / "provenance/biological_context_validation.json"
         completion_path = root / "provenance/completion_gate.json"
         confirmation_path = root / "state/final_annotation_confirmation.json"

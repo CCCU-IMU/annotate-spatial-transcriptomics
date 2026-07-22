@@ -11,7 +11,7 @@
     "technical_flags", "frozen_before_initial_label"
   ],
   "properties": {
-    "schema_version": {"enum": ["1.0", "2.0"]},
+    "schema_version": {"enum": ["1.0", "2.0", "2.1"]},
     "freeze_id": {"type": "string", "minLength": 1},
     "source_cluster": {"type": "string", "minLength": 1},
     "n_observations": {"type": "integer", "minimum": 1},
@@ -67,8 +67,15 @@
     "frozen_before_initial_label": {"const": true}
     ,
     "broad_family_evidence_manifest": {"$ref": "#/$defs/artifact"},
-    "broad_family_evidence_validation": {"$ref": "#/$defs/artifact"}
+    "broad_family_evidence_validation": {"$ref": "#/$defs/artifact"},
+    "lineage_decision_table": {"$ref": "#/$defs/artifact"}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"schema_version": {"const": "2.1"}}},
+      "then": {"required": ["broad_family_evidence_manifest", "broad_family_evidence_validation", "lineage_decision_table"]}
+    }
+  ],
   "$defs": {
     "artifact": {
       "type": "object",

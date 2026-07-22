@@ -68,7 +68,7 @@
       "release_level": "evidence_dependent_broad_candidate",
       "profile_program": "lineages.smooth_muscle",
       "review_required": true,
-      "release_rule": "Require a mature MYH11/CNN1/ACTG2-centered contractile backbone, stable separation and coherent structural tracks."
+      "release_rule": "Require a mature MYH11/CNN1/ACTG2-centered contractile backbone, stable separation and coherent nonvascular structural tracks. RGS5/PDGFRB/NOTCH3/MCAM/CSPG4-supported vascular-wall cells return to Vascular-associated."
     },
     {
       "candidate_id": "pericyte_mural",
@@ -108,7 +108,7 @@
       "release_level": "default_broad_candidate",
       "profile_program": "lineages.epithelial_mesothelial",
       "review_required": true,
-      "release_rule": "Require a coherent epithelial/mesothelial program and compatible surface morphology; WT1, MUC16 or an isolated keratin alone is insufficient."
+      "release_rule": "Require a coherent epithelial/mesothelial program and compatible surface or rete/glandular morphology. Recover an embedded lineage from a high-purity reclustered subcluster; never expand a mixed parent cluster or spatial component from WT1, MUC16, PRG4 or isolated keratin evidence."
     },
     {
       "candidate_id": "neural_schwann_glia",

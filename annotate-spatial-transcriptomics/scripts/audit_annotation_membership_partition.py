@@ -136,12 +136,40 @@ def audit(root: Path) -> dict:
         if expected is None:
             all_cell_gate = (
                 cohort.get("question_mode") == "targeted_mixture"
-                and cohort.get("source_cluster_ids") == "all_cell_multi_module_gate"
+                and cohort.get("source_cluster_ids") in {"all_cell_multi_module_gate", "canonical_multimodule_candidates"}
             )
-            if not all_cell_gate:
-                errors.append(f"targeted cohort {cohort_id} is not linked to one explicit source subcluster")
-            elif not actual <= analysis_ids:
-                errors.append(f"all-cell targeted cohort {cohort_id} contains observations outside the analysis set")
+            source_ids = [value for value in cohort.get("source_cluster_ids", "").replace(";", ",").split(",") if value]
+            initial_question = bool(source_ids) and all(value.isdigit() for value in source_ids)
+            initial_expected = {
+                row["cell_id"] for row in analysis
+                if row.get("source_cluster", "") in set(source_ids)
+                and not row.get("initial_broad_label", "").strip()
+            } if initial_question else set()
+            parent_matches = []
+            if len(source_ids) == 1:
+                for parent in cohorts:
+                    parent_id = parent.get("cohort_id", "")
+                    key = (parent_id, source_ids[0])
+                    if (
+                        parent_id != cohort_id
+                        and parent.get("source_run_ids", "") == cohort.get("source_run_ids", "")
+                        and key in outcome_memberships
+                        and outcome_memberships[key] == actual
+                    ):
+                        parent_matches.append(key)
+            if all_cell_gate:
+                if not actual <= analysis_ids:
+                    errors.append(f"all-cell targeted cohort {cohort_id} contains observations outside the analysis set")
+            elif initial_question and actual == initial_expected:
+                pass
+            elif len(parent_matches) == 1:
+                # A fail-closed QC successor may be reopened once by an exact
+                # upstream-recall challenger. Its membership must equal one
+                # immutable parent subcluster cell-for-cell; no parent or
+                # spatial-component expansion is accepted here.
+                pass
+            else:
+                errors.append(f"targeted cohort {cohort_id} is not linked to one explicit source subcluster or initial-cluster question")
         elif actual != expected:
             errors.append(f"targeted cohort {cohort_id} membership differs from its source subcluster")
 
@@ -218,8 +246,8 @@ def audit(root: Path) -> dict:
             for item in outcome_by_cohort.get(key[0], {}).get("subcluster_outcomes", [])
         )
     ]) if outcome_memberships else set()
-    if not qc_successor_members <= terminal_qc:
-        errors.append("one or more QC-successor observations are missing from terminal residual QC provenance")
+    if not qc_successor_members <= terminal_qc | seen_direct:
+        errors.append("one or more QC-successor observations lack terminal residual-QC or unique direct-return coverage")
     global_atlas_rows = [row for row in routes if row.get("route_class") == "global_atlas_broad_audit" and row.get("status") in {"validated_done", "not_applicable_reviewed"}]
     residual_atlas_rows = [row for row in routes if row.get("route_class") == "residual_qc_atlas_review" and row.get("status") in {"validated_done", "not_applicable_reviewed"}]
     project_path = root / "config/project.json"

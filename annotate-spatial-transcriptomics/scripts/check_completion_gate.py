@@ -3,6 +3,8 @@
 from __future__ import annotations
 import argparse,csv,hashlib,json,re
 from pathlib import Path
+
+from project_context import resolve_context_path
 from validate_direct_lineage_workflow import audit as audit_direct_lineage
 from validate_incident_registry import validate as validate_incidents
 from validate_profile_role import load_profile
@@ -108,7 +110,7 @@ def main():
                 for source_key,hash_key in (("audit","audit_sha256"),("candidate_catalog","candidate_catalog_sha256"),("biological_profile","biological_profile_sha256")):
                     value=str(discovery.get(source_key,"") or "");path=Path(value) if value else Path()
                     if not value or not path.is_file() or discovery.get(hash_key)!=sha256(path):errors.append(f"open-world lineage discovery binding is missing or stale: {source_key}")
-    context_path=a.context or r/"config/biological_context.json";context={}
+    context_path=resolve_context_path(r,a.context);context={}
     if not context_path.exists():errors.append("missing biological context")
     else:context=json.loads(context_path.read_text())
     cv=r/"provenance/biological_context_validation.json"

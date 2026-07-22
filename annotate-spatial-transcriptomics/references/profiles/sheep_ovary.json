@@ -100,9 +100,10 @@
       },
       "mature_contractile_core": ["MYH11", "CNN1", "ACTG2"],
       "contractile_support": ["TAGLN", "ACTA2", "MYL9", "MYL6", "DES", "TPM2", "FHL1"],
-      "anti_programs": ["PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
-      "spatial_expectation": "coherent vessel-wall, hilar or structural follicular-wall tracks rather than diffuse ECM background",
-      "safety": "ACTA2/TAGLN-only ECM-rich cells remain myofibroblast or structural stroma; require a mature contractile-core gene, additional contractile support, stable reclustering and morphology"
+      "mural_exclusion_program": ["RGS5", "PDGFRB", "NOTCH3", "MCAM", "CSPG4", "RERGL"],
+      "anti_programs": ["RGS5", "PDGFRB", "NOTCH3", "MCAM", "CSPG4", "RERGL", "PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
+      "spatial_expectation": "coherent hilar, structural follicular-wall or nonvascular contractile tracks rather than diffuse ECM background or endothelial-associated mural branches",
+      "safety": "ACTA2/TAGLN-only ECM-rich cells remain contractile stroma. Require a coherent MYH11/CNN1/ACTG2-centered mature program plus additional contractile support. A coherent RGS5/PDGFRB/NOTCH3/MCAM/CSPG4 mural program or clear endothelial-associated vascular-wall topology routes the broad label to Vascular-associated, with optional Pericyte/mural fine identity."
     },
     "blood_endothelial": {
       "positive_families": {
@@ -172,8 +173,8 @@
       },
       "program": ["KRT8", "KRT18", "KRT19", "KRT7", "EPCAM", "DSP", "MUC16", "MSLN", "PRG4"],
       "spatial_expectation": "continuous thin ovarian surface boundary",
-      "broad_recall_rule": "a coherent keratin backbone plus one independent surface/adhesion family supports the broad class; alternatively, label-blind DEG plus a continuous surface component may supply the second channel. Adjudicate morphology per passing cluster/component and include every member of that passing cluster/component rather than marker-positive seeds only",
-      "safety": "WT1 or MUC16 alone and internal ECM-rich points remain review; KRT8/KRT18/KRT19 are one family, not three independent votes"
+      "broad_recall_rule": "a coherent keratin backbone plus one independent surface/adhesion or mesothelial family supports the broad class. When the lineage is embedded at the whole-tissue resolution, keep it as watch and recover only a high-purity subcluster during open-world cohort reclustering. A mixed spatial component is evidence for one bounded targeted question, never permission to expand its complete membership.",
+      "safety": "WT1, MUC16, PRG4, one keratin or internal ECM-rich points remain review. KRT8/KRT18/KRT19 are one family, not three independent votes. Whole-cluster or whole-component epithelial writeback is forbidden unless the exact returned membership passes its own two-family, competitor and observation-level purity review."
     }
   },
   "contamination_rules": {
@@ -241,7 +242,7 @@
     "vascular_hierarchy": {
       "broad_parent": "Vascular-associated",
       "fine_children": ["Blood endothelial", "Lymphatic endothelial", "Pericyte/mural"],
-      "smooth_muscle_policy": "Smooth muscle remains a separate evidence-dependent broad class",
+      "smooth_muscle_policy": "Smooth muscle remains a separate evidence-dependent broad class only for a mature MYH11/CNN1/ACTG2-centered program after mural exclusion; RGS5/PDGFRB/NOTCH3/MCAM/CSPG4-supported vascular-wall cells belong to Vascular-associated",
       "legacy_alias_policy": "Vascular/endothelial and standalone Pericyte/mural broad labels must be migrated to Vascular-associated while preserving their supported fine identity"
     },
     "broad_aliases": {
@@ -286,7 +287,7 @@
   "evidence_gates": {
     "broad_defined": "at least two explicit independent positive marker families, low major anti-program, spatial plausibility when available and adjacent-resolution stability; absolute full-feature detection/prevalence and pseudobulk establish broad presence, while centered module scores and one-vs-rest DEG cannot alone reject an abundant shared parent program; atlas alone cannot pass",
     "mesenchymal_defined": "stable progenitor/fibroblast-like core plus support, low mature-contractile/endothelial/steroidogenic/immune/epithelial/granulosa programs and reproducible morphology; DCN/PDGFRA alone cannot pass",
-    "smooth_muscle_defined": "at least one mature-contractile-core gene plus multiple contractile-support genes, low endothelial/steroidogenic/immune/epithelial/granulosa programs, stable broad-class or targeted-cohort reclustering and coherent vessel-wall/hilar/structural morphology",
+    "smooth_muscle_defined": "a coherent MYH11/CNN1/ACTG2-centered mature-contractile program plus multiple contractile-support genes, low mural/endothelial/steroidogenic/immune/epithelial/granulosa programs, stable broad-class or targeted-cohort reclustering and coherent nonvascular structural morphology; mural-supported vascular-wall cells route to Vascular-associated",
     "pericyte_defined": "RGS5/PDGFRB/CSPG4/NOTCH3/MCAM backbone plus vascular adjacency and separation from endothelial and generic contractile stroma; release as a fine child of Vascular-associated rather than a separate broad class",
     "fine_defined": "broad locked first; subtype program, morphology and resolution stability require at least two supporting channels without strong contradiction",
     "broad_only": "broad supported but subtype evidence insufficient; fine_anchor_eligible=false",
@@ -302,9 +303,18 @@
     ],
     "complete_cartesian_product_required": true,
     "minimum_independent_positive_families_for_broad_assignment": 2,
+    "absolute_family_support_thresholds": {
+      "minimum_detected_marker_count": 1,
+      "minimum_any_detection_fraction": 0.02,
+      "minimum_mean_normalized_expression": 0.01
+    },
     "comparative_scores_can_establish_absence": false,
     "one_vs_rest_deg_can_establish_absence": false,
-    "decision_thresholds_must_be_recorded_not_inferred_from_color_scales": true
+    "decision_thresholds_must_be_recorded_not_inferred_from_color_scales": true,
+    "machine_derived_lineage_decision_table_required": true,
+    "winner_runner_and_margin_must_be_recomputed": true,
+    "whole_subcluster_return_requires_observation_purity_pass": true,
+    "parent_label_inheritance_is_not_evidence": true
   },
   "final_validation": {
     "minimum_features_for_full_validation": 10000,
@@ -315,9 +325,10 @@
     "routing_model": "broad_then_subtype_direct_cross_lineage_then_global_all_cell_atlas",
     "persistent_biological_pools": false,
     "incident_registry_required": true,
-    "initial_broad_annotation": "after selecting the whole-tissue resolution, apply the complete open-world lineage audit directly to every cluster; moderate-or-higher broad calls enter their broad class and low-information or irreducibly mixed clusters enter QC holdout",
+    "initial_broad_annotation": "use the selected whole-tissue partition to establish supported coarse resident compartments, not to force every final ovarian lineage to appear. A biologically informative mixed cluster returns to its numerically dominant supported parent, usually Stromal/mesenchymal when appropriate, while coherent subthreshold epithelial, vascular, smooth-muscle or other signals remain watch for open-world cohort rescanning. Only low-information or technically irreducible observations enter QC holdout.",
     "broad_recluster": "submit one broad_class_recluster cohort per initial broad class and run the complete active-contract candidate grid; select the integrated-evidence optimum, permit homogeneous_parent_confirmed, and allow only a formally evidenced underpowered skip",
     "subcluster_outcomes": ["high_confidence_fine", "direct_broad_return", "direct_cross_lineage_return", "targeted_recluster_or_calibrated_rctd", "qc_holdout"],
+    "subcluster_writeback_policy": "every selected-resolution subcluster is rescored against the complete catalog. Parent identity is provenance only. A whole-subcluster biological return requires a machine-derived positive-margin winner, at least two positive families, no unresolved contradiction and an observation-level purity pass. Mixed subclusters receive one bounded targeted question or QC; they never inherit the parent label wholesale.",
     "cross_lineage_policy": "a source subcluster with coherent evidence for another broad/fine identity returns directly to that target while preserving source run/cluster/cohort provenance; do not create an intermediate cohort or automatically recluster it again",
     "targeted_recluster_policy": "create an immutable temporary cohort only when interpretable competing biological programs and sufficient observations make another computation decision-relevant",
     "qc_holdout_recluster_forbidden": true,
@@ -326,7 +337,12 @@
     "large_residual_qc_policy": "residual QC at least 10% of analysis observations or 50000 observations automatically reopens initial broad-resolution recall, selected-plus-two-higher catalog scans and embedded-program review; Atlas low confidence cannot close this audit",
     "atlas_open_set_policy": "coherent OOD groups trigger unknown-lineage review and are never forced to the nearest known class",
     "atlas_fine_labels_forbidden": true,
-    "legacy_pool_registries": "migration provenance only; the active controller uses broad_class_recluster cohort, targeted_recluster cohort, direct return and terminal residual QC"
+    "legacy_pool_registries": "migration provenance only; the active controller uses broad_class_recluster cohort, targeted_recluster cohort, direct return and terminal residual QC",
+    "completion_interface": {
+      "public_gate": "check_completion_gate.py",
+      "phases": ["INPUT_INTEGRITY", "BIOLOGICAL_EVIDENCE", "WORKFLOW_CLOSURE", "RELEASE_AUDIT"],
+      "policy": "individual validators are internal checks of one public completion interface; conditional audits run only when their trigger is present and warnings do not become new blocking gates"
+    }
   },
   "context_questions": ["animal age and reproductive stage", "cycle, pregnancy or disease state", "section anatomy and follicle-size distribution", "cell, nucleus, spot or cellbin observation unit", "primary biological questions and priority lineages"]
 }

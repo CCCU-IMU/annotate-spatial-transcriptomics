@@ -1,4 +1,4 @@
-name: Release v2.0.1
+name: Release v2.0.3
 
 on:
   workflow_dispatch:
@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   release:
-    if: startsWith(github.event.head_commit.message, 'Release v2.0.1') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.event.head_commit.message, 'Release v2.0.3') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
-      VERSION: v2.0.1
-      PACKAGE: annotate-spatial-transcriptomics-v2.0.1
+      VERSION: v2.0.3
+      PACKAGE: annotate-spatial-transcriptomics-v2.0.3
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -52,5 +52,5 @@ jobs:
               "${PACKAGE}.tar.gz" "${PACKAGE}.zip" CHECKSUMS.sha256 \
               --target "${GITHUB_SHA}" \
               --title "Annotate Spatial Transcriptomics Skill ${VERSION}" \
-              --notes-file .github/RELEASE_NOTES_v2.0.1.md
+              --notes-file .github/RELEASE_NOTES_v2.0.3.md
           fi

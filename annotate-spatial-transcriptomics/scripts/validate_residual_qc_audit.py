@@ -34,8 +34,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ledger", required=True, type=Path)
     ap.add_argument("--audit", type=Path)
-    ap.add_argument("--state-column", default="annotation_status")
-    ap.add_argument("--qc-reason-column", default="qc_reason")
+    ap.add_argument("--state-column", default="auto")
+    ap.add_argument("--qc-reason-column", default="auto")
     ap.add_argument("--require-v2", action="store_true")
     ap.add_argument("--fraction-trigger", type=float, default=0.10)
     ap.add_argument("--count-trigger", type=int, default=50000)
@@ -43,10 +43,26 @@ def main() -> int:
     args = ap.parse_args()
 
     with open_text(args.ledger) as handle:
-        rows = list(csv.DictReader(handle, delimiter="\t"))
-    if not rows or args.state_column not in rows[0]:
-        raise SystemExit(f"ledger is empty or lacks {args.state_column}")
-    qc_n = sum(str(row.get(args.state_column, "")).strip().lower() in QC_STATES for row in rows)
+        reader = csv.DictReader(handle, delimiter="\t")
+        rows = list(reader)
+        fields = set(reader.fieldnames or [])
+    state_column = args.state_column
+    if state_column == "auto":
+        state_column = next(
+            (name for name in ("final_state", "annotation_status", "state") if name in fields),
+            "",
+        )
+    reason_column = args.qc_reason_column
+    if reason_column == "auto":
+        reason_column = next(
+            (name for name in ("qc_reason", "final_qc_reason") if name in fields),
+            "qc_reason",
+        )
+    if not rows or not state_column:
+        raise SystemExit("ledger is empty or lacks a supported state column")
+    if state_column not in fields:
+        raise SystemExit(f"ledger lacks requested state column {state_column}")
+    qc_n = sum(str(row.get(state_column, "")).strip().lower() in QC_STATES for row in rows)
     fraction = qc_n / len(rows)
     triggered = qc_n >= args.count_trigger or fraction >= args.fraction_trigger
     errors: list[str] = []
@@ -74,13 +90,13 @@ def main() -> int:
                 errors.append("residual-QC audit still has unresolved query-derived lineage signals")
             if args.require_v2:
                 reason_census: dict[str, int] = {}
-                if args.qc_reason_column not in rows[0]:
-                    errors.append(f"v2 residual-QC ledger lacks {args.qc_reason_column}")
+                if reason_column not in fields:
+                    errors.append(f"v2 residual-QC ledger lacks {reason_column}")
                 else:
                     for row in rows:
-                        if str(row.get(args.state_column, "")).strip().lower() not in QC_STATES:
+                        if str(row.get(state_column, "")).strip().lower() not in QC_STATES:
                             continue
-                        reason = str(row.get(args.qc_reason_column, "")).strip()
+                        reason = str(row.get(reason_column, "")).strip()
                         if not reason:
                             errors.append("v2 residual-QC observation lacks a typed qc_reason")
                             continue
@@ -99,6 +115,8 @@ def main() -> int:
         "analysis_n": len(rows),
         "cell_ledger": str(args.ledger.resolve()),
         "cell_ledger_sha256": sha256(args.ledger),
+        "state_column": state_column,
+        "qc_reason_column": reason_column,
         "residual_qc_n": qc_n,
         "residual_qc_fraction": fraction,
         "audit_triggered": triggered,

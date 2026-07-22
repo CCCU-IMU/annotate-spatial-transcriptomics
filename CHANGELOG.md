@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.3 — 2026-07-22
+
+- 修复完整终态账本的控制器兼容性：cell decision 可绑定 active direct return、active Atlas route 或显式 terminal residual-QC freeze；零计数 Atlas 分区可被哈希审计；精确父亚簇 challenger 与最终 direct return 均纳入 membership closure。
+- biological context 统一通过一个解析器兼容 `config/biological_context.json` 与 `config/context.json`，completion、autopilot、report 和 release audit 不再因文件别名产生互相冲突的结果。
+- residual-QC validator 默认自动识别 v2 的 `final_state`/`qc_reason` 列，同时保留显式列参数；避免把完整终态 ledger 错读为旧 `annotation_status`。
+- 最终 HTML 在每个大类/亚群空间高亮旁直接展示经验证的定义路线、定量支撑、排他验证、空间证据、证据来源与前五个 current-data DEG；上下文别名与外部参考下载链接也可正确解析。autopilot 同时统一识别 canonical `final_report_metadata`/`final_*_DEG` 与旧发布文件名。
+- 全细胞 marker 空间图固定使用 `all_analysis_set_observations` 范围并可校验预期 observation 数；报告元数据明确要求在含 pandas 的预检运行时执行。以上均复用既有证据/发布审计，不新增公开完成门。
+
+## 2.0.2 — 2026-07-22
+
+- 初始大类改为“基础区室 + 连续信号记忆”：不再为了补齐最终 taxonomy 强制制造 Epithelial、Vascular 或 Smooth muscle 初始簇；有信息的混合簇归入数值占优的受支持 parent，较弱连贯信号进入 `watch` 并在二次聚类中重建。
+- 新增共享的 machine-derived lineage decision table 合同。初始簇和 cohort 亚簇的 winner、runner-up 与 margin 均由 validator 重算，Agent/论文解释不能覆盖数值排序。
+- cohort outcome v2 要求逐亚簇两阳性 family、无未解决实质矛盾、正 margin 和 observation-level purity；父级标签只作来源信息，不能把全部亚簇自动 `parent_return`。混合亚簇进入一次 targeted question 或 QC。
+- 最终 broad completeness 复核增加本类程序、最强竞争程序、细胞级纯度和空间形态的数值内容校验，阻断低典型 marker、强竞争谱系的大标签。
+- 上皮召回改为只写回高纯度重聚类亚簇，禁止由少量 marker 将混合簇或空间组件整体扩张。成熟 Smooth muscle 强制 MYH11/CNN1/ACTG2 核心与 mural 排除；RGS5/PDGFRB/NOTCH3/MCAM/CSPG4 支持的血管壁细胞归入 `Vascular-associated`。
+- 不新增公开完成门；`check_completion_gate.py` 是唯一公开入口，内部检查按 input integrity、biological evidence、workflow closure 与 release audit 四阶段组织。
+
 ## 2.0.1 — 2026-07-22
 
 - 将本地验证过的独立 SCT+BANKSY 原始计数重建合同同步到发布版：BANKSY 使用 SCT Pearson residuals，导入对象的归一化、降维、聚类和历史标签不再作为当前项目计算输入；全基因 LogNormalize 仅用于 marker 验证。

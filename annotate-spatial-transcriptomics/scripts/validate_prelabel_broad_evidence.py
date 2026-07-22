@@ -15,6 +15,14 @@ from evidence_schema_lib import (
     validate_json_against_schema,
     write_result,
 )
+from lineage_decision_lib import (
+    absolute_supported_families,
+    cluster_rows as decision_cluster_rows,
+    eligible as decision_eligible,
+    rank as rank_decisions,
+    split_families,
+    validate_rows as validate_decision_rows,
+)
 
 
 def truth(value: object) -> bool:
@@ -27,8 +35,10 @@ def validate(root: Path, ledger_path: Path) -> dict:
     errors: list[str] = []
     validated = 0
     project_path = root / "config/project.json"
+    project_config: dict = {}
     try:
-        framework = json.loads(project_path.read_text(encoding="utf-8")).get("framework_version", "0")
+        project_config = json.loads(project_path.read_text(encoding="utf-8"))
+        framework = project_config.get("framework_version", "0")
     except (OSError, json.JSONDecodeError):
         framework = "0"
     try:
@@ -50,9 +60,14 @@ def validate(root: Path, ledger_path: Path) -> dict:
         if document_errors:
             continue
         broad_family_table_hash = ""
+        family_evidence_rows: list[dict[str, str]] = []
+        family_support_thresholds: dict = {}
+        decision_rows: list[dict[str, str]] = []
         if v2_contract:
-            if document.get("schema_version") != "2.0":
+            if document.get("schema_version") not in {"2.0", "2.1"}:
                 errors.append(f"cluster row {line} ({cluster}) does not use v2 prelabel evidence")
+            if project_config.get("prelabel_evidence_schema_version") == "2.1" and document.get("schema_version") != "2.1":
+                errors.append(f"cluster row {line} ({cluster}) must use schema 2.1 with a machine-derived lineage decision table")
             manifest_ref = document.get("broad_family_evidence_manifest")
             validation_ref = document.get("broad_family_evidence_validation")
             if not isinstance(manifest_ref, dict) or not isinstance(validation_ref, dict):
@@ -67,6 +82,39 @@ def validate(root: Path, ledger_path: Path) -> dict:
                     if family_validation.get("status") != "PASS" or family_validation.get("manifest_sha256") != sha256(manifest_path):
                         errors.append(f"cluster row {line} broad-family evidence validation is failed or stale")
                     broad_family_table_hash = str(family_manifest.get("evidence_table", {}).get("sha256", ""))
+                    family_table_ref = family_manifest.get("evidence_table", {})
+                    family_table_path = path_at(manifest_path.parent, family_table_ref.get("path", ""))
+                    if family_table_path.is_file() and sha256(family_table_path) == broad_family_table_hash:
+                        family_evidence_rows = read_tsv(family_table_path)
+                    profile_ref = family_manifest.get("biological_profile", {})
+                    profile_path = path_at(manifest_path.parent, profile_ref.get("path", ""))
+                    try:
+                        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+                        family_support_thresholds = profile.get("broad_family_evidence_contract", {}).get(
+                            "absolute_family_support_thresholds", {}
+                        )
+                    except (OSError, json.JSONDecodeError):
+                        family_support_thresholds = {}
+            if document.get("schema_version") == "2.1":
+                decision_ref = document.get("lineage_decision_table")
+                if not isinstance(decision_ref, dict):
+                    errors.append(f"cluster row {line} ({cluster}) lacks the machine-derived lineage decision table")
+                else:
+                    decision_path, decision_errors = validate_evidence_artifact(
+                        root, decision_ref, f"cluster row {line} lineage decision table"
+                    )
+                    errors.extend(decision_errors)
+                    if decision_path and not decision_errors:
+                        all_decision_rows = read_tsv(decision_path)
+                        decision_rows = decision_cluster_rows(all_decision_rows, cluster)
+                        errors.extend(
+                            f"cluster row {line} ({cluster}): {message}"
+                            for message in validate_decision_rows(
+                                decision_rows,
+                                expected_clusters=[cluster],
+                                expected_candidates=document.get("candidate_lineages", []),
+                            )
+                        )
         if not expected_hash or sha256(artifact) != expected_hash:
             errors.append(f"cluster row {line} ({cluster}) has a stale prelabel evidence hash")
         if document["source_cluster"] != cluster:
@@ -107,11 +155,85 @@ def validate(root: Path, ledger_path: Path) -> dict:
             errors.append(f"cluster row {line} winner/runner_up contract failed")
         hypothesis_by_name = {item["candidate_id"]: item for item in hypotheses}
         winning = hypothesis_by_name.get(winner, {})
+        inline_decision_rows = [
+            {
+                "cluster": cluster,
+                "candidate_id": str(item.get("candidate_id", "")),
+                "candidate_broad_lineage": str(item.get("candidate_broad_lineage", "")),
+                "program_score": str(item.get("program_score", "")),
+                "positive_family_count": str(item.get("positive_marker_family_count", "")),
+                "positive_families": ";".join(item.get("positive_marker_families", [])),
+                "anti_program_burden": str(item.get("anti_program_burden", "")),
+                "contradiction_count": str(item.get("contradiction_count", "")),
+                "eligible": str(item.get("eligible", False)).lower(),
+            }
+            for item in hypotheses
+        ]
+        numerical_rows = decision_rows or inline_decision_rows
+        numerical_errors = validate_decision_rows(
+            numerical_rows,
+            expected_clusters=[cluster],
+            expected_candidates=candidates,
+        )
+        errors.extend(f"cluster row {line} ({cluster}): {message}" for message in numerical_errors)
+        computed = None
+        if not numerical_errors:
+            computed = rank_decisions(numerical_rows)
+            if winner != computed["winner"] or runner_up != computed["runner_up"]:
+                errors.append(
+                    f"cluster row {line} winner/runner_up were not recomputed from numerical program scores "
+                    f"(expected {computed['winner']} over {computed['runner_up']})"
+                )
+            if abs(float(document["winning_margin"]) - float(computed["winning_margin"])) > 1e-9:
+                errors.append(f"cluster row {line} winning_margin was not recomputed from numerical program scores")
+        if decision_rows:
+            table_by_name = {item["candidate_id"]: item for item in decision_rows}
+            for hypothesis in hypotheses:
+                authoritative = table_by_name.get(hypothesis["candidate_id"])
+                if not authoritative:
+                    continue
+                candidate_id = hypothesis["candidate_id"]
+                comparisons = {
+                    "candidate_broad_lineage": str(hypothesis.get("candidate_broad_lineage", "")),
+                    "eligible": str(hypothesis.get("eligible", False)).lower(),
+                    "positive_family_count": str(hypothesis.get("positive_marker_family_count", "")),
+                    "contradiction_count": str(hypothesis.get("contradiction_count", "")),
+                }
+                for key, observed_value in comparisons.items():
+                    if str(authoritative.get(key, "")).strip().lower() != observed_value.strip().lower():
+                        errors.append(f"cluster row {line} {candidate_id} {key} differs from the lineage decision table")
+                if abs(float(authoritative["program_score"]) - float(hypothesis["program_score"])) > 1e-9:
+                    errors.append(f"cluster row {line} {candidate_id} program_score differs from the lineage decision table")
+                if abs(float(authoritative["anti_program_burden"]) - float(hypothesis["anti_program_burden"])) > 1e-9:
+                    errors.append(f"cluster row {line} {candidate_id} anti_program_burden differs from the lineage decision table")
+                if split_families(authoritative.get("positive_families", "")) != sorted(hypothesis.get("positive_marker_families", [])):
+                    errors.append(f"cluster row {line} {candidate_id} positive families differ from the lineage decision table")
+                if family_evidence_rows:
+                    try:
+                        absolute_supported = absolute_supported_families(
+                            family_evidence_rows,
+                            cluster=cluster,
+                            candidate_id=candidate_id,
+                            thresholds=family_support_thresholds,
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        errors.append(f"cluster row {line} lacks profile-bound absolute family support thresholds")
+                    else:
+                        table_supported = split_families(authoritative.get("positive_families", ""))
+                        if table_supported != absolute_supported:
+                            errors.append(
+                                f"cluster row {line} {candidate_id} positive families were not derived from the "
+                                f"bound absolute-expression matrix (expected {absolute_supported})"
+                            )
+                else:
+                    errors.append(f"cluster row {line} cannot resolve the bound absolute family evidence rows")
         initial = row.get("initial_broad_label", "").strip()
         confidence = row.get("confidence", "").strip().lower()
         if initial:
             if initial != winning.get("candidate_broad_lineage", ""):
                 errors.append(f"cluster row {line} initial broad label differs from frozen winner")
+            if computed is not None and not decision_eligible(computed["winner_row"]):
+                errors.append(f"cluster row {line} assigned a broad label although the numerical winner is not eligible")
             if confidence not in {"moderate", "high"}:
                 errors.append(f"cluster row {line} assigned broad label below moderate confidence")
             if document["winning_margin"] <= 0:

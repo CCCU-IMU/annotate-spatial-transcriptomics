@@ -71,6 +71,7 @@ def main() -> int:
         SKILL / "scripts" / "validate_direct_return_evidence.py",
         SKILL / "scripts" / "validate_annotation_support_registry.py",
         SKILL / "scripts" / "validate_prelabel_broad_evidence.py",
+        SKILL / "scripts" / "lineage_decision_lib.py",
         SKILL / "scripts" / "build_global_atlas_concordance.py",
         SKILL / "scripts" / "route_global_atlas_v2.py",
         SKILL / "scripts" / "validate_global_atlas_v2.py",
@@ -167,6 +168,8 @@ def main() -> int:
         problems.append("missing legacy migration regression tests")
     if not (ROOT / "tests/test_v2_contract.py").is_file():
         problems.append("missing v2 contract regression tests")
+    if not (ROOT / "tests/test_v2_0_2_contract.py").is_file():
+        problems.append("missing v2.0.2 biological-writeback regression tests")
 
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     readme = (ROOT / "README.md").read_text(encoding="utf-8")

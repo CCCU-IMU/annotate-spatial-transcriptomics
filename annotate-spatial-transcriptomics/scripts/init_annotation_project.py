@@ -85,6 +85,11 @@ def main() -> int:
         "atlas_authoritative_router": "route_global_atlas_v2.py",
         "release_taxonomy_hierarchy_validation_required": True,
         "project_results_readonly_audit_required": True,
+        "prelabel_evidence_schema_version": "2.1",
+        "cohort_outcome_schema_version": "2.0",
+        "numerical_broad_completeness_evidence_required": True,
+        "public_completion_gate": "check_completion_gate.py",
+        "completion_gate_phases": ["INPUT_INTEGRITY", "BIOLOGICAL_EVIDENCE", "WORKFLOW_CLOSURE", "RELEASE_AUDIT"],
     }
     (root / "config/project.json").write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     for filename, fields in REGISTRIES.items():
