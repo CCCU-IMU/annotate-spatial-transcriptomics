@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0 — 2026-07-23
+
+- 将默认注释流程补齐为“所有 present broad parent 的完整亚型候选审计”：逐一记录 supported、refuted 或 not_evaluable；没有独立子类证据时保留 broad-only，不以亚型数量作为完成指标。
+- 新增 `build_reliable_fine_annotation.py`：锁定大类后才允许高置信 fine 写回，候选 release label 与父类必须来自绑定 catalog，历史 fine label 在候选分区冻结前不得参与拟合。
+- 新增 `validate_final_fine_annotation.py`，并加强 `validate_state.py`：非空 fine label 必须同时满足 `state=final_state=defined_fine`、high fine confidence、fine eligibility 和正确父类；空 fine label 禁止携带 fine 终态。
+- 为 Epithelial/mesothelial 增加 surface epithelial 与 mesothelial-like 的独立 discriminator modules，避免共享 KRT8/KRT18/KRT19 直接决定子类；将 Mesenchymal progenitor-like 纳入 Stromal/mesenchymal 的完整负审计。
+- 保留 v2.0.4 的 observation-subset broad writeback、完整候选重扫、Atlas broad-only QC rescue 和大类完整性复核，不改变 framework schema 2.0.0。
+
+## 2.0.4 — 2026-07-22
+
+- 将 graph subcluster 明确为计算边界而非不可拆分的标签单位。整亚簇写回改为原始两家族覆盖率、最小优势与高覆盖竞争谱系共同约束的高纯度快速路径；旧表使用保守的有效支持率回退，阻断“13.8% 仅略高于 11.3%”仍整簇通过的问题。
+- 激活 `supported_subset` 的真实语义：亚簇内子集以自己的完整候选 numerical winner、全基因证据、空间连续性和跨分辨率支持为准，不再受亚簇 aggregate winner 限制；同一亚簇可产生多个互斥子集，余下成员必须独立重判。
+- 新增 observation-subset evidence schema，并把写回阈值冻结进项目配置和 annotation contract。最终 broad completeness 按每个来源写回逐条复核，防止总体平均值掩盖一次低纯度扩张。
+- 新增父大类下 machine-actionable fine-candidate 全覆盖审计。零亚型仍然是有效结果，但仅限所有候选均已记录为 supported、refuted 或 not_evaluable；禁止只搜索血管亚型后把其他谱系误报为不存在。
+- 保留 Smooth muscle 的成熟 MYH11/CNN1/ACTG2 核心与 mural 排除；ACTA2/TAGLN、位置或单一 marker 不能驱动逐 observation 写回。
+
 ## 2.0.3 — 2026-07-22
 
 - 修复完整终态账本的控制器兼容性：cell decision 可绑定 active direct return、active Atlas route 或显式 terminal residual-QC freeze；零计数 Atlas 分区可被哈希审计；精确父亚簇 challenger 与最终 direct return 均纳入 membership closure。

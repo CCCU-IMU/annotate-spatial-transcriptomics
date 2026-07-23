@@ -134,6 +134,35 @@
     "vascular_associated": ["blood endothelial", "lymphatic endothelial", "pericyte/mural"],
     "epithelial_mesothelial": ["surface epithelial", "mesothelial-like"]
   },
+  "machine_actionable_fine_candidate_catalog": {
+    "granulosa": [
+      {"candidate_id": "granulosa_cumulus_like", "release_label": "Cumulus-like granulosa", "parent_release_label": "Granulosa", "profile_program": "lineages.granulosa.subtype_modules.cumulus_oophorus"},
+      {"candidate_id": "granulosa_mural_estrogenic", "release_label": "Mural/estrogenic granulosa", "parent_release_label": "Granulosa", "profile_program": "lineages.granulosa.subtype_modules.mural_estrogenic"},
+      {"candidate_id": "granulosa_luteinizing", "release_label": "Luteinizing granulosa", "parent_release_label": "Granulosa", "profile_program": "lineages.granulosa.subtype_modules.luteinizing", "context_gate": "reproductive stage and steroidogenic support"}
+    ],
+    "luteal_steroidogenic": [
+      {"candidate_id": "granulosa_lutein_like", "release_label": "Granulosa-lutein-like", "parent_release_label": "Luteal/steroidogenic", "profile_program": "lineages.luteal_steroidogenic.granulosa_lutein_support"},
+      {"candidate_id": "theca_lutein_like", "release_label": "Theca-lutein-like", "parent_release_label": "Luteal/steroidogenic", "profile_program": "lineages.luteal_steroidogenic.theca_lutein_support"}
+    ],
+    "immune": [
+      {"candidate_id": "immune_macrophage_myeloid", "release_label": "Macrophage/myeloid", "parent_release_label": "Immune", "profile_program": "lineages.immune.macrophage"},
+      {"candidate_id": "immune_t_nk", "release_label": "T/NK", "parent_release_label": "Immune", "profile_program": "lineages.immune.t_nk"},
+      {"candidate_id": "immune_b_plasma", "release_label": "B/plasma", "parent_release_label": "Immune", "profile_program": "lineages.immune.b_plasma"},
+      {"candidate_id": "immune_granulocyte", "release_label": "Granulocyte", "parent_release_label": "Immune", "profile_program": "lineages.immune.neutrophil"}
+    ],
+    "vascular_endothelial": [
+      {"candidate_id": "vascular_blood_endothelial", "release_label": "Blood endothelial", "parent_release_label": "Vascular-associated", "profile_program": "lineages.blood_endothelial"},
+      {"candidate_id": "vascular_lymphatic_endothelial", "release_label": "Lymphatic endothelial", "parent_release_label": "Vascular-associated", "profile_program": "lineages.lymphatic_endothelial"},
+      {"candidate_id": "vascular_pericyte_mural", "release_label": "Pericyte/mural", "parent_release_label": "Vascular-associated", "profile_program": "lineages.pericyte_mural"}
+    ],
+    "epithelial_mesothelial": [
+      {"candidate_id": "epithelial_surface", "release_label": "Surface epithelial", "parent_release_label": "Epithelial/mesothelial", "profile_program": "lineages.epithelial_mesothelial.subtype_modules.surface_epithelial", "required_discriminator": "continuous surface topology plus epithelial adhesion support"},
+      {"candidate_id": "epithelial_mesothelial_like", "release_label": "Mesothelial-like", "parent_release_label": "Epithelial/mesothelial", "profile_program": "lineages.epithelial_mesothelial.subtype_modules.mesothelial_like", "required_discriminator": "mesothelial support and surface topology distinct from rete/glandular epithelium"}
+    ],
+    "stromal_mesenchymal": [
+      {"candidate_id": "stromal_mesenchymal_progenitor_like", "release_label": "Mesenchymal progenitor-like", "parent_release_label": "Stromal/mesenchymal", "profile_program": "lineages.mesenchymal_progenitor_like", "required_discriminator": "stable progenitor-like program distinct from generic DCN/LUM/collagen stroma"}
+    ]
+  },
   "literature_basis": [
     "adult sheep whole-ovary GSE233801",
     "Tibetan-sheep ovary multiomics 2024",

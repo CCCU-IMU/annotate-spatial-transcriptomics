@@ -11,6 +11,7 @@ from evidence_schema_lib import active_registry_rows, path_at, read_tsv, sha256,
 from validate_cohort_outcome import validate as validate_cohort_outcome
 from validate_direct_return_evidence import validate as validate_direct_return_evidence
 from validate_prelabel_broad_evidence import validate as validate_prelabel_broad_evidence
+from validate_final_fine_annotation import validate as validate_final_fine_annotation
 from workflow_contract_lib import active_workflow_contract
 
 
@@ -77,6 +78,17 @@ def audit(root: Path) -> dict:
     }
     if cells and not required_fields.issubset(cells[0]):
         add("CELL_LEDGER_SCHEMA_INVALID", "analysis_set", "analysis_set", "repair_cell_ledger_schema", "missing fields: " + ", ".join(sorted(required_fields - set(cells[0]))))
+    if cells and project.get("final_fine_state_validation_required") is True:
+        contract_path = root / "config/annotation_contract.json"
+        try:
+            annotation_contract = json.loads(contract_path.read_text(encoding="utf-8"))
+            candidate_catalog = path_at(root, annotation_contract["candidate_catalog"]["path"])
+            fine_validation = validate_final_fine_annotation(cell_path, candidate_catalog)
+        except (OSError, KeyError, TypeError, json.JSONDecodeError, ValueError) as exc:
+            fine_validation = {"status": "BLOCKED", "errors": [f"cannot resolve final-fine validation inputs: {exc}"]}
+        write_result(root / "provenance/final_fine_annotation_validation.json", fine_validation)
+        for message in fine_validation.get("errors", []):
+            add("FINAL_FINE_ANNOTATION_INVALID", "analysis_set", "final_fine_annotation", "repair_catalog_bound_fine_state", message)
     analysis = [row for row in cells if row.get("analysis_scope") == "analysis_set"]
     initial_broad = sorted({row.get("initial_broad_label", "").strip() for row in analysis if row.get("initial_broad_label", "").strip()})
     if project.get("prelabel_evidence_freeze_required"):

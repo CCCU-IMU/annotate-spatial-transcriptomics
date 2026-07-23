@@ -14,6 +14,7 @@ from lineage_decision_lib import (
     absolute_supported_families,
     cluster_rows as decision_cluster_rows,
     eligible as decision_eligible,
+    observation_writeback_policy,
     purity_passes,
     rank as rank_decisions,
     split_families,
@@ -29,7 +30,14 @@ def _project_config(root: Path) -> dict:
         return {}
 
 
-def _validate_subset_purity(root: Path, row: dict, members: set[str]) -> list[str]:
+def _validate_subset_purity(
+    root: Path,
+    row: dict,
+    members: set[str],
+    *,
+    candidate_universe: set[str],
+    project: dict,
+) -> list[str]:
     errors: list[str] = []
     ref = row.get("observation_purity_evidence")
     if not isinstance(ref, dict):
@@ -39,24 +47,131 @@ def _validate_subset_purity(root: Path, row: dict, members: set[str]) -> list[st
     if not path or artifact_errors:
         return errors
     try:
-        evidence = json.loads(path.read_text(encoding="utf-8"))
-        required = {
-            "status", "candidate_id", "membership_sha256", "n_observations",
-            "positive_family_count", "contradiction_count", "lineage_supported_fraction",
-            "strongest_competing_fraction",
-        }
-        if not isinstance(evidence, dict) or not required <= set(evidence):
-            return errors + [f"subcluster {row['subcluster_id']} subset purity evidence lacks numerical content"]
-        if evidence["status"] != "PASS" or evidence["candidate_id"] != row.get("target_candidate_id"):
-            errors.append(f"subcluster {row['subcluster_id']} subset purity evidence did not pass for the returned candidate")
+        schema = Path(__file__).resolve().parents[1] / "schemas/observation_subset_evidence.schema.json"
+        evidence, schema_errors = validate_json_against_schema(path, schema)
+        if schema_errors:
+            return errors + [
+                f"subcluster {row['subcluster_id']} subset purity evidence schema error: {error}"
+                for error in schema_errors
+            ]
+        policy = observation_writeback_policy(project)
+        target = str(row.get("target_candidate_id", ""))
+        if evidence["candidate_id"] != target or evidence["winner"] != target:
+            errors.append(f"subcluster {row['subcluster_id']} subset numerical winner differs from the returned candidate")
+        if evidence["candidate_broad_lineage"] != row.get("target_broad_label"):
+            errors.append(f"subcluster {row['subcluster_id']} subset target broad label differs from its evidence")
+        if set(evidence["candidate_universe"]) != candidate_universe:
+            errors.append(f"subcluster {row['subcluster_id']} subset evidence does not cover the complete candidate catalog")
+        if evidence["runner_up"] == target:
+            errors.append(f"subcluster {row['subcluster_id']} subset winner and runner-up are identical")
         if evidence["membership_sha256"] != row["membership"]["sha256"] or int(evidence["n_observations"]) != len(members):
             errors.append(f"subcluster {row['subcluster_id']} subset purity evidence is stale for its membership")
-        if int(evidence["positive_family_count"]) < 2 or int(evidence["contradiction_count"]) != 0:
+        if int(evidence["positive_family_count"]) != len(evidence["positive_families"]):
+            errors.append(f"subcluster {row['subcluster_id']} subset positive-family count is inconsistent")
+        if int(evidence["contradiction_count"]) != 0:
             errors.append(f"subcluster {row['subcluster_id']} subset return lacks two families or has a contradiction")
-        if float(evidence["lineage_supported_fraction"]) <= float(evidence["strongest_competing_fraction"]):
-            errors.append(f"subcluster {row['subcluster_id']} subset return is not purer than its strongest competitor")
+        supported = float(evidence["lineage_supported_fraction"])
+        competing = float(evidence["strongest_competing_fraction"])
+        contradiction = float(evidence["contradiction_fraction"])
+        if supported < policy["supported_subset_min_lineage_supported_fraction"]:
+            errors.append(f"subcluster {row['subcluster_id']} supported subset is below the absolute lineage-support floor")
+        if supported - competing < policy["supported_subset_min_purity_margin"]:
+            errors.append(f"subcluster {row['subcluster_id']} supported subset lacks the required purity margin")
+        if contradiction > policy["maximum_contradiction_fraction"]:
+            errors.append(f"subcluster {row['subcluster_id']} supported subset exceeds the contradiction ceiling")
+        for field in ("full_feature_scope", "spatial_coherence", "cross_resolution_support"):
+            _, channel_errors = validate_evidence_artifact(
+                root, evidence[field]["artifact"], f"subcluster {row['subcluster_id']} subset {field}"
+            )
+            errors.extend(channel_errors)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
         errors.append(f"subcluster {row['subcluster_id']} subset purity evidence is unreadable")
+    return errors
+
+
+def _validate_whole_purity(
+    root: Path,
+    row: dict,
+    members: set[str],
+    *,
+    candidate_rows: list[dict[str, str]],
+    project: dict,
+) -> list[str]:
+    errors: list[str] = []
+    ref = row.get("observation_purity_evidence")
+    if not isinstance(ref, dict):
+        return [f"subcluster {row['subcluster_id']} whole return lacks membership-level purity evidence"]
+    path, artifact_errors = validate_evidence_artifact(
+        root, ref, f"subcluster {row['subcluster_id']} whole-subcluster purity evidence"
+    )
+    errors.extend(artifact_errors)
+    if not path or artifact_errors:
+        return errors
+    try:
+        schema = Path(__file__).resolve().parents[1] / "schemas/whole_subcluster_purity_evidence.schema.json"
+        evidence, schema_errors = validate_json_against_schema(path, schema)
+        if schema_errors:
+            return errors + [
+                f"subcluster {row['subcluster_id']} whole purity evidence schema error: {error}"
+                for error in schema_errors
+            ]
+        policy = observation_writeback_policy(project)
+        target = str(row.get("target_candidate_id", ""))
+        target_row = next((item for item in candidate_rows if item.get("candidate_id") == target), {})
+        candidate_universe = {str(item.get("candidate_id", "")) for item in candidate_rows}
+        if evidence["candidate_id"] != target or evidence["winner"] != target:
+            errors.append(f"subcluster {row['subcluster_id']} whole purity winner differs from the returned candidate")
+        if evidence["candidate_broad_lineage"] != row.get("target_broad_label"):
+            errors.append(f"subcluster {row['subcluster_id']} whole purity broad label differs from the return")
+        if set(evidence["candidate_universe"]) != candidate_universe:
+            errors.append(f"subcluster {row['subcluster_id']} whole purity evidence lacks the complete candidate catalog")
+        if evidence["membership_sha256"] != row["membership"]["sha256"] or int(evidence["n_observations"]) != len(members):
+            errors.append(f"subcluster {row['subcluster_id']} whole purity evidence is stale for its membership")
+        if int(evidence["positive_family_count"]) != len(evidence["positive_families"]):
+            errors.append(f"subcluster {row['subcluster_id']} whole purity positive-family count is inconsistent")
+        raw_supported = float(evidence["raw_two_family_supported_fraction"])
+        raw_competing = float(evidence["strongest_eligible_competing_raw_fraction"])
+        if (
+            raw_supported < policy["whole_subcluster_min_raw_two_family_supported_fraction"]
+            or raw_supported - raw_competing < policy["whole_subcluster_min_raw_two_family_margin"]
+            or float(evidence["contradiction_fraction"]) > policy["maximum_contradiction_fraction"]
+            or int(evidence["contradiction_count"]) != 0
+        ):
+            errors.append(f"subcluster {row['subcluster_id']} whole purity evidence fails raw support, margin or contradiction gates")
+        trigger = policy["whole_subcluster_embedded_competitor_raw_trigger"]
+        high_competitors = {
+            str(item.get("candidate_id", ""))
+            for item in candidate_rows
+            if item.get("candidate_broad_lineage") != target_row.get("candidate_broad_lineage")
+            and decision_eligible(item)
+            and float(item.get("raw_two_family_supported_fraction", 0) or 0) >= trigger
+        }
+        audits = {
+            str(item.get("candidate_id", "")): item
+            for item in evidence["embedded_competitor_audit"]
+            if isinstance(item, dict)
+        }
+        if not high_competitors <= set(audits):
+            errors.append(f"subcluster {row['subcluster_id']} whole purity evidence omits a high-coverage competing lineage")
+        for candidate_id in high_competitors:
+            audit = audits.get(candidate_id, {})
+            if audit.get("spatial_status") != "not_coherent" or audit.get("disposition") != "refuted_by_spatial_or_antiprogram":
+                errors.append(
+                    f"subcluster {row['subcluster_id']} has coherent/unresolved embedded competitor {candidate_id}; "
+                    "use supported_subset or a targeted successor"
+                )
+        for field in ("full_feature_scope", "spatial_coherence", "cross_resolution_support"):
+            _, channel_errors = validate_evidence_artifact(
+                root, evidence[field]["artifact"], f"subcluster {row['subcluster_id']} whole {field}"
+            )
+            errors.extend(channel_errors)
+        for candidate_id, audit in audits.items():
+            _, audit_errors = validate_evidence_artifact(
+                root, audit["artifact"], f"subcluster {row['subcluster_id']} embedded competitor {candidate_id}"
+            )
+            errors.extend(audit_errors)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        errors.append(f"subcluster {row['subcluster_id']} whole purity evidence is unreadable")
     return errors
 
 
@@ -68,6 +183,11 @@ def validate(root: Path, outcome_path: Path, registry_path: Path | None = None) 
     query, query_errors = membership_ids(root, outcome["query_membership"], "query membership")
     errors.extend(query_errors)
     project = _project_config(root)
+    try:
+        writeback_policy = observation_writeback_policy(project)
+    except (TypeError, ValueError):
+        writeback_policy = observation_writeback_policy()
+        errors.append("project observation_writeback_policy is invalid")
     try:
         framework = tuple(int(part) for part in str(project.get("framework_version", "0")).split(".")[:3])
     except ValueError:
@@ -246,26 +366,80 @@ def validate(root: Path, outcome_path: Path, registry_path: Path | None = None) 
             elif scope == "supported_subset":
                 if not members < source_members:
                     errors.append(f"subcluster {subcluster} supported-subset return is not a strict subset of its selected membership")
-                errors.extend(_validate_subset_purity(root, row, members))
             candidate_rows = decision_cluster_rows(decision_rows, subcluster)
             target_candidate = str(row.get("target_candidate_id", ""))
             candidate_by_id = {item.get("candidate_id", ""): item for item in candidate_rows}
+            if scope == "supported_subset":
+                errors.extend(
+                    _validate_subset_purity(
+                        root,
+                        row,
+                        members,
+                        candidate_universe=set(candidate_by_id),
+                        project=project,
+                    )
+                )
             target_row = candidate_by_id.get(target_candidate)
             if not target_row:
                 errors.append(f"subcluster {subcluster} target candidate is absent from its decision table")
             else:
-                computed = rank_decisions(candidate_rows)
-                if computed["winner"] != target_candidate or float(computed["winning_margin"]) <= 0:
-                    errors.append(
-                        f"subcluster {subcluster} return target is not the positive-margin numerical winner "
-                        f"(expected {computed['winner']})"
-                    )
                 if str(target_row.get("candidate_broad_lineage", "")) != str(row.get("target_broad_label", "")):
                     errors.append(f"subcluster {subcluster} target broad label differs from the decision table")
-                if not decision_eligible(target_row):
-                    errors.append(f"subcluster {subcluster} return target lacks two families or has unresolved contradictions")
-                if scope == "whole_subcluster" and not purity_passes(target_row):
-                    errors.append(f"subcluster {subcluster} whole-subcluster return lacks an observation-level purity pass")
+                if scope == "whole_subcluster":
+                    computed = rank_decisions(candidate_rows)
+                    if computed["winner"] != target_candidate or float(computed["winning_margin"]) <= 0:
+                        errors.append(
+                            f"subcluster {subcluster} return target is not the positive-margin numerical winner "
+                            f"(expected {computed['winner']})"
+                        )
+                    if not decision_eligible(target_row):
+                        errors.append(f"subcluster {subcluster} return target lacks two families or has unresolved contradictions")
+                    raw_available = all(
+                        str(item.get("raw_two_family_supported_fraction", "")).strip()
+                        for item in candidate_rows
+                    )
+                    raw_pass = False
+                    if raw_available:
+                        target_raw = float(target_row["raw_two_family_supported_fraction"])
+                        competing_raw = max(
+                            (
+                                float(item["raw_two_family_supported_fraction"])
+                                for item in candidate_rows
+                                if item.get("candidate_broad_lineage") != target_row.get("candidate_broad_lineage")
+                                and decision_eligible(item)
+                            ),
+                            default=0.0,
+                        )
+                        raw_pass = (
+                            str(target_row.get("purity_status", "")).strip().lower() == "pass"
+                            and target_raw >= writeback_policy[
+                                "whole_subcluster_min_raw_two_family_supported_fraction"
+                            ]
+                            and target_raw - competing_raw >= writeback_policy[
+                                "whole_subcluster_min_raw_two_family_margin"
+                            ]
+                        )
+                    fallback_pass = purity_passes(
+                        target_row,
+                        minimum_supported_fraction=writeback_policy["whole_subcluster_min_lineage_supported_fraction"],
+                        minimum_margin=writeback_policy["whole_subcluster_min_purity_margin"],
+                        maximum_contradiction_fraction=writeback_policy["maximum_contradiction_fraction"],
+                    )
+                    if not (raw_pass if raw_available else fallback_pass):
+                        errors.append(
+                            f"subcluster {subcluster} whole-subcluster return lacks the raw/effective support floor, "
+                            "purity margin, embedded-competitor clearance or contradiction clearance"
+                        )
+                    if project.get("whole_subcluster_purity_evidence_required") is True:
+                        errors.extend(
+                            _validate_whole_purity(
+                                root,
+                                row,
+                                members,
+                                candidate_rows=candidate_rows,
+                                project=project,
+                            )
+                        )
                 if row.get("confidence") not in {"moderate", "high"}:
                     errors.append(f"subcluster {subcluster} biological return is below moderate confidence")
     if outcome_members != query:

@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcrip
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CCCU-IMU/annotate-spatial-transcriptomics/main/install.sh \
-  | bash -s -- --ref v2.0.3
+  | bash -s -- --ref v2.1.0
 ```
 
 克隆后本地安装（适合内网或需要审查源码的环境）：
@@ -380,7 +380,7 @@ GitHub Actions 的 PR 验证与 Release 打包均使用 Python 3.11 和仓库内
 
 ## 版本
 
-当前版本：`2.0.3`。这是 v2 的运行边界与报告一致性修订，项目 framework schema 仍为 `2.0.0`：保留 v2.0.2 的初始大类、全候选 cohort 和 purity-gated writeback 生物学规则，同时统一 context 别名、v2 residual-QC 列、direct-return/terminal-residual decision 域、零计数 Atlas 分区、最终资产文件名与全 analysis-set marker 空间范围。最终报告在每个大类/亚群高亮旁显示既有定量支撑和 current-data DEG；没有增加新的公开完成门。
+当前版本：`2.1.0`（稳定版）。项目 framework schema 仍为 `2.0.0`。本版将“默认带亚型”定义为对每个已出现大类执行完整、父类特异的候选亚型审计，而不是强迫每个大类产生亚型。只有全基因 discriminator program、稳定重聚类和空间形态共同支持的候选才写入；无独立子类证据时保留 broad-only。新增锁定大类的可靠亚型写回工具和终态一致性校验，阻断 fine label 已存在但状态仍为 `defined_broad_only`、亚型跨父类或共享 parent marker 直接决定子类的问题。
 
 ## 许可
 

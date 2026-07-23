@@ -270,6 +270,10 @@ def main() -> int:
                         require(bool(final_broad), f"cell line {i}: final fine label lacks final broad parent", errors)
                         require(fine_rank >= 2, f"cell line {i}: final fine label is below high confidence", errors)
                         require(row.get("fine_anchor_eligible", "").lower() in {"true", "1", "yes"}, f"cell line {i}: final fine label is not fine-anchor eligible", errors)
+                        require(row.get("final_state") == "defined_fine", f"cell line {i}: final fine label is not in defined_fine state", errors)
+                        require(row.get("state") == "defined_fine", f"cell line {i}: fine label and active state disagree", errors)
+                    else:
+                        require(row.get("final_state") != "defined_fine", f"cell line {i}: defined_fine state lacks a final fine label", errors)
                 elif scope=="excluded_initial_qc":
                     excluded_n+=1
                     require(row.get("final_state") == "excluded_initial_qc", f"cell line {i}: excluded observation leaked into final state", errors)

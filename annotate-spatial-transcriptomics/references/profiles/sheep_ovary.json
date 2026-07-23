@@ -172,9 +172,13 @@
         "surface_adhesion_mesothelial_support": ["EPCAM", "DSP", "MUC16", "MSLN", "PRG4"]
       },
       "program": ["KRT8", "KRT18", "KRT19", "KRT7", "EPCAM", "DSP", "MUC16", "MSLN", "PRG4"],
+      "subtype_modules": {
+        "surface_epithelial": ["EPCAM", "CDH1", "DSP", "KRT7", "KRT8", "KRT18", "KRT19", "PPL", "CGN", "MAL2"],
+        "mesothelial_like": ["PRG4", "WT1", "PDPN", "LRRN4", "C4BPA", "UPK1B", "GPM6A", "ALDH1A2", "PTGDS", "MSLN", "MUC16"]
+      },
       "spatial_expectation": "continuous thin ovarian surface boundary",
       "broad_recall_rule": "a coherent keratin backbone plus one independent surface/adhesion or mesothelial family supports the broad class. When the lineage is embedded at the whole-tissue resolution, keep it as watch and recover only a high-purity subcluster during open-world cohort reclustering. A mixed spatial component is evidence for one bounded targeted question, never permission to expand its complete membership.",
-      "safety": "WT1, MUC16, PRG4, one keratin or internal ECM-rich points remain review. KRT8/KRT18/KRT19 are one family, not three independent votes. Whole-cluster or whole-component epithelial writeback is forbidden unless the exact returned membership passes its own two-family, competitor and observation-level purity review."
+      "safety": "WT1, MUC16, PRG4, one keratin or internal ECM-rich points remain review. KRT8/KRT18/KRT19 are one family, not three independent votes. Whole-cluster or whole-component epithelial writeback is forbidden unless the exact returned membership passes its own two-family, competitor and observation-level purity review. Surface epithelial versus mesothelial-like requires a stable parent-specific partition and a discriminator program beyond their shared keratin backbone; shared keratins cannot decide the child label."
     }
   },
   "contamination_rules": {
@@ -314,7 +318,23 @@
     "machine_derived_lineage_decision_table_required": true,
     "winner_runner_and_margin_must_be_recomputed": true,
     "whole_subcluster_return_requires_observation_purity_pass": true,
-    "parent_label_inheritance_is_not_evidence": true
+    "parent_label_inheritance_is_not_evidence": true,
+    "observation_subset_writeback": {
+      "principle": "a graph subcluster is a computational boundary, not an indivisible biological unit; a mixed subcluster may yield multiple disjoint lineage-supported observation subsets",
+      "whole_subcluster_min_effective_supported_fraction_fallback": 0.25,
+      "whole_subcluster_min_effective_purity_margin_fallback": 0.10,
+      "whole_subcluster_min_raw_two_family_supported_fraction": 0.40,
+      "whole_subcluster_min_raw_two_family_margin": 0.20,
+      "whole_subcluster_embedded_competitor_raw_trigger": 0.35,
+      "supported_subset_min_lineage_supported_fraction": 0.70,
+      "supported_subset_min_purity_margin": 0.30,
+      "maximum_contradiction_fraction": 0.05,
+      "remainder_policy": "after every supported subset is frozen, rescore the exact remainder against the complete broad catalog; do not inherit the parent or aggregate winner",
+      "single_marker_split_forbidden": true,
+      "spatial_coherence_required": true,
+      "full_feature_evidence_required": true,
+      "cross_resolution_support_required": true
+    }
   },
   "final_validation": {
     "minimum_features_for_full_validation": 10000,
@@ -328,7 +348,8 @@
     "initial_broad_annotation": "use the selected whole-tissue partition to establish supported coarse resident compartments, not to force every final ovarian lineage to appear. A biologically informative mixed cluster returns to its numerically dominant supported parent, usually Stromal/mesenchymal when appropriate, while coherent subthreshold epithelial, vascular, smooth-muscle or other signals remain watch for open-world cohort rescanning. Only low-information or technically irreducible observations enter QC holdout.",
     "broad_recluster": "submit one broad_class_recluster cohort per initial broad class and run the complete active-contract candidate grid; select the integrated-evidence optimum, permit homogeneous_parent_confirmed, and allow only a formally evidenced underpowered skip",
     "subcluster_outcomes": ["high_confidence_fine", "direct_broad_return", "direct_cross_lineage_return", "targeted_recluster_or_calibrated_rctd", "qc_holdout"],
-    "subcluster_writeback_policy": "every selected-resolution subcluster is rescored against the complete catalog. Parent identity is provenance only. A whole-subcluster biological return requires a machine-derived positive-margin winner, at least two positive families, no unresolved contradiction and an observation-level purity pass. Mixed subclusters receive one bounded targeted question or QC; they never inherit the parent label wholesale.",
+    "subcluster_writeback_policy": "every selected-resolution subcluster is rescored against the complete catalog. Parent identity is provenance only. Whole-subcluster return is a high-purity fast path and requires an absolute support floor plus margin, not merely relative winner status. A mixed subcluster may be partitioned into multiple disjoint supported_subset returns when each exact membership independently passes complete-catalog observation evidence, full-feature marker/anti-marker, spatial coherence and cross-resolution review. The exact remainder is rescored independently and may return to Stromal/mesenchymal, Smooth muscle, Vascular-associated, Theca or QC; it never inherits the parent or aggregate winner.",
+    "fine_candidate_policy": "after every broad label is locked, audit every machine-actionable optional child under that parent across the selected and adjacent resolutions. Record supported, refuted or not_evaluable with evidence; zero fine labels is valid only after the complete parent-specific fine catalog was actually tested. State programs remain tags.",
     "cross_lineage_policy": "a source subcluster with coherent evidence for another broad/fine identity returns directly to that target while preserving source run/cluster/cohort provenance; do not create an intermediate cohort or automatically recluster it again",
     "targeted_recluster_policy": "create an immutable temporary cohort only when interpretable competing biological programs and sufficient observations make another computation decision-relevant",
     "qc_holdout_recluster_forbidden": true,

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/whole_subcluster_purity_evidence.schema.json",
+  "title": "Whole-subcluster writeback purity evidence",
+  "type": "object",
+  "required": [
+    "schema_version", "status", "source_subcluster", "candidate_id",
+    "candidate_broad_lineage", "membership_sha256", "n_observations",
+    "candidate_universe", "winner", "runner_up", "winning_margin",
+    "positive_family_count", "positive_families", "contradiction_count",
+    "contradiction_fraction", "raw_two_family_supported_fraction",
+    "strongest_eligible_competing_raw_fraction", "embedded_competitor_audit",
+    "full_feature_scope", "spatial_coherence", "cross_resolution_support"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "status": {"const": "PASS"},
+    "source_subcluster": {"type": "string", "minLength": 1},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "candidate_broad_lineage": {"type": "string", "minLength": 1},
+    "membership_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "n_observations": {"type": "integer", "minimum": 1},
+    "candidate_universe": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "winner": {"type": "string", "minLength": 1},
+    "runner_up": {"type": "string", "minLength": 1},
+    "winning_margin": {"type": "number", "exclusiveMinimum": 0},
+    "positive_family_count": {"type": "integer", "minimum": 2},
+    "positive_families": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "contradiction_count": {"type": "integer", "minimum": 0},
+    "contradiction_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "raw_two_family_supported_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "strongest_eligible_competing_raw_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "embedded_competitor_audit": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "raw_two_family_supported_fraction", "eligible", "spatial_status", "disposition", "artifact"],
+        "properties": {
+          "candidate_id": {"type": "string", "minLength": 1},
+          "raw_two_family_supported_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+          "eligible": {"type": "boolean"},
+          "spatial_status": {"enum": ["not_coherent", "coherent", "not_evaluable"]},
+          "disposition": {"enum": ["refuted_by_spatial_or_antiprogram", "supported_subset_required", "targeted_successor_required", "below_trigger"]},
+          "artifact": {"$ref": "#/$defs/artifact"}
+        }
+      }
+    },
+    "full_feature_scope": {"$ref": "#/$defs/passArtifact"},
+    "spatial_coherence": {"$ref": "#/$defs/passArtifact"},
+    "cross_resolution_support": {"$ref": "#/$defs/passArtifact"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "artifact": {
+      "type": "object", "required": ["path", "sha256"],
+      "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+    },
+    "passArtifact": {
+      "type": "object", "required": ["status", "artifact"],
+      "properties": {"status": {"const": "PASS"}, "artifact": {"$ref": "#/$defs/artifact"}}
+    }
+  }
+}

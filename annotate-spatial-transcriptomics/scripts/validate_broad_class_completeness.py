@@ -10,6 +10,8 @@ import json
 import re
 from pathlib import Path
 
+from lineage_decision_lib import observation_writeback_policy
+
 
 TRUE = {"1", "true", "yes", "pass", "passed", "reviewed"}
 PRESENT_REQUIRED = ("query_marker_program_review", "deg_review", "spatial_morphology_review", "observation_level_review", "large_label_embedding_review")
@@ -56,7 +58,16 @@ def project_config(root: Path) -> dict:
         return {}
 
 
-def validate_present_evidence(path: Path, candidate_id: str, expected_n: int) -> list[str]:
+def validate_present_evidence(
+    path: Path,
+    candidate_id: str,
+    expected_n: int,
+    *,
+    policy: dict[str, float],
+    require_return_audits: bool = False,
+    require_raw_whole_return_audits: bool = False,
+    expected_fine_candidates: set[str] | None = None,
+) -> list[str]:
     errors: list[str] = []
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -91,10 +102,120 @@ def validate_present_evidence(path: Path, candidate_id: str, expected_n: int) ->
         contradiction = float(purity["contradiction_fraction"])
         if any(not 0 <= value <= 1 for value in (supported, competing, contradiction)):
             errors.append(f"{candidate_id}: observation-level purity fractions are outside [0,1]")
-        if purity.get("status") != "PASS" or supported <= competing:
-            errors.append(f"{candidate_id}: observation-level purity did not pass against the strongest competitor")
+        if (
+            purity.get("status") != "PASS"
+            or supported < policy["present_label_min_lineage_supported_fraction"]
+            or supported - competing < policy["present_label_min_purity_margin"]
+            or contradiction > policy["maximum_contradiction_fraction"]
+        ):
+            errors.append(
+                f"{candidate_id}: observation-level purity lacks the absolute support floor, margin or contradiction clearance"
+            )
         if spatial.get("status") != "PASS" or len(str(spatial.get("rationale", "")).strip()) < 10:
             errors.append(f"{candidate_id}: spatial morphology lacks a substantive PASS review")
+
+        if require_return_audits:
+            audits = document.get("source_writeback_audits")
+            if not isinstance(audits, list) or not audits:
+                errors.append(f"{candidate_id}: present lineage lacks per-source writeback purity audits")
+            else:
+                seen: set[str] = set()
+                accounted = 0
+                query_scopes = {"whole_subcluster", "supported_subset", "initial_cluster"}
+                for audit in audits:
+                    if not isinstance(audit, dict):
+                        errors.append(f"{candidate_id}: source writeback audit is not an object")
+                        continue
+                    audit_id = str(audit.get("return_id", "")).strip()
+                    if not audit_id or audit_id in seen:
+                        errors.append(f"{candidate_id}: source writeback audit has an empty or duplicate return_id")
+                    seen.add(audit_id)
+                    try:
+                        n = int(audit["n_observations"])
+                        accounted += n
+                        if n < 1 or len(str(audit["membership_sha256"])) != 64 or audit.get("status") != "PASS":
+                            raise ValueError
+                        scope = str(audit["return_scope"])
+                        if scope in query_scopes:
+                            a_supported = float(audit["lineage_supported_fraction"])
+                            a_competing = float(audit["strongest_competing_fraction"])
+                            a_contradiction = float(audit["contradiction_fraction"])
+                            if scope == "supported_subset":
+                                minimum = policy["supported_subset_min_lineage_supported_fraction"]
+                                margin = policy["supported_subset_min_purity_margin"]
+                                purity_ok = (
+                                    a_supported >= minimum
+                                    and a_supported - a_competing >= margin
+                                    and a_contradiction <= policy["maximum_contradiction_fraction"]
+                                )
+                            else:
+                                raw_present = all(
+                                    key in audit
+                                    for key in (
+                                        "raw_two_family_supported_fraction",
+                                        "strongest_eligible_competing_raw_fraction",
+                                    )
+                                )
+                                if require_raw_whole_return_audits and not raw_present:
+                                    errors.append(f"{candidate_id}: source writeback {audit_id} lacks raw two-family purity")
+                                if raw_present:
+                                    raw_supported = float(audit["raw_two_family_supported_fraction"])
+                                    raw_competing = float(audit["strongest_eligible_competing_raw_fraction"])
+                                    purity_ok = (
+                                        raw_supported >= policy[
+                                            "whole_subcluster_min_raw_two_family_supported_fraction"
+                                        ]
+                                        and raw_supported - raw_competing >= policy[
+                                            "whole_subcluster_min_raw_two_family_margin"
+                                        ]
+                                        and a_contradiction <= policy["maximum_contradiction_fraction"]
+                                    )
+                                    if (
+                                        raw_competing >= policy[
+                                            "whole_subcluster_embedded_competitor_raw_trigger"
+                                        ]
+                                        and audit.get("embedded_competitor_review_status") != "PASS"
+                                    ):
+                                        errors.append(
+                                            f"{candidate_id}: source writeback {audit_id} lacks closure of a high-coverage embedded competitor"
+                                        )
+                                else:
+                                    purity_ok = (
+                                        a_supported >= policy["whole_subcluster_min_lineage_supported_fraction"]
+                                        and a_supported - a_competing >= policy["whole_subcluster_min_purity_margin"]
+                                        and a_contradiction <= policy["maximum_contradiction_fraction"]
+                                    )
+                            if not purity_ok:
+                                errors.append(f"{candidate_id}: source writeback {audit_id} fails its scope-specific purity gate")
+                        elif scope in {"atlas_qc_return", "canonical_oocyte_cluster"}:
+                            if audit.get("route_validation_status") != "PASS":
+                                errors.append(f"{candidate_id}: source writeback {audit_id} lacks its route-specific validation")
+                        else:
+                            errors.append(f"{candidate_id}: source writeback {audit_id} has an unknown return_scope")
+                    except (KeyError, TypeError, ValueError):
+                        errors.append(f"{candidate_id}: source writeback audit {audit_id or '<unknown>'} is malformed")
+                if accounted != expected_n:
+                    errors.append(f"{candidate_id}: source writeback audits do not exactly account for final membership")
+
+        expected_fine_candidates = expected_fine_candidates or set()
+        if expected_fine_candidates:
+            audits = document.get("fine_candidate_audit")
+            if not isinstance(audits, list):
+                errors.append(f"{candidate_id}: optional fine candidates were not systematically audited")
+            else:
+                by_id = {str(item.get("candidate_id", "")): item for item in audits if isinstance(item, dict)}
+                if set(by_id) != expected_fine_candidates:
+                    errors.append(f"{candidate_id}: fine-candidate audit does not cover the complete parent-specific catalog")
+                for fine_id, audit in by_id.items():
+                    status = audit.get("status")
+                    if status not in {"supported", "refuted", "not_evaluable"}:
+                        errors.append(f"{candidate_id}: fine candidate {fine_id} has an invalid audit status")
+                    if status in {"supported", "refuted"}:
+                        channels = audit.get("evidence_channels", [])
+                        if not isinstance(channels, list) or len(set(channels)) < 2:
+                            errors.append(f"{candidate_id}: fine candidate {fine_id} lacks two independent evidence channels")
+                    if status == "not_evaluable" and len(str(audit.get("rationale", "")).strip()) < 10:
+                        errors.append(f"{candidate_id}: fine candidate {fine_id} lacks a substantive not-evaluable rationale")
     except (KeyError, TypeError, ValueError):
         errors.append(f"{candidate_id}: present-lineage numerical evidence is malformed")
     return errors
@@ -104,11 +225,17 @@ def validate(root: Path, catalog_path: Path) -> dict[str, object]:
     root = root.resolve()
     errors: list[str] = []
     config = project_config(root)
+    try:
+        writeback_policy = observation_writeback_policy(config)
+    except (TypeError, ValueError):
+        writeback_policy = observation_writeback_policy()
+        errors.append("project observation_writeback_policy is invalid")
     require_numerical_present = (
         config.get("numerical_broad_completeness_evidence_required") is True
         or framework_tuple(root) >= (2, 0, 2)
     )
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    fine_catalog = catalog.get("machine_actionable_fine_candidate_catalog", {})
     candidates = {str(x.get("candidate_id", "")): x for x in catalog.get("candidate_boundaries", []) if x.get("review_required")}
     required_zero = {cid for cid, row in candidates.items() if row.get("release_level") == "default_broad_candidate"}
     rows = active(read_tsv(root / "state/broad_class_completeness_registry.tsv"))
@@ -147,7 +274,24 @@ def validate(root: Path, catalog_path: Path) -> dict[str, object]:
                 if row.get(field, "").lower() not in TRUE:
                     errors.append(f"{cid}: present-lineage audit lacks {field}")
             if require_numerical_present and artifact.is_file():
-                errors.extend(validate_present_evidence(artifact, cid, n))
+                expected_fine = {
+                    str(item.get("candidate_id", ""))
+                    for item in fine_catalog.get(cid, [])
+                    if isinstance(item, dict) and item.get("candidate_id")
+                }
+                errors.extend(
+                    validate_present_evidence(
+                        artifact,
+                        cid,
+                        n,
+                        policy=writeback_policy,
+                        require_return_audits=config.get("terminal_return_purity_audit_required") is True,
+                        require_raw_whole_return_audits=config.get("raw_two_family_writeback_audit_required") is True,
+                        expected_fine_candidates=(
+                            expected_fine if config.get("complete_fine_candidate_audit_required") is True else set()
+                        ),
+                    )
+                )
         else:
             zero_census.append(cid)
             if cid in required_zero:

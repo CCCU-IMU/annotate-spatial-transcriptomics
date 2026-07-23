@@ -27,7 +27,7 @@ Comparable annotation quality requires:
 11. A small/local retained interface, or a documented irreducible QC/technical remainder after every applicable route. Large/diffuse retention automatically reopens.
 12. Broad and subtype evidence assets are separate. The subtype tree may be shallow when the data support only broad identities.
 13. A navigable report whose annotation tree, node highlights, DEG, marker dotplots, spatial gene maps, source ancestry and detailed workflow all resolve to audited artifacts.
-14. A subtype parsimony audit showing that every fine label adds a reproducible functional or lineage program beyond its parent; unsupported splits are merged and retained as state tags.
+14. A complete parent-specific subtype parsimony audit showing that every machine-actionable child of every present parent was supported, refuted or found not evaluable, and that every released fine label adds a reproducible discriminator program beyond its parent. Unsupported splits are merged and retained as state tags; broad-only remains a valid audited endpoint.
 15. A taxonomy/cohort audit showing that every release label passed its own gate, every unsupported plausible literature class has a negative audit, and no routing/technical state enters biological DEG or marker discovery.
 16. Content-schema validation for every prelabel freeze, cohort outcome, direct return and broad/fine support record. Artifact existence alone, empty evidence and status-only placeholders fail.
 17. Exact observation-level partition closure through global Atlas query coverage, frozen-QC accepted/rejected writeback, defined-label review closure and the final annotation.
@@ -37,6 +37,8 @@ Comparable annotation quality requires:
 ## Large-label purity trigger
 
 A convincing cluster-level DEG does not validate every observation in that cluster. Reopen a large direct label when a cell-level lineage backbone is sparse, anti-programs dominate, spatial distribution is too broad for the proposed identity, or a small coherent lineage appears embedded in a resident class. Freeze only the coherent cells; return the remainder directly to a supported broad lineage, a targeted cohort, or QC.
+
+Do not reduce purity to “target fraction is slightly larger than competitor fraction.” Whole-subcluster returns require an absolute support floor and minimum margin. Mixed clusters may yield several disjoint observation-level returns; each exact subset must pass its own complete-catalog numerical, full-feature, spatial and cross-resolution evidence, and the remainder must be rescored without parent-label inheritance. Read `observation-subset-writeback.md`.
 
 The purity trigger and rare-lineage recall use the same persistent signal ledger. Every cohort remains open to cross-lineage evidence. An embedded lineage that was subthreshold at the whole-tissue pass is a tracked hypothesis, not a rejected class; a coherent recurrence in a subcluster must reopen broad-class construction.
 

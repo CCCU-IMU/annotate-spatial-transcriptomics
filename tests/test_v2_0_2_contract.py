@@ -18,7 +18,7 @@ sys.path.insert(0, str(SCRIPTS))
 from validate_broad_class_completeness import validate as validate_completeness  # noqa: E402
 from validate_cohort_outcome import validate as validate_cohort  # noqa: E402
 from validate_prelabel_broad_evidence import validate as validate_prelabel  # noqa: E402
-from lineage_decision_lib import absolute_supported_families  # noqa: E402
+from lineage_decision_lib import absolute_supported_families, purity_passes  # noqa: E402
 
 
 def sha(path: Path) -> str:
@@ -55,6 +55,13 @@ def decision_rows(epithelial_score: float = 0.01, stromal_score: float = 0.8) ->
 
 
 class V202ContractTests(unittest.TestCase):
+    def test_relative_purity_winner_cannot_pass_without_absolute_support(self) -> None:
+        row = {
+            "purity_status": "pass", "lineage_supported_fraction": "0.138391",
+            "strongest_competing_fraction": "0.113400", "contradiction_fraction": "0",
+        }
+        self.assertFalse(purity_passes(row))
+
     def test_absolute_family_threshold_blocks_sparse_epithelial_claim(self) -> None:
         rows = [
             {"cluster": "4", "candidate_id": "epithelial_mesothelial", "family_name": "keratin",
@@ -184,6 +191,102 @@ class V202ContractTests(unittest.TestCase):
             outcome = self.make_v2_cohort(root, "stromal_mesenchymal", "Stromal/mesenchymal")
             result = validate_cohort(root, outcome)
             self.assertEqual(result["status"], "PASS", result["errors"])
+
+    def test_supported_subset_may_differ_from_aggregate_cluster_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            outcome_path = self.make_v2_cohort(root, "stromal_mesenchymal", "Stromal/mesenchymal")
+            outcome = json.loads(outcome_path.read_text())
+            channel = root / "evidence/subset_channel.json"
+            channel.write_text(json.dumps({"status": "PASS", "evidence": ["full", "spatial", "resolution"]}))
+
+            def subset(cell_id: str, candidate: str, broad: str, runner: str) -> dict:
+                membership = write_tsv(root / f"memberships/{candidate}.tsv", ["cell_id"], [{"cell_id": cell_id}])
+                evidence = root / f"evidence/{candidate}_subset.json"
+                evidence.write_text(json.dumps({
+                    "schema_version": "1.0", "status": "PASS", "source_subcluster": "1",
+                    "candidate_id": candidate, "candidate_broad_lineage": broad,
+                    "membership_sha256": sha(membership), "n_observations": 1,
+                    "candidate_universe": ["epithelial_mesothelial", "stromal_mesenchymal"],
+                    "winner": candidate, "runner_up": runner, "winning_margin": 0.6,
+                    "positive_family_count": 2, "positive_families": ["identity", "support"],
+                    "contradiction_count": 0, "contradiction_fraction": 0.0,
+                    "lineage_supported_fraction": 0.9, "strongest_competing_fraction": 0.05,
+                    "full_feature_scope": {"status": "PASS", "artifact": ref(channel)},
+                    "spatial_coherence": {"status": "PASS", "artifact": ref(channel)},
+                    "cross_resolution_support": {"status": "PASS", "artifact": ref(channel)},
+                }))
+                return {
+                    "subcluster_id": "1", "outcome": "cross_lineage_return" if candidate.startswith("epithelial") else "parent_return",
+                    "membership": ref(membership, 1), "target_candidate_id": candidate,
+                    "target_broad_label": broad, "target_fine_label": "", "confidence": "moderate",
+                    "return_scope": "supported_subset", "observation_purity_evidence": ref(evidence),
+                }
+
+            outcome["subcluster_outcomes"] = [
+                subset("a", "epithelial_mesothelial", "Epithelial/mesothelial", "stromal_mesenchymal"),
+                subset("b", "stromal_mesenchymal", "Stromal/mesenchymal", "epithelial_mesothelial"),
+            ]
+            outcome["terminal_outcome"] = "subclusters_adjudicated"
+            outcome["homogeneous_parent_confirmed"] = False
+            outcome_path.write_text(json.dumps(outcome))
+            result = validate_cohort(root, outcome_path)
+            self.assertEqual(result["status"], "PASS", result["errors"])
+
+    def test_whole_return_blocks_coherent_high_coverage_competitor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            outcome_path = self.make_v2_cohort(root, "stromal_mesenchymal", "Stromal/mesenchymal")
+            project_path = root / "config/project.json"
+            project = json.loads(project_path.read_text())
+            project["whole_subcluster_purity_evidence_required"] = True
+            project_path.write_text(json.dumps(project))
+            outcome = json.loads(outcome_path.read_text())
+            decision_path = Path(outcome["lineage_decision_table"]["path"])
+            with decision_path.open(encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle, delimiter="\t"))
+            for row in rows:
+                row["raw_two_family_supported_fraction"] = "0.9" if row["candidate_id"] == "stromal_mesenchymal" else "0.5"
+            write_tsv(decision_path, list(rows[0]), rows)
+            outcome["lineage_decision_table"] = ref(decision_path)
+            channel = root / "evidence/whole_channel.json"
+            channel.write_text(json.dumps({"status": "PASS", "review": "full spatial cross-resolution"}))
+            returned = Path(outcome["subcluster_outcomes"][0]["membership"]["path"])
+            evidence = root / "evidence/whole_purity.json"
+
+            def write_evidence(spatial_status: str, disposition: str) -> None:
+                evidence.write_text(json.dumps({
+                    "schema_version": "1.0", "status": "PASS", "source_subcluster": "1",
+                    "candidate_id": "stromal_mesenchymal", "candidate_broad_lineage": "Stromal/mesenchymal",
+                    "membership_sha256": sha(returned), "n_observations": 2,
+                    "candidate_universe": ["epithelial_mesothelial", "stromal_mesenchymal"],
+                    "winner": "stromal_mesenchymal", "runner_up": "epithelial_mesothelial", "winning_margin": 0.7,
+                    "positive_family_count": 2, "positive_families": ["ecm", "ovarian_stroma"],
+                    "contradiction_count": 0, "contradiction_fraction": 0.0,
+                    "raw_two_family_supported_fraction": 0.9,
+                    "strongest_eligible_competing_raw_fraction": 0.5,
+                    "embedded_competitor_audit": [{
+                        "candidate_id": "epithelial_mesothelial", "raw_two_family_supported_fraction": 0.5,
+                        "eligible": True, "spatial_status": spatial_status, "disposition": disposition,
+                        "artifact": ref(channel),
+                    }],
+                    "full_feature_scope": {"status": "PASS", "artifact": ref(channel)},
+                    "spatial_coherence": {"status": "PASS", "artifact": ref(channel)},
+                    "cross_resolution_support": {"status": "PASS", "artifact": ref(channel)},
+                }))
+
+            write_evidence("coherent", "supported_subset_required")
+            outcome["subcluster_outcomes"][0]["observation_purity_evidence"] = ref(evidence)
+            outcome_path.write_text(json.dumps(outcome))
+            blocked = validate_cohort(root, outcome_path)
+            self.assertEqual(blocked["status"], "FAIL")
+            self.assertTrue(any("embedded competitor" in error for error in blocked["errors"]), blocked["errors"])
+
+            write_evidence("not_coherent", "refuted_by_spatial_or_antiprogram")
+            outcome["subcluster_outcomes"][0]["observation_purity_evidence"] = ref(evidence)
+            outcome_path.write_text(json.dumps(outcome))
+            passed = validate_cohort(root, outcome_path)
+            self.assertEqual(passed["status"], "PASS", passed["errors"])
 
     def test_present_completeness_fails_when_competitor_dominates(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

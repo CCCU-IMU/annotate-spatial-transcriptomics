@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/schemas/observation_subset_evidence.schema.json",
+  "title": "Observation-level lineage subset writeback evidence",
+  "type": "object",
+  "required": [
+    "schema_version", "status", "source_subcluster", "candidate_id",
+    "candidate_broad_lineage", "membership_sha256", "n_observations",
+    "candidate_universe", "winner", "runner_up", "winning_margin",
+    "positive_family_count", "positive_families", "contradiction_count",
+    "contradiction_fraction", "lineage_supported_fraction",
+    "strongest_competing_fraction", "full_feature_scope",
+    "spatial_coherence", "cross_resolution_support"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "status": {"const": "PASS"},
+    "source_subcluster": {"type": "string", "minLength": 1},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "candidate_broad_lineage": {"type": "string", "minLength": 1},
+    "membership_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "n_observations": {"type": "integer", "minimum": 1},
+    "candidate_universe": {
+      "type": "array", "minItems": 2, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "winner": {"type": "string", "minLength": 1},
+    "runner_up": {"type": "string", "minLength": 1},
+    "winning_margin": {"type": "number", "exclusiveMinimum": 0},
+    "positive_family_count": {"type": "integer", "minimum": 2},
+    "positive_families": {
+      "type": "array", "minItems": 2, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "contradiction_count": {"type": "integer", "minimum": 0},
+    "contradiction_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "lineage_supported_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "strongest_competing_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "full_feature_scope": {"$ref": "#/$defs/passArtifact"},
+    "spatial_coherence": {"$ref": "#/$defs/passArtifact"},
+    "cross_resolution_support": {"$ref": "#/$defs/passArtifact"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "passArtifact": {
+      "type": "object",
+      "required": ["status", "artifact"],
+      "properties": {
+        "status": {"const": "PASS"},
+        "artifact": {
+          "type": "object",
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
+      }
+    }
+  }
+}

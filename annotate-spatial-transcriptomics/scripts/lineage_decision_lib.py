@@ -33,6 +33,20 @@ PURITY_COLUMNS = {
 }
 
 
+DEFAULT_OBSERVATION_WRITEBACK_POLICY = {
+    "whole_subcluster_min_lineage_supported_fraction": 0.25,
+    "whole_subcluster_min_purity_margin": 0.10,
+    "whole_subcluster_min_raw_two_family_supported_fraction": 0.40,
+    "whole_subcluster_min_raw_two_family_margin": 0.20,
+    "whole_subcluster_embedded_competitor_raw_trigger": 0.35,
+    "supported_subset_min_lineage_supported_fraction": 0.70,
+    "supported_subset_min_purity_margin": 0.30,
+    "present_label_min_lineage_supported_fraction": 0.50,
+    "present_label_min_purity_margin": 0.20,
+    "maximum_contradiction_fraction": 0.05,
+}
+
+
 def truth(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "pass", "passed"}
 
@@ -142,10 +156,45 @@ def eligible(row: dict[str, str], minimum_families: int = 2) -> bool:
     )
 
 
-def purity_passes(row: dict[str, str]) -> bool:
+def observation_writeback_policy(project: dict | None = None) -> dict[str, float]:
+    """Return a complete, bounded writeback policy from project configuration.
+
+    Relative winner status alone is intentionally insufficient.  Without an
+    absolute floor and margin, a cluster with 13.8% target support and 11.3%
+    competitor support can be mislabeled wholesale even though most members
+    support neither lineage.
+    """
+    policy = dict(DEFAULT_OBSERVATION_WRITEBACK_POLICY)
+    configured = (project or {}).get("observation_writeback_policy", {})
+    if isinstance(configured, dict):
+        for key in policy:
+            if key in configured:
+                value = float(configured[key])
+                if not 0 <= value <= 1:
+                    raise ValueError(f"observation writeback threshold {key} is outside [0,1]")
+                policy[key] = value
+    return policy
+
+
+def purity_passes(
+    row: dict[str, str],
+    *,
+    minimum_supported_fraction: float = DEFAULT_OBSERVATION_WRITEBACK_POLICY[
+        "whole_subcluster_min_lineage_supported_fraction"
+    ],
+    minimum_margin: float = DEFAULT_OBSERVATION_WRITEBACK_POLICY["whole_subcluster_min_purity_margin"],
+    maximum_contradiction_fraction: float = DEFAULT_OBSERVATION_WRITEBACK_POLICY[
+        "maximum_contradiction_fraction"
+    ],
+) -> bool:
+    supported = _number(row, "lineage_supported_fraction")
+    competing = _number(row, "strongest_competing_fraction")
+    contradiction = float(row.get("contradiction_fraction", 0) or 0)
     return (
         str(row.get("purity_status", "")).strip().lower() == "pass"
-        and _number(row, "lineage_supported_fraction") > _number(row, "strongest_competing_fraction")
+        and supported >= minimum_supported_fraction
+        and supported - competing >= minimum_margin
+        and contradiction <= maximum_contradiction_fraction
     )
 
 

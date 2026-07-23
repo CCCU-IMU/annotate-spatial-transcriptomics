@@ -30,6 +30,12 @@ def main() -> int:
         for key in ("project_id", "sample_id", "framework_version"):
             if project.get(key) != contract.get(key):
                 errors.append(f"project config disagrees with contract: {key}")
+        if project.get("observation_subset_writeback_required") is True:
+            bound = contract.get("observation_writeback", {})
+            if bound.get("subset_writeback_required") is not True:
+                errors.append("annotation contract does not bind required observation-level subset writeback")
+            if bound.get("policy") != project.get("observation_writeback_policy"):
+                errors.append("annotation contract observation-writeback policy differs from project config")
     snapshot_registry = Path(contract.get("selected_input_snapshot", {}).get("registry_path", ""))
     if snapshot_registry.is_file():
         with snapshot_registry.open(newline="", encoding="utf-8") as handle:

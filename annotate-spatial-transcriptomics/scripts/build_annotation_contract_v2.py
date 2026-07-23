@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 
 from evidence_schema_lib import sha256
+from lineage_decision_lib import observation_writeback_policy
 
 
 def artifact(path: Path) -> dict[str, str]:
@@ -117,6 +118,16 @@ def main() -> int:
             "required": True,
             "feature_scope": "full_feature",
             "complete_cartesian_product": True,
+        },
+        "observation_writeback": {
+            "subset_writeback_required": project.get("observation_subset_writeback_required") is True,
+            "whole_subcluster_purity_evidence_required": project.get("whole_subcluster_purity_evidence_required") is True,
+            "terminal_return_purity_audit_required": project.get("terminal_return_purity_audit_required") is True,
+            "raw_two_family_writeback_audit_required": project.get("raw_two_family_writeback_audit_required") is True,
+            "complete_fine_candidate_audit_required": project.get("complete_fine_candidate_audit_required") is True,
+            "fine_writeback_broad_lock_required": project.get("fine_writeback_broad_lock_required") is True,
+            "final_fine_state_validation_required": project.get("final_fine_state_validation_required") is True,
+            "policy": observation_writeback_policy(project),
         },
         "atlas_routing": {
             "authoritative_router": "route_global_atlas_v2.py",

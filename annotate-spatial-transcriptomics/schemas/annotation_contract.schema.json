@@ -68,6 +68,38 @@
         "complete_cartesian_product": {"const": true}
       }
     },
+    "observation_writeback": {
+      "type": "object",
+      "required": [
+        "subset_writeback_required", "whole_subcluster_purity_evidence_required", "terminal_return_purity_audit_required",
+        "raw_two_family_writeback_audit_required", "complete_fine_candidate_audit_required", "policy"
+      ],
+      "properties": {
+        "subset_writeback_required": {"type": "boolean"},
+        "whole_subcluster_purity_evidence_required": {"type": "boolean"},
+        "terminal_return_purity_audit_required": {"type": "boolean"},
+        "raw_two_family_writeback_audit_required": {"type": "boolean"},
+        "complete_fine_candidate_audit_required": {"type": "boolean"},
+        "fine_writeback_broad_lock_required": {"type": "boolean"},
+        "final_fine_state_validation_required": {"type": "boolean"},
+        "policy": {
+          "type": "object",
+          "required": [
+            "whole_subcluster_min_lineage_supported_fraction",
+            "whole_subcluster_min_purity_margin",
+            "whole_subcluster_min_raw_two_family_supported_fraction",
+            "whole_subcluster_min_raw_two_family_margin",
+            "whole_subcluster_embedded_competitor_raw_trigger",
+            "supported_subset_min_lineage_supported_fraction",
+            "supported_subset_min_purity_margin",
+            "present_label_min_lineage_supported_fraction",
+            "present_label_min_purity_margin",
+            "maximum_contradiction_fraction"
+          ],
+          "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    },
     "atlas_routing": {
       "type": "object",
       "required": ["authoritative_router", "mapping_scope", "writeback_scope", "fine_anchor_eligible"],
