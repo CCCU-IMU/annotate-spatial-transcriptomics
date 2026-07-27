@@ -1,5 +1,5 @@
 {
-  "profile_id": "ovis_aries_ovary_v3",
+  "profile_id": "ovis_aries_ovary_v4",
   "species": "Ovis aries",
   "tissue": "ovary",
   "profile_role": "biological_evidence",
@@ -38,7 +38,14 @@
       "subtype_modules": {
         "cumulus_oophorus": ["HAS2", "PTX3", "TNFAIP6", "VCAN", "IGFBP5", "AMH"],
         "mural_estrogenic": ["FSHR", "CYP19A1", "HSD17B1", "INHA", "INHBA", "GJA1"],
-        "luteinizing": ["LHCGR", "STAR", "CYP11A1", "HSD3B1", "NR5A2"]
+        "small_preantral": ["AMH", "FOXL2", "FST", "CDH2", "KITLG", "WNT4"],
+        "large_antral": ["FSHR", "CYP19A1", "HSD17B1", "INHA", "INHBA", "GJA1", "ESR2"]
+      },
+      "state_modules": {
+        "hypoxia": ["HIF1A", "VEGFA", "BNIP3", "CA9", "EGLN3"],
+        "proliferation": ["MKI67", "TOP2A", "UBE2C", "CENPF"],
+        "atresia": ["BAX", "CASP3", "FAS", "ATF4", "DDIT3"],
+        "luteinization": ["LHCGR", "STAR", "CYP11A1", "HSD3B1", "NR5A2"]
       },
       "safety": "ZP-family or other oocyte-adjacent RNA without a non-ZP oocyte core does not convert a coherent granulosa program into Oocyte"
     },
@@ -49,8 +56,8 @@
       },
       "required_program": ["CYP17A1", "CYP11A1", "STAR", "HSD3B1", "INSL3", "ANPEP", "NR5A1", "FDX1", "DHCR24"],
       "support_only": ["LHCGR"],
-      "spatial_expectation": "outer ring around growing follicles, often vascular-associated",
-      "safety": "ECM or LHCGR alone cannot define Theca"
+      "spatial_expectation": "post hoc anatomy audit only: often perifollicular and vascular-associated, but molecularly supported Theca is not required to lie inside a preselected follicle ROI",
+      "safety": "ECM, LHCGR, follicle distance or ROI membership alone cannot define, shrink or expand Theca"
     },
     "theca_progenitor_follicular_stroma": {
       "positive_families": {
@@ -125,7 +132,8 @@
     "immune": {
       "positive_families": {
         "pan_immune_backbone": ["PTPRC", "CD53", "LYZ", "TYROBP", "FCER1G"],
-        "immune_effector_support": ["C1QA", "C1QB", "C1QC", "CD68", "CD3D", "CD3E", "TRAC", "CD79A", "MS4A1", "JCHAIN", "NKG7"]
+        "immune_effector_support": ["C1QA", "C1QB", "C1QC", "CD68", "CD3D", "CD3E", "TRAC", "CD79A", "MS4A1", "JCHAIN", "NKG7"],
+        "antibody_secreting_support": ["LOC101108817", "LOC101108781", "LOC121817142", "LOC114108841", "POU2AF1", "TENT5C", "MZB1"]
       },
       "backbone": ["PTPRC", "CD53", "LYZ", "TYROBP", "FCER1G"],
       "macrophage": ["C1QA", "C1QB", "C1QC", "CD68", "AIF1", "CTSD", "CTSB", "LGMN", "GPNMB", "STAB1", "MRC1", "APOE"],
@@ -139,13 +147,19 @@
     "luteal_steroidogenic": {
       "positive_families": {
         "luteal_steroidogenic_core": ["STAR", "CYP11A1", "HSD3B1", "FDX1", "NR5A1", "NR5A2"],
-        "luteal_receptor_support": ["LHCGR", "CYP17A1", "INSL3", "INHA", "INHBA", "CYP19A1", "FSHR"]
+        "corpus_luteum_identity": ["OXT", "PTGFR", "PARM1", "LDLR", "PRLR"]
       },
-      "program": ["STAR", "CYP11A1", "HSD3B1", "FDX1", "NR5A1", "NR5A2", "LHCGR"],
+      "program": ["STAR", "CYP11A1", "HSD3B1", "FDX1", "NR5A1", "NR5A2", "OXT", "PTGFR", "PARM1", "LDLR", "PRLR"],
       "theca_lutein_support": ["CYP17A1", "INSL3", "ANPEP"],
       "granulosa_lutein_support": ["INHA", "INHBA", "CYP19A1", "FSHR"],
+      "support_only": ["LHCGR", "PGR", "APOD", "SFRP4", "VEGFA"],
+      "subtype_modules": {
+        "early_luteal": ["STAR", "CYP11A1", "HSD3B1", "VEGFA", "INHA"],
+        "late_luteal": ["OXT", "PTGFR", "PARM1", "LDLR", "PRLR"],
+        "transitional_luteal": ["LHCGR", "STAR", "CYP11A1", "INHA", "CYP17A1"]
+      },
       "spatial_expectation": "large coherent luteal structure rather than a thin follicular ring",
-      "safety": "stage is required for confident corpus-luteum or luteal subtype labels; generic steroidogenesis alone remains steroidogenic somatic"
+      "safety": "stage compatibility and generic STAR/CYP11A1/HSD3B1 steroidogenesis are insufficient without an independent corpus-luteum identity family; PGR, APOD, SFRP4 or a solid spatial component alone cannot seed Luteal"
     },
     "neural_schwann": {
       "positive_families": {
@@ -174,7 +188,8 @@
       "program": ["KRT8", "KRT18", "KRT19", "KRT7", "EPCAM", "DSP", "MUC16", "MSLN", "PRG4"],
       "subtype_modules": {
         "surface_epithelial": ["EPCAM", "CDH1", "DSP", "KRT7", "KRT8", "KRT18", "KRT19", "PPL", "CGN", "MAL2"],
-        "mesothelial_like": ["PRG4", "WT1", "PDPN", "LRRN4", "C4BPA", "UPK1B", "GPM6A", "ALDH1A2", "PTGDS", "MSLN", "MUC16"]
+        "mesothelial_like": ["PRG4", "WT1", "PDPN", "LRRN4", "C4BPA", "UPK1B", "GPM6A", "ALDH1A2", "PTGDS", "MSLN", "MUC16"],
+        "rete_glandular_like": ["PAX8", "KRT7", "KRT19", "EPCAM", "MUC1", "KRT18", "SOX9"]
       },
       "spatial_expectation": "continuous thin ovarian surface boundary",
       "broad_recall_rule": "a coherent keratin backbone plus one independent surface/adhesion or mesothelial family supports the broad class. When the lineage is embedded at the whole-tissue resolution, keep it as watch and recover only a high-purity subcluster during open-world cohort reclustering. A mixed spatial component is evidence for one bounded targeted question, never permission to expand its complete membership.",
@@ -210,28 +225,34 @@
       "require_follicular_morphology": true,
       "spatial_focus_hard_filter_for_targeted_cohort": false,
       "targeted_cohort_policy": "all observations passing the multi-module starting gate enter one query-only targeted cohort; do not restrict membership to strict seeds or DBSCAN-supported foci",
+      "zero_census_targeted_cohort_trigger": "when ordinary second-round scanning returns no Oocyte but a label-blind full-analysis-set multi-module starting-gate screen is nonzero, run exactly one query-only canonical targeted cohort before declaring absence",
+      "zero_census_targeted_cohort_label_policy": "existing broad/fine labels, Atlas labels and repair membership remain invisible until canonical cluster membership and hard exclusions are frozen",
       "strict_seed_role": "high-specificity identity/anti-program and spatial-focus evidence used to identify an enriched recluster cluster; never the final census or the only recluster membership",
       "isolated_candidate_policy": "retain isolated starting-gate observations in the full targeted cohort; lack of a spatial neighbour is not negative evidence",
       "final_return_policy": "after adaptive targeted-cohort reclustering, adjudicate clusters using coherent non-ZP identity and maternal/ooplasm enrichment, somatic anti-program separation and cluster/object-ensemble morphology; for every passing cluster return all canonical-cohort members except explicit cell-level hard contradictions/QC exclusions. Strict-seed or spatial-object membership is never a final per-cell filter; return somatic clusters directly with ambient/adjacent-oocyte state tags",
       "spatial_location_rule": "cortical, subcortical, peripheral or section-edge location is never negative evidence for Oocyte; small or primordial oocytes may occur in the ovarian cortex. Location alone is not positive evidence and cannot relax the multi-module, anti-program, spatial-object or reclustering gates",
       "forbid_single_marker_definition": true,
       "forbid_cellbin_as_oocyte_count": true,
-      "required_actions": ["cell_level_marker_screen", "negative_program_screen", "full_starting_targeted_cohort_query_only_recluster", "strict_seed_and_spatial_focus_support", "cluster_level_program_antiprogram_adjudication", "direct_somatic_return_with_ambient_tag", "putative_object_grouping"]
+      "required_actions": ["cell_level_marker_screen", "negative_program_screen", "zero_census_full_analysis_set_starting_gate_audit", "full_starting_targeted_cohort_query_only_recluster", "strict_seed_and_spatial_focus_support", "cluster_level_program_antiprogram_adjudication", "direct_somatic_return_with_ambient_tag", "putative_object_grouping"]
     }
   },
   "release_taxonomy": {
-    "principle": "publish the least specific biologically honest label supported by the current full-feature query; this vocabulary is an allowlist with evidence gates, not a quota",
+    "principle": "publish the least specific biologically honest label supported by the current full-feature query; the catalog is open and every boundary is scanned, while the listed vocabulary controls release permissions rather than presence quotas",
     "default_biological_broad_classes": ["Granulosa", "Stromal/mesenchymal", "Vascular-associated", "Immune", "Epithelial/mesothelial", "Oocyte"],
+    "default_biological_broad_classes_role": "baseline zero-census review candidates only; not a required or exhaustive sheep-ovary label list",
     "context_gated_default": {
       "Oocyte": "full multi-module targeted-cohort query-only reclustering followed by non-ZP/maternal positive, somatic anti-program and cluster/object-ensemble adjudication; strict seeds support cluster identity, then all canonical members of a passing cluster enter the census unless explicitly hard-excluded"
     },
     "evidence_dependent_standalone_classes": {
-      "Theca": "coherent steroidogenic/androgenic theca program plus follicular outer-ring morphology",
-      "Smooth muscle": "mature contractile backbone, stable separation and coherent vessel-wall, hilar or structural tracks",
-      "Mesenchymal progenitor-like": "stable S100A4/progenitor-like program and reproducible morphology distinct from generic ovarian stroma",
-      "Luteal steroidogenic": "stage support plus coherent luteal program and corpus-luteum-like morphology",
-      "Neural/Schwann": "coherent glial program plus nerve-track morphology",
-      "Neuroendocrine": "secretory-neuroendocrine backbone plus neuronal support and coherent rare-focus morphology"
+      "Theca": "coherent steroidogenic/androgenic Theca program discovered without a spatial gate; anatomy is a post hoc challenger and validation layer",
+      "Smooth muscle": "mature contractile backbone, stable separation and coherent nonvascular follicular, hilar or structural tracks",
+      "Luteal": "stage support plus an independent corpus-luteum identity family, coherent steroidogenesis and corpus-luteum-like morphology",
+      "Glial/Schwann-like": "coherent glial program plus nerve-track morphology"
+    },
+    "exploratory_candidates_not_release_labels": {
+      "Mesenchymal progenitor-like": "retain as an exploratory stable-program record until a sheep-specific independent identity is confirmed",
+      "Neuroendocrine-like": "retain as exploratory unless a future catalog revision defines an independently validated sheep ovarian identity",
+      "Structural/perifollicular Theca": "retain as a topology/state candidate without steroidogenic Theca identity"
     },
     "forbidden_release_broad_labels": ["Theca/follicular wall", "Stromal/perivascular", "follicular_somatic_granulosa_theca", "anatomical_interface_review", "postcluster_qc_holdout"],
     "fallback_names": {
@@ -260,7 +281,21 @@
       "Blood endothelial": ["Vascular-associated"],
       "Lymphatic endothelial": ["Vascular-associated"],
       "Pericyte/mural": ["Vascular-associated"],
-      "Oocyte": ["Oocyte"]
+      "Oocyte": ["Oocyte"],
+      "Cumulus-like granulosa": ["Granulosa"],
+      "Mural/estrogenic granulosa": ["Granulosa"],
+      "Small/preantral-like granulosa": ["Granulosa"],
+      "Large/antral-like granulosa": ["Granulosa"],
+      "Early luteal": ["Luteal"],
+      "Late luteal": ["Luteal"],
+      "Transitional luteal": ["Luteal"],
+      "Macrophage/myeloid": ["Immune"],
+      "T/NK": ["Immune"],
+      "B/plasma": ["Immune"],
+      "Granulocyte": ["Immune"],
+      "Surface epithelial": ["Epithelial/mesothelial"],
+      "Mesothelial-like": ["Epithelial/mesothelial"],
+      "Rete/glandular-like": ["Epithelial/mesothelial"]
     },
     "forbidden_fine_semantics": [
       "low-information", "low information", "qc", "holdout", "pending", "unknown",
@@ -272,7 +307,7 @@
     "principle": "choose the resolution with the best integrated evidence for the current biological question; preserve stable lineages or true subtypes first, avoid state/technical fragmentation second, and use lower complexity only as a tie-breaker",
     "fresh_sct_banksy_whole_tissue_candidate_resolutions": [0.2, 0.4, 0.6, 0.8],
     "query_reclustering_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
-    "upstream_banksy_whole_tissue_policy": "audit the complete resolution grid stored in the bound BANKSY input, then select for broad recall/purity; this upstream grid is not replaced by the query-reclustering grid",
+    "upstream_banksy_whole_tissue_policy": "audit the complete resolution grid stored in the bound BANKSY input, then select a stable anatomical cohort partition without release authority; this upstream grid is not replaced by the query-reclustering grid",
     "formal_candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
     "minimum_formal_resolution": 0.1,
     "below_floor_policy": "reject before execution; below-floor artifacts cannot enter ranking, stability, biological interpretation or writeback",
@@ -291,7 +326,7 @@
   "evidence_gates": {
     "broad_defined": "at least two explicit independent positive marker families, low major anti-program, spatial plausibility when available and adjacent-resolution stability; absolute full-feature detection/prevalence and pseudobulk establish broad presence, while centered module scores and one-vs-rest DEG cannot alone reject an abundant shared parent program; atlas alone cannot pass",
     "mesenchymal_defined": "stable progenitor/fibroblast-like core plus support, low mature-contractile/endothelial/steroidogenic/immune/epithelial/granulosa programs and reproducible morphology; DCN/PDGFRA alone cannot pass",
-    "smooth_muscle_defined": "a coherent MYH11/CNN1/ACTG2-centered mature-contractile program plus multiple contractile-support genes, low mural/endothelial/steroidogenic/immune/epithelial/granulosa programs, stable broad-class or targeted-cohort reclustering and coherent nonvascular structural morphology; mural-supported vascular-wall cells route to Vascular-associated",
+    "smooth_muscle_defined": "a coherent MYH11/CNN1/ACTG2-centered mature-contractile program plus multiple contractile-support genes, low mural/endothelial/steroidogenic/immune/epithelial/granulosa programs, stable second-round cohort resolution and coherent nonvascular structural morphology; mural-supported vascular-wall cells route to Vascular-associated",
     "pericyte_defined": "RGS5/PDGFRB/CSPG4/NOTCH3/MCAM backbone plus vascular adjacency and separation from endothelial and generic contractile stroma; release as a fine child of Vascular-associated rather than a separate broad class",
     "fine_defined": "broad locked first; subtype program, morphology and resolution stability require at least two supporting channels without strong contradiction",
     "broad_only": "broad supported but subtype evidence insufficient; fine_anchor_eligible=false",
@@ -326,10 +361,14 @@
       "whole_subcluster_min_raw_two_family_supported_fraction": 0.40,
       "whole_subcluster_min_raw_two_family_margin": 0.20,
       "whole_subcluster_embedded_competitor_raw_trigger": 0.35,
+      "whole_subcluster_dominant_seed_fraction": 0.70,
+      "whole_subcluster_dominant_direct_core_fraction": 0.80,
+      "whole_subcluster_dominant_identity_core_fraction": 0.80,
+      "whole_subcluster_dominant_max_contradiction_fraction": 0.20,
       "supported_subset_min_lineage_supported_fraction": 0.70,
       "supported_subset_min_purity_margin": 0.30,
       "maximum_contradiction_fraction": 0.05,
-      "remainder_policy": "after every supported subset is frozen, rescore the exact remainder against the complete broad catalog; do not inherit the parent or aggregate winner",
+      "remainder_policy": "after every supported subset is frozen, rescore the exact local remainder against the complete broad catalog. After Atlas, one bounded post-merge review may act only on unresolved biological members by using strict direct multi-family seeds, coherent same-candidate spatial expansion, specific-before-generic overlap resolution and catalog-declared anatomical parent overrides; it cannot become a whole-object per-cellbin classifier or alter frozen broad members",
       "single_marker_split_forbidden": true,
       "spatial_coherence_required": true,
       "full_feature_evidence_required": true,
@@ -341,24 +380,36 @@
     "minimum_profile_marker_coverage": 0.7,
     "rule": "HVG/BANKSY features may select clusters, but final canonical positive/negative marker validation must use a full-feature count/data object; absence from an HVG matrix is not negative expression evidence"
   },
+  "biological_quality_endpoints": {
+    "required": true,
+    "validator": "validate_sheep_ovary_biological_quality.py",
+    "spatial_celltype_localization": "audit complete membership of every released broad class using multigene identity, contradiction and profile-compatible spatial morphology",
+    "oocyte_annotation_quality": "require a complete canonical non-zona/maternal group, somatic contradiction clearance and reconstructable spatial objects; edge location is not negative evidence",
+    "follicle_roi_histology": "detect Granulosa spatial components and jointly audit complete stage-appropriate architecture: Granulosa boundary, cavity clarity, Theca-interna/vascular interleaving, outer mature nonvascular contractile layer, Stromal background, angular continuity, radial order, boundary blurring, missing layers and abnormal expansion",
+    "large_antral_expected_sequence": "Granulosa boundary -> Theca interna with interleaved vasculature -> outer nonvascular mature contractile layer -> Stromal background",
+    "no_follicle_policy": "NOT_EVALUABLE rather than failure when no coherent Granulosa follicle is present",
+    "no_antral_follicle_policy": "NOT_EVALUABLE rather than failure for cavity clarity when only small or preantral follicles are present",
+    "geometry_authority": "review_trigger_only_no_label_writeback",
+    "iteration_scope": "one exact source subcluster or bounded raw-count follicle ROI"
+  },
   "annotation_workflow_policy": {
-    "routing_model": "broad_then_subtype_direct_cross_lineage_then_global_all_cell_atlas",
+    "routing_model": "provisional_whole_tissue_partition_then_second_round_subcluster_annotation_then_local_mixture_resolution_then_broad_freeze_then_global_atlas",
     "persistent_biological_pools": false,
     "incident_registry_required": true,
-    "initial_broad_annotation": "use the selected whole-tissue partition to establish supported coarse resident compartments, not to force every final ovarian lineage to appear. A biologically informative mixed cluster returns to its numerically dominant supported parent, usually Stromal/mesenchymal when appropriate, while coherent subthreshold epithelial, vascular, smooth-muscle or other signals remain watch for open-world cohort rescanning. Only low-information or technically irreducible observations enter QC holdout.",
-    "broad_recluster": "submit one broad_class_recluster cohort per initial broad class and run the complete active-contract candidate grid; select the integrated-evidence optimum, permit homogeneous_parent_confirmed, and allow only a formally evidenced underpowered skip",
-    "subcluster_outcomes": ["high_confidence_fine", "direct_broad_return", "direct_cross_lineage_return", "targeted_recluster_or_calibrated_rctd", "qc_holdout"],
-    "subcluster_writeback_policy": "every selected-resolution subcluster is rescored against the complete catalog. Parent identity is provenance only. Whole-subcluster return is a high-purity fast path and requires an absolute support floor plus margin, not merely relative winner status. A mixed subcluster may be partitioned into multiple disjoint supported_subset returns when each exact membership independently passes complete-catalog observation evidence, full-feature marker/anti-marker, spatial coherence and cross-resolution review. The exact remainder is rescored independently and may return to Stromal/mesenchymal, Smooth muscle, Vascular-associated, Theca or QC; it never inherits the parent or aggregate winner.",
+    "whole_tissue_partition": "select a stable initial clustering only to construct one second-round cohort per initial cluster. Record provisional broad, mixed or unknown plus watch signals; do not write formal broad, fine or QC membership.",
+    "second_round_recluster": "restart every initial-cluster cohort from project-local non-SCT raw counts, run the complete active grid, score every subcluster against the full open catalog before reading provisional provenance, and allow missing-broad reconstruction",
+    "subcluster_outcomes": ["parent_return", "cross_lineage_return", "missing_broad_reconstruction", "fine_candidate", "state_annotation", "unmodeled_lineage_candidate", "unresolved_biological", "underpowered_not_evaluable"],
+    "subcluster_writeback_policy": "the second-round Leiden subcluster is the main annotation unit. Whole-subcluster return is a high-purity fast path. Only a subcluster with two or more separable competing identity cores may be partitioned into local supported subsets. The exact local remainder is rescored once and may return to a common parent or unresolved biological state; it never inherits the provisional parent or aggregate winner and never becomes QC merely by nonselection.",
     "fine_candidate_policy": "after every broad label is locked, audit every machine-actionable optional child under that parent across the selected and adjacent resolutions. Record supported, refuted or not_evaluable with evidence; zero fine labels is valid only after the complete parent-specific fine catalog was actually tested. State programs remain tags.",
     "cross_lineage_policy": "a source subcluster with coherent evidence for another broad/fine identity returns directly to that target while preserving source run/cluster/cohort provenance; do not create an intermediate cohort or automatically recluster it again",
-    "targeted_recluster_policy": "create an immutable temporary cohort only when interpretable competing biological programs and sufficient observations make another computation decision-relevant",
+    "local_split_policy": "invoke observation-level splitting only inside an exact second-round mixed subcluster after a recorded multi-candidate trigger; never extend it to the whole tissue or whole cohort",
     "qc_holdout_recluster_forbidden": true,
-    "atlas_scope": "map the complete analysis set once after terminal residual QC is frozen",
-    "atlas_acceptance": "an unlabeled frozen-QC observation with calibrated moderate-or-higher Atlas tier returns broad-only when non-OOD, ontology-compatible and within Atlas scope; marker/spatial evidence is audit/challenge rather than a duplicate per-cell gate. Defined labels are challenge-only until orthogonal review; low/OOD remains retained",
-    "large_residual_qc_policy": "residual QC at least 10% of analysis observations or 50000 observations automatically reopens initial broad-resolution recall, selected-plus-two-higher catalog scans and embedded-program review; Atlas low confidence cannot close this audit",
+    "atlas_scope": "map the complete analysis set once after all second-round outcomes merge and formal broad membership freezes",
+    "atlas_acceptance": "an unlabeled post-merge observation with calibrated moderate-or-higher Atlas tier returns broad-only when non-OOD, ontology-compatible and within Atlas scope. Defined labels are challenge-only until orthogonal review; Atlas never writes fine labels.",
+    "large_residual_qc_policy": "residual QC at least 10% of analysis observations or 50000 observations returns to the contributing second-round cohort or the bounded post-merge unresolved-component review; never tune a first-pass whole-object cellbin gate and never lower component evidence merely to cross the completion threshold",
     "atlas_open_set_policy": "coherent OOD groups trigger unknown-lineage review and are never forced to the nearest known class",
     "atlas_fine_labels_forbidden": true,
-    "legacy_pool_registries": "migration provenance only; the active controller uses broad_class_recluster cohort, targeted_recluster cohort, direct return and terminal residual QC",
+    "legacy_pool_registries": "migration provenance only; the active controller uses initial-cluster cohorts, conditional local mixed-subcluster splitting, post-merge broad freeze and terminal typed QC",
     "completion_interface": {
       "public_gate": "check_completion_gate.py",
       "phases": ["INPUT_INTEGRITY", "BIOLOGICAL_EVIDENCE", "WORKFLOW_CLOSURE", "RELEASE_AUDIT"],

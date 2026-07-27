@@ -30,6 +30,205 @@ def _project_config(root: Path) -> dict:
         return {}
 
 
+def _validate_v22(
+    root: Path, outcome_path: Path, outcome: dict,
+    registry_path: Path | None,
+) -> dict:
+    errors: list[str] = []
+    query, query_errors = membership_ids(
+        root, outcome["query_membership"], "query membership"
+    )
+    errors.extend(query_errors)
+    whole_path, whole_errors = validate_evidence_artifact(
+        root, outcome.get("whole_tissue_manifest", {}),
+        "whole-tissue controller manifest",
+    )
+    errors.extend(whole_errors)
+    if whole_path and not whole_errors:
+        try:
+            whole = json.loads(whole_path.read_text(encoding="utf-8"))
+            if (
+                whole.get("status") != "PASS"
+                or whole.get("phase") != "whole_tissue_partition"
+                or whole.get("formal_membership_written") is not False
+                or whole.get("release_authority_written") is not False
+            ):
+                errors.append("whole-tissue prerequisite is not provisional-only")
+            plan_path, plan_errors = validate_evidence_artifact(
+                root, whole.get("cohort_plan", {}), "whole-tissue cohort plan"
+            )
+            errors.extend(plan_errors)
+            if plan_path and not plan_errors:
+                matches = [
+                    row for row in read_tsv(plan_path)
+                    if row.get("cohort_id") == outcome.get("cohort_id")
+                ]
+                if len(matches) != 1:
+                    errors.append("cohort_id is not unique in the whole-tissue plan")
+                else:
+                    planned = matches[0]
+                    if (
+                        planned.get("source_initial_cluster")
+                        != outcome.get("source_initial_cluster")
+                        or planned.get("membership_sha256")
+                        != outcome.get("query_membership", {}).get("sha256")
+                        or int(planned.get("n_observations", -1)) != len(query)
+                        or planned.get("provisional_broad_after_score_freeze", "")
+                        != outcome.get("provisional_broad_after_score_freeze", "")
+                    ):
+                        errors.append(
+                            "cohort query/provisional record differs from its exact initial-cluster plan"
+                        )
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            errors.append("whole-tissue prerequisite is unreadable")
+    context = outcome.get("context_evidence")
+    if isinstance(context, dict):
+        _, context_errors = validate_evidence_artifact(
+            root, context, "cohort context evidence"
+        )
+        errors.extend(context_errors)
+    if (
+        outcome.get("cohort_type") != "initial_cluster_recluster"
+        or outcome.get("question_mode") != "open_world_identity"
+        or outcome.get("formal_membership_written") is not False
+    ):
+        errors.append("v2.2 cohort must be initial-cluster, open-world and candidate-only")
+    underpowered = outcome.get("terminal_outcome") == "underpowered_not_evaluable"
+    grid = [float(value) for value in outcome.get("candidate_grid", [])]
+    if len(grid) < 3 or len(grid) != len(set(grid)):
+        errors.append("v2.2 cohort grid must contain at least three unique resolutions")
+    if underpowered:
+        if len(query) >= 3:
+            errors.append("underpowered_not_evaluable is restricted to fewer than three observations")
+    else:
+        selected = float(outcome.get("selected_resolution", -1))
+        neighbors = [float(value) for value in outcome.get("resolution_neighbors", [])]
+        if selected not in grid or len(neighbors) != 2 or len({selected, *neighbors}) != 3 or any(value not in grid for value in neighbors):
+            errors.append("selected resolution and two neighbors are not a valid grid subset")
+        observed_resolutions = []
+        for row in outcome.get("resolutions", []):
+            observed_resolutions.append(float(row.get("resolution", -1)))
+            members, member_errors = membership_ids(
+                root, row.get("membership", {}),
+                f"resolution {row.get('resolution')} membership",
+            )
+            errors.extend(member_errors)
+            if members != query:
+                errors.append(f"resolution {row.get('resolution')} differs from query")
+            _, evidence_errors = validate_evidence_artifact(
+                root, row.get("evidence_index", {}),
+                f"resolution {row.get('resolution')} evidence",
+            )
+            errors.extend(evidence_errors)
+        if sorted(observed_resolutions) != sorted(grid):
+            errors.append("resolution records do not cover the candidate grid exactly once")
+    ancestry_path, ancestry_errors = validate_evidence_artifact(
+        root, outcome.get("raw_count_ancestry", {}), "raw-count ancestry"
+    )
+    errors.extend(ancestry_errors)
+    if outcome.get("raw_count_assay") == "SCT":
+        errors.append("v2.2 cohort cannot use SCT corrected counts as raw input")
+    if ancestry_path and not ancestry_errors:
+        try:
+            ancestry = json.loads(ancestry_path.read_text(encoding="utf-8"))
+            expected_ancestry_status = (
+                "UNDERPOWERED_NOT_EVALUABLE" if underpowered else "PASS"
+            )
+            if (
+                ancestry.get("status") != expected_ancestry_status
+                or ancestry.get("raw_count_assay") != outcome.get("raw_count_assay")
+                or ancestry.get("query_membership", {}).get("sha256")
+                != outcome.get("query_membership", {}).get("sha256")
+                or (
+                    not underpowered
+                    and ancestry.get("clustering_path")
+                    != "raw_counts_SCTv2_PCA_SNN_Leiden"
+                )
+            ):
+                errors.append("raw-count ancestry does not bind the cohort query and path")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            errors.append("raw-count ancestry is unreadable")
+    resolved: dict[str, Path] = {}
+    for key in (
+        "second_round_adjudication", "selected_scoring",
+        "selected_cluster_evidence", "fine_candidate_proposals",
+        "state_annotation_proposals", "unmodeled_discovery"
+    ):
+        if key == "state_annotation_proposals":
+            record = outcome.get(key, {})
+            path = path_at(root, record.get("path", "")) if isinstance(record, dict) else None
+            artifact_errors = []
+            if (
+                path is None or not path.is_file()
+                or record.get("sha256") != sha256(path)
+            ):
+                artifact_errors.append(f"{key}: artifact is missing or stale")
+        else:
+            path, artifact_errors = validate_evidence_artifact(
+                root, outcome.get(key, {}), key
+            )
+        errors.extend(artifact_errors)
+        if path:
+            resolved[key] = path
+    adjud_path = resolved.get("second_round_adjudication")
+    if adjud_path:
+        try:
+            adjud = json.loads(adjud_path.read_text(encoding="utf-8"))
+            if (
+                adjud.get("stage") != "cluster_cohort_recluster"
+                or adjud.get("full_catalog_scan") is not True
+                or adjud.get("provisional_broad_visible_during_scoring") is not False
+                or adjud.get("formal_membership_written") is not False
+                or int(adjud.get("n_observations", -1)) != len(query)
+                or adjud.get("source_initial_cluster")
+                != outcome.get("source_initial_cluster")
+                or (
+                    underpowered
+                    and adjud.get("all_candidates_not_evaluable") is not True
+                )
+            ):
+                errors.append("second-round adjudication violates v2.2 boundaries")
+            pending = int(adjud.get("n_pending_local_split", -1))
+            expected_local = pending > 0
+            expected_terminal = (
+                "underpowered_not_evaluable" if underpowered
+                else ("local_split_required" if expected_local else "candidate_partition_complete")
+            )
+            if (
+                bool(outcome.get("local_split_required")) != expected_local
+                or int(outcome.get("n_pending_local_split", -1)) != pending
+                or outcome.get("terminal_outcome") != expected_terminal
+            ):
+                errors.append("cohort terminal outcome differs from local split census")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            errors.append("second-round adjudication is unreadable")
+    if registry_path and registry_path.is_file():
+        matches = [
+            row for row in read_tsv(registry_path)
+            if row.get("cohort_id") == outcome.get("cohort_id")
+        ]
+        if len(matches) != 1:
+            errors.append("cohort outcome must match exactly one registry row")
+        else:
+            registry = matches[0]
+            if (
+                registry.get("source_initial_cluster")
+                != outcome.get("source_initial_cluster")
+                or registry.get("membership_sha256")
+                != outcome.get("query_membership", {}).get("sha256")
+            ):
+                errors.append("cohort registry differs from v2.2 outcome")
+    return {
+        "status": "PASS" if not errors else "FAIL",
+        "artifact": str(outcome_path),
+        "artifact_sha256": sha256(outcome_path),
+        "cohort_id": outcome.get("cohort_id"),
+        "terminal_outcome": outcome.get("terminal_outcome"),
+        "n_query": len(query),
+        "errors": errors,
+    }
+
+
 def _validate_subset_purity(
     root: Path,
     row: dict,
@@ -180,6 +379,8 @@ def validate(root: Path, outcome_path: Path, registry_path: Path | None = None) 
     outcome, errors = validate_json_against_schema(outcome_path, schema)
     if errors:
         return {"status": "FAIL", "artifact": str(outcome_path), "errors": errors}
+    if outcome.get("schema_version") == "2.2":
+        return _validate_v22(root, outcome_path, outcome, registry_path)
     query, query_errors = membership_ids(root, outcome["query_membership"], "query membership")
     errors.extend(query_errors)
     project = _project_config(root)

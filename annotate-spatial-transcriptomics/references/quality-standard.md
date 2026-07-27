@@ -2,56 +2,70 @@
 
 ## Primary endpoint
 
-For spatial spots/cellbins, optimize broad-class correctness, spatial coherence and complete uncertainty handling. Define fine subtypes only when full-feature marker/anti-marker evidence, stable cohort-specific reclustering and morphology agree. A biologically honest broad-only label is a successful endpoint; a weak fine label is not.
+Optimize correct broad identity, plausible spatial anatomy, faithful uncertainty and reproducible shallow subtypes. Cluster count, subtype count and agreement with an older annotation are not endpoints. Broad-only is correct when the query lacks an independent fine discriminator.
 
-Use a shallow-tree default. The number of graph clusters, selected resolutions or DEG tables does not determine the number of biological subtypes. Penalize one-cluster-one-name annotation, literature-name completion and state-only labels presented as lineages. Preserve useful ECM, contractile, stress, low-RNA, ambient and anatomical differences as tags even when several clusters merge into one biological class.
+The first whole-tissue pass is judged only as a stable cohort partition. Annotation quality is judged from the second-round subclusters, local mixed-subcluster resolution, merged broad membership and post-merge review.
 
-Keep the literature checklist, computational cohorts and release taxonomy distinct. Penalize one-cohort-one-label annotation, copying cohort/QC identifiers into the final tree, and adding a literature class after its query-specific gate fails. The report must separate biological broad classes from retained anatomical-interface, QC, technical and pending states.
+## Required evidence
+
+Every released broad class must have:
+
+1. coherent multigene marker-family support on the full-feature query;
+2. compatible DEG and pseudobulk evidence, including competitor/anti-program review;
+3. stability at the selected second-round resolution and its nearest neighbors;
+4. plausible spatial morphology and localization;
+5. a documented source: whole second-round subcluster, supported local subset, local remainder parent or post-merge unlabeled Atlas rescue.
+
+A fine label additionally requires a matching frozen broad parent and an independent child discriminator. State, depth, ECM, stress, hypoxia, cell cycle or generic contractility alone cannot create a fine identity. Low RNA or weak child markers may make a subtype not evaluable without invalidating a coherent broad identity: return the subcluster to its supported parent broad, or to another supported cross-lineage broad, and leave the fine label empty.
 
 ## Method-independent acceptance
 
-Do not optimize a BANKSY, Seurat or Scanpy result to reproduce another method's cell-level labels. If a previous annotation exists, keep it blinded during fitting, resolution selection and writeback. Use it only after freezing the new result as a diagnostic comparison.
+- Freeze `full_object`, `analysis_set`, `excluded_initial_qc` and project-local raw-count ancestry.
+- Keep historical annotation, repair membership, failed diagnostic artifacts and same-batch labels invisible until new membership freezes.
+- Create exactly one second-round cohort per initial cluster, not per provisional broad label.
+- Restart each cohort from non-SCT raw counts and scan the complete open candidate catalog.
+- Permit the second round to reconstruct a broad lineage absent from the first pass.
+- Return a pure second-round subcluster wholesale, including sparse noncontradictory observations.
+- Trigger observation-level splitting only for a documented mixed second-round subcluster.
+- Recompute exact local remainder without converting nonselection into QC.
+- Freeze broad membership only after all cohorts merge into an exact disjoint analysis-set cover.
+- Run Atlas and missing-lineage review only after broad freeze; Atlas may rescue unlabeled broad identities but cannot overwrite a defined label or create fine labels.
+- Audit every present broad, every zero-census catalog lineage, every stable unmodeled program and every parent-by-fine candidate.
+- Convert unresolved biological cells to typed QC only at final materialization.
 
-Comparable annotation quality requires:
+## Failure patterns that block release
 
-1. Exact `full_object`, `analysis_set`, initial-QC and post-clustering-holdout accounting.
-2. Freeze a label-blind, all-candidate broad evidence matrix before initial labels: positive DEG, anti-DEG, winner/runner-up, margin, marker-family coverage, contradictions and technical flags. Paper markers cannot narrow the candidate set after seeing the result.
-3. Per-class cell/bin-level lineage-core, support and anti-program audits on the full-feature object.
-4. Marker, DEG, source/QC composition and spatial morphology review for every large label and every broad/targeted cohort.
-5. Continuous full-catalog signal coverage at the whole-tissue, broad-cohort and targeted-cohort levels. Audit the selected resolution and next two higher available resolutions; retain weak coherent signals across boundaries instead of treating failure of the naming threshold as absence.
-6. Open-world discovery plus strict context gates for ambient-prone identities; rarity alone is not a class or route. Report spatial objects separately from observation counts.
-7. One reclustering cohort for every supported initial broad class, with an underpowered skip allowed only when recorded.
-8. Tiered low-priority RCTD evidence: canonical high plus independent evidence may support fine, moderate returns broad-only, and low enters the frozen QC holdout rather than Atlas.
-9. After terminal QC is frozen, run one calibrated broad-only Atlas mapping over the complete analysis set. `high`/`moderate_only` plus current-query and independent spatial/internal support may directly rescue only QC; `low_reject`, OOD and ontology-conflicted rows do not write back. Defined cells use the mapping only for concordance challenge. Accepted QC returns cannot seed fine discovery. Default held-out precision targets remain 0.90/0.95.
-10. Every material defined-label disagreement and coherent OOD group reopens the complete cluster/cohort exactly once. Atlas alternatives require independent query full-feature evidence to supersede; mixed evidence downgrades or becomes unknown/QC.
-11. A small/local retained interface, or a documented irreducible QC/technical remainder after every applicable route. Large/diffuse retention automatically reopens.
-12. Broad and subtype evidence assets are separate. The subtype tree may be shallow when the data support only broad identities.
-13. A navigable report whose annotation tree, node highlights, DEG, marker dotplots, spatial gene maps, source ancestry and detailed workflow all resolve to audited artifacts.
-14. A complete parent-specific subtype parsimony audit showing that every machine-actionable child of every present parent was supported, refuted or found not evaluable, and that every released fine label adds a reproducible discriminator program beyond its parent. Unsupported splits are merged and retained as state tags; broad-only remains a valid audited endpoint.
-15. A taxonomy/cohort audit showing that every release label passed its own gate, every unsupported plausible literature class has a negative audit, and no routing/technical state enters biological DEG or marker discovery.
-16. Content-schema validation for every prelabel freeze, cohort outcome, direct return and broad/fine support record. Artifact existence alone, empty evidence and status-only placeholders fail.
-17. Exact observation-level partition closure through global Atlas query coverage, frozen-QC accepted/rejected writeback, defined-label review closure and the final annotation.
-18. A post-Atlas query-derived broad-class completeness audit: present classes pass full-membership expression/spatial/purity review, while every zero-census default tissue lineage has a multichannel negative audit independent of Atlas.
-19. Every expression object used as query evidence is project-local and hash-bound to its raw counts, analysis set and parent artifact; cross-project derived expression is reference-only and explicitly registered.
+- Granulosa, Epithelial, Smooth muscle or another restricted lineage expands diffusely through an anatomically incompatible compartment.
+- A mixed subcluster is assigned wholesale from its aggregate winner despite an independent competitor.
+- Epithelial is inferred from one keratin/surface marker or a single spatial component.
+- Smooth muscle is inferred from `ACTA2/TAGLN` without mature nonvascular contractile identity or mural exclusion.
+- Vascular wall cells are released as Smooth muscle rather than `Vascular-associated`.
+- Oocyte is expanded by zona/ambient signal instead of a coherent canonical cluster.
+- A common ovarian lineage is declared absent despite a repeatable multigene spatial program.
+- A stable catalog-external program is silently forced into the nearest known label.
+- First-pass provisional labels, failed diagnostics or a historical annotation contribute runtime membership.
+- Final QC is at least 10% or 50,000 observations without returning to the contributing second-round/post-merge biological problem.
 
-## Large-label purity trigger
+## Stability
 
-A convincing cluster-level DEG does not validate every observation in that cluster. Reopen a large direct label when a cell-level lineage backbone is sparse, anti-programs dominate, spatial distribution is too broad for the proposed identity, or a small coherent lineage appears embedded in a resident class. Freeze only the coherent cells; return the remainder directly to a supported broad lineage, a targeted cohort, or QC.
+Technical determinism requires identical partitions, memberships and semantic hash for identical input, contract and seed.
 
-Do not reduce purity to “target fraction is slightly larger than competitor fraction.” Whole-subcluster returns require an absolute support floor and minimum margin. Mixed clusters may yield several disjoint observation-level returns; each exact subset must pass its own complete-catalog numerical, full-feature, spatial and cross-resolution evidence, and the remainder must be rescored without parent-label inheritance. Read `observation-subset-writeback.md`.
+Parameter robustness is evaluated with neighboring reasonable resolutions, PCs +/-5 and k +/-20%. All broad classes occupying at least 1% must remain present; no new or missing >=1% broad class is allowed; broad census Spearman must be at least 0.95; major broad spatial Dice must be at least 0.80; major fine labels must retain the same parent and core biological program. Rare lineages are reviewed by program and anatomy rather than prevalence alone.
 
-The purity trigger and rare-lineage recall use the same persistent signal ledger. Every cohort remains open to cross-lineage evidence. An embedded lineage that was subthreshold at the whole-tissue pass is a tracked hypothesis, not a rejected class; a coherent recurrence in a subcluster must reopen broad-class construction.
+## External comparison
 
-Use observation-level core/support/anti hits and local spatial connected components inside large labels. A coherent program occupying only 1–5% of a parent label is not refuted by a weak parent-cluster average. It enters `watch/candidate` and receives one bounded targeted recall. More graph clusters without improved lineage separation and anti-program clearance do not constitute rescue.
+A previous annotation is loaded only after the new result freezes. Compare broad census, follicular/vascular/surface anatomy, major subtype programs and failure patterns. Exact cell counts and cellbin equality are not required. The comparison is an external acceptance test, never a runtime classifier or Atlas.
 
-## Unresolved-fraction trigger
+## Sheep-ovary biological endpoints
 
-Do not impose a universal annotation-rate quota. Treat any large or spatially diffuse interface/QC/pending fraction as a mandatory evidence audit. After broad/targeted cohorts are terminal, freeze residual QC once and run the calibrated all-cell broad concordance pass without QC reclustering. Report the complete mapping denominator, frozen-QC accepted/rejected outcomes, defined-label disagreements and OOD groups separately.
+For sheep ovary, reduce final biological approval to three required questions:
 
-## Forward-test target
+1. Is the complete membership of every released cell type spatially and molecularly plausible?
+2. Is Oocyte supported by a complete canonical group and reconstructable objects without zona/ambient expansion?
+3. Where follicles are present, are stage-appropriate follicle ROIs interpretable, and do large/antral candidates show a cavity-bounding Granulosa layer followed by Theca-interna steroidogenesis with interleaved vasculature and an outer fibromuscular/stromal transition?
 
-A fresh Agent receives raw inputs, biological context and this Skill, but not the intended clustering or final labels. It must autonomously discover inputs, select/adapt resolutions, submit and repair jobs, reopen overbroad labels, route uncertainty, write immutable state and build the complete report with only genuinely blocking user questions. Evaluate evidence completeness and biological safety first; historical label agreement is a blind secondary diagnostic.
+Run the deterministic sheep-ovary biological-quality review after broad freeze and Atlas. A sample without follicles or without antral follicles may close the corresponding structure as `NOT_EVALUABLE`; absence is not a failure. A coherent multisector lineage program hidden inside generic Stromal/unresolved is an iteration trigger. Reopen only the exact source subcluster or bounded follicle ROI. Spatial shape alone never writes a label.
 
-## Post-completion main-Agent approval
+## Main-Agent approval
 
-For every sample, the main conversation Agent performs one biological quality approval only after all broad/targeted cohorts, direct returns, all-cell Atlas concordance/OOD review, residual-QC writeback, final label materialization and the completion gate have finished. The completion gate proves workflow closure; the approval does not repeat it. Review broad-label reasonableness, marker/anti-marker plus spatial support, context-gated/confounded lineage safety, and whether the result reaches the evidence quality of the validated deidentified reference strategy. Exact label/count agreement and equally deep subtypes are not required. A result may pass with documented concerns; a material biological error returns the same sample worker to targeted iteration. User confirmation and final assets remain blocked until this approval passes.
+After computational completion, the main Agent reviews broad spatial reasonableness, marker/anti-marker evidence, missing-lineage audit, fine-parent consistency and retained QC. The user sees a lightweight review report before final release assets are generated.

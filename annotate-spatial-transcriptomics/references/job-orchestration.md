@@ -31,6 +31,7 @@ Never request many scheduler CPUs for a stage that is actually single-threaded. 
 - `FindAllMarkers` in current Seurat releases iterates clusters serially. A job that calls it directly is single-threaded unless the wrapper explicitly parallelizes independent clusters/resolutions. Request one CPU, or split independent comparisons into scheduler jobs/fork workers with disjoint outputs and a validated aggregation step.
 - `RunUMAP(..., umap.method="uwot")` uses `future::nbrOfWorkers()` as its thread count in Seurat 5.5. Record that count and prevent nested BLAS/OpenMP oversubscription.
 - When memory duplication makes process parallelism unsafe, reduce both workers and requested CPUs together and record the reason. Reserving idle CPUs is not an acceptable memory strategy.
+- For a whole-tissue, full-catalog lineage-controller run with at least 200,000 observations, request 64 HNAICC CPUs by default and pass `--subset-workers 64`. The canonical subset writer parallelizes independent candidate spatial-component searches within each source cluster with `parallel::mclapply`; its effective concurrency is capped by the number of catalog candidates. Smaller inputs should request the measured worker count instead. Do not apply this 64-core default to serial Seurat, report, validator or writeback stages.
 
 After completion, compare observed CPU time with wall time. A multi-core request whose CPU/wall ratio remains close to one is a resource-audit failure: preserve the run, correct future submissions and do not copy that allocation into templates.
 
@@ -49,12 +50,12 @@ name. `Ann` is the execution attempt and increments after a preserved failure.
 | P00 | INPUT | input inspection/snapshot |
 | P10/P11 | SCT/SCTQC | SCT preprocessing and its validation |
 | P20/P21 | RESGRID/RESEVID | resolution grid and candidate evidence |
-| P30 | BROAD | broad-class evidence/adjudication compute |
-| P40/P41 | COHORT/TARGET | broad-class or targeted cohort reclustering/validation |
+| P30 | PARTITION | provisional whole-tissue cohort partition evidence |
+| P40/P41 | COHORT/LOCAL | initial-cluster cohort reclustering or triggered local mixed-subcluster validation |
 | P50/P51 | RCTD/ATLAS | reference-assisted routes |
 | P60 | RARE | legacy job-name compatibility only; do not create a generic rare-cell route |
 | P61 | CONTEXT | open-world lineage audit or triggered Oocyte/context-specific validation |
-| P70/P75 | WRITEBACK/CONFIRM | atomic writeback, lightweight confirmation spatial/dotplot assets, frozen support report and user gate |
+| P70/P75 | MERGE/CONFIRM | broad merge/freeze, lightweight confirmation spatial/dotplot assets, frozen support report and user gate |
 | P80/P81/P82 | FINALDEG/DOTPLOT/SPATIAL | confirmed final release assets |
 | P90/P99 | REPORT/AUDIT | report assembly and release audit |
 

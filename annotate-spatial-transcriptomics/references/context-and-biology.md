@@ -1,6 +1,6 @@
 # Biological context and tissue profiles
 
-Collect species, tissue, stage/condition, platform, observation unit, section anatomy, biological questions and reference datasets before choosing broad/targeted cohorts or subtype resolutions. Missing age/cycle information must reduce confidence for stage-specific ovarian labels.
+Collect species, tissue, stage/condition, platform, observation unit, section anatomy, biological questions and reference datasets before selecting the whole-tissue partition or second-round cohort resolutions. Missing age/cycle information must reduce confidence for stage-specific ovarian labels.
 
 After input inspection, run `scripts/resolve_workflow_profile.py`. Sheep/Ovis/ovine/羊 plus ovary/ovarian/卵巢 selects the sheep-ovary profile; a readable full-feature Seurat RDS selects the R workflow, and confirmed StereoPy `cellbin_PPed` provenance plus a full-feature `Spatial` assay activates the fixed SCT+BANKSY batch preprocessing contract. Resolver output is workflow provenance only and cannot assign cell identities.
 

@@ -95,10 +95,10 @@ needed, which is why a running SCT+BANKSY job may not encounter the issue yet.
 ## Parameters that remain adaptive
 
 Batch harmonisation does not mean copying biological decisions. The following
-must be selected from each sample or broad/targeted cohort:
+must be selected from each sample or initial-cluster cohort:
 
-- the final broad-class resolution;
-- cohort membership and anchor composition;
+- the stable whole-tissue cohort-partition resolution;
+- exact initial-cluster cohort membership;
 - cohort-specific resolution grids and the selected cohort resolution;
 - the number of PCs for small cohorts when fewer than 30 are supported;
 - biological labels, merges, subtypes and confidence.
@@ -112,11 +112,9 @@ fewer than 100 observations. Rare oocyte, immune, endothelial or epithelial
 populations may be small. Record a `small_cluster_review` flag and adjudicate it
 biologically.
 
-## Broad-class and targeted-cohort profile
+## Second-round initial-cluster cohort profile
 
-Each cohort reclustering begins again from the parent object's `Spatial` counts. When
-anchors are present, anchors and query are jointly SCT/PCA fitted, while the
-neighbour graph, Leiden clusters, UMAP and DEG are query-only.
+Each cohort reclustering begins again from the current project's non-SCT raw counts, preferring `RNA` then `Spatial`. Do not SCTransform corrected SCT counts. The neighbour graph, Leiden clusters, UMAP, DEG and pseudobulk are query-only.
 
 Use these defaults:
 
@@ -126,15 +124,13 @@ Use these defaults:
 - 1,500 SCT variable features for a cohort below 1,000 observations, otherwise
   3,000; a balanced-anchor round may use 2,500 below 5,000 joint observations
   and 3,500 otherwise when the richer anchor boundary requires it;
-- at most 30 PCs for ordinary cohorts, at most 25 for shallow immune cohorts, and
-  at most 15 for the Oocyte targeted cohort, constrained by cohort size and feature
-  rank;
+- at most 30 PCs for ordinary cohorts, adapted downward for small cohorts and constrained by cohort size and feature rank;
 - adaptive `k=min(30, max(5, floor(sqrt(n_query))))`; cap strict oocyte
   candidates at 20;
 - Annoy cosine neighbours with 50 trees and Leiden algorithm 4;
 - UMAP cosine with `min.dist=0.3`; `0.2` may be used for strict small oocyte
   candidates;
-- for sheep ovary, run the complete formal grid `0.1,0.2,0.3,0.4,0.6` in every broad/targeted cohort and choose the final value from current-cohort evidence. Pass `--resolution-contract sheep_ovary`; adapt PCs and k, not the formal resolution candidates. A value below 0.1 is a graph-repair trigger, not an analysis candidate. Final QC is not reclustered.
+- for sheep ovary, run `0.1,0.2,0.3,0.4,0.6` in every initial-cluster cohort and choose from current-cohort evidence. Compare nearest neighboring resolutions; at a grid edge use the two nearest. Pass `--resolution-contract sheep_ovary`; adapt PCs and k, not the candidate grid. A value below 0.1 is a graph-repair trigger. Final QC is not reclustered.
 
 The portable `scripts/run_seurat_cohort_recluster.R` exposes these controls. Its
 default SCT route fails closed if `glmGamPoi` is unavailable; silently changing

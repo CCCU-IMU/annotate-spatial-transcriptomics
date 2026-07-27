@@ -1,44 +1,71 @@
-# Direct-lineage annotation controller
+# Staged second-round annotation controller
 
-This is the default architecture for every new project. Active entities are `broad_class_recluster cohort`, `targeted_recluster cohort`, `direct return` and `terminal residual QC`. Retired controller registries remain readable only for migration.
+`run_lineage_controller.py` is the only formal entry and the only chain that may ultimately create release membership. The controller binds its scripts, candidate catalog, profiles, inputs, seed and artifact roles in the annotation contract.
 
-## Ordered state machine
+## Authority by phase
 
-1. **Whole-tissue proposal and prelabel freeze.** Select a defensible broad resolution. For BANKSY, the selection question is explicitly whole-tissue broad-class recall/purity: review every formal resolution for full-catalog recall, zero-census default lineages, embedded programs inside large clusters, marker/DEG coherence, spatial morphology, technical fragmentation and adjacent-resolution migration. Cluster count is never the selection target. Before loading paper labels or a favored interpretation, freeze full-feature positive DEG, anti-DEG, technical flags and simultaneous evidence for every eligible broad lineage. Record winner, runner-up, margin and contradictions with `prelabel_broad_evidence.schema.json`.
-2. **Initial broad decisions.** Review the frozen matrix against the open-world catalog. The initial partition establishes supported coarse resident compartments and does not have to expose every final lineage. First validate that every default lineage exposes at least two explicit positive marker families. Assign a moderate-or-higher `initial_broad_label` only when the machine-derived decision table recomputes a positive winner margin, absolute full-feature detection/pseudobulk supports its backbone and support family, and alternatives/anti-programs are cleared. Return an informative mixed cluster to its dominant supported parent and retain coherent subthreshold alternatives as `watch`; only genuinely low-information, featureless or irreducibly mixed observations enter `qc_holdout`.
-3. **One broad cohort per class.** Freeze one immutable `broad_class_recluster` membership for every initial broad class. Run its complete active grid and choose the integrated-evidence optimum for the purity/subtype question. A single stable population is a successful `homogeneous_parent_confirmed` endpoint, never an under-split failure. A genuinely underpowered class may close `not_applicable_reviewed` with a hash-bound evidence artifact and remain broad-only.
-4. **Adjudicate every subcluster and supported subset.** A coherent high-confidence program may receive one shallow fine label. Parent identity alone is not evidence. Whole-subcluster writeback is only a high-purity fast path: require a machine-derived positive-margin winner, two positive families, contradiction clearance, an absolute lineage-support floor and a minimum purity margin. For a mixed subcluster, follow `observation-subset-writeback.md`: freeze one or more disjoint exact observation subsets only after their own complete-catalog/full-feature/spatial/cross-resolution evidence passes, then independently rescore the exact remainder. The aggregate subcluster winner does not veto an independently supported subset. State-only fragmentation may merge only after the returned membership itself passes.
-   At the selected resolution and the next two higher available candidates, every subcluster is rescored against the complete open-world lineage catalog plus unexplained coherent multi-gene programs. The cohort parent is not a prior and must not narrow the candidates.
-5. **Direct cross-lineage return.** If a subcluster coherently supports another lineage, write it directly to that broad class or high-confidence fine label. Preserve source cohort, subcluster, membership hash, evidence and state/spatial tags. Do not create an intermediate cohort and do not automatically recluster it with the target class.
-6. **Targeted cohort only when decision-relevant.** Create one immutable `targeted_recluster` cohort only for a local, interpretable mixture, contamination boundary or context-gated identity that cannot be adjudicated from the existing broad cohort. It must state the competing hypotheses and stop after answering that question.
-7. **Optional RCTD/reference assistance.** Use only when a local interface has an appropriate reference and machine-readable applicability record. Canonical high confidence plus independent marker/anti-marker, resolution and spatial evidence may support a fine return; moderate confidence supports broad-only; low enters `qc_holdout`.
-8. **Terminal all-cell Atlas pass.** After all broad and targeted cohorts are terminal, freeze residual `qc_holdout`, then map the complete analysis set once to a calibrated broad-only Atlas with OOD outputs. Use the same result for QC rescue and defined-label concordance.
-9. **State-aware routing.** An unlabeled frozen-QC observation with calibrated moderate-or-higher non-OOD Atlas support and no ontology/profile-scope conflict returns broad-only. Calibration already represents the validated confidence gate; marker/anti-marker and spatial channels audit or challenge coherent groups rather than becoming a duplicate per-cell prerequisite. Defined labels that agree close immediately; weak differences are logged. Material broad disagreement, material ontology conflict after crosswalk inspection or coherent OOD reopens the complete cluster/cohort for one query-evidence review. Atlas alone cannot overwrite a defined label.
-10. **Query-derived broad-class completeness review.** After Atlas, audit every present class for complete-membership expression/spatial validity and observation-level purity. Enumerate every source writeback so a low-purity whole-cluster expansion cannot be hidden by the final-class average. Audit the complete machine-actionable fine-candidate catalog for every present parent; zero subtypes is valid only after candidates were tested. Audit every zero-census default tissue lineage using all-cell programs, selected-plus-two-higher scans, embedded large-label components, QC/OOD, morphology and technical missingness. Atlas cannot establish absence. Residual QC at least 10% or 50,000 observations automatically reopens upstream broad-recall review and cannot be closed solely as Atlas low confidence.
-11. **Single final annotation.** Every analysis-set observation has one moderate-or-higher final broad label with an optional high-confidence fine label, or an explicit retained QC/technical/unknown state.
+1. `whole_tissue_partition` creates only a stable initial-cluster partition and provisional cohort plan.
+2. `cluster_cohort_recluster` independently reclusters every initial cluster from project-local non-SCT raw counts and freezes full-catalog subcluster evidence.
+3. `local_mixed_subcluster_split` resolves only second-round subclusters with two or more separable competing identity cores.
+4. `merge_and_freeze_broad` merges mutually exclusive second-round outcomes and creates formal broad membership.
+5. `atlas_and_completeness_review` maps all cells at broad level, rescues only unlabeled cells and audits present, absent and unmodeled lineages.
+6. `materialize_final_release` parent-locks fine labels, preserves states and converts terminal unresolved observations to typed QC.
 
-## Cohort semantics
+The first phase has no release authority. It cannot emit formal broad, fine, QC or release membership. Artifacts registered as `failed_diagnostic` cannot enter any phase as membership or reference truth.
 
-A cohort is a frozen computational query boundary for one question. It has no biological name, cannot become a report node and cannot collect unrelated unresolved cells over time. A direct return closes the source question. Re-entering a completed cohort requires a versioned successor and an explicit new scientific question.
+`cluster_cohort_recluster` may reuse a controller-generated `derived_partition_cache` only when the frozen input, exact cohort membership, resolution grid/contract, seed and clustering-script fingerprints are identical. Cache reuse skips raw-count SCT/PCA/SNN/Leiden fitting but reruns full-catalog scoring, resolution selection and adjudication. The cache carries no label authority and cannot originate under `failed_diagnostic`.
 
-## Continuous lineage-signal memory
+## Whole-tissue partition
 
-Whole tissue, every broad-class cohort and every targeted cohort are mandatory open-world scan boundaries. Record the exact cluster universe at the selected resolution plus the next two higher available resolutions, then create one catalog scan row per cluster and candidate lineage. Also record coherent programs not represented in the catalog.
+Choose a stable resolution that preserves major anatomy without obvious technical fragmentation. The purpose is one initial cluster to one second-round cohort, not complete lineage separation. Store `provisional_broad`, `mixed` or `unknown`, plus candidate/competitor/watch programs. Observation scores may describe those programs but cannot assign formal cells.
 
-`absent`, `watch`, `candidate`, `supported` and `refuted` are evidence states, not labels. Any positive marker-family evidence makes `absent` invalid. A `watch` signal is deliberately below the naming threshold but remains active across later boundaries. It closes only after support/writeback or explicit multichannel refutation using positive families, anti-programs, cross-resolution persistence, spatial morphology and technical alternatives. Failure to reach an initial broad-label threshold is never itself a refutation. Atlas evidence cannot close the query-derived signal ledger.
+All `analysis_set` members must occur exactly once in `whole_tissue_cohort_plan.tsv`. Provisional fields are withheld from the second-round scorer and resolution selector.
 
-Every large boundary (default: at least 10% of the analysis set or 50,000 observations) receives a purity audit even when its aggregate DEG supports the parent. Completion fails if any required boundary/catalog product is missing, any unexplained-program audit is absent, or any `watch`/`candidate`/`supported` signal is unresolved.
+## Second-round cohort annotation
 
-## Completion contract
+Every initial cluster, including an apparently pure one, runs:
 
-`validate_direct_lineage_workflow.py` must verify:
+`project-local raw counts -> SCT v2/glmGamPoi -> PCA -> query-only SNN -> Leiden grid`
 
-- each initial broad class has a terminal broad cohort or reviewed underpowered skip;
-- every cohort and direct return has immutable membership and evidence;
-- broad/fine confidence and RCTD ceilings are respected;
-- the global Atlas query equals the analysis set, its frozen QC submembership equals terminal residual QC, and only QC predictions can write broad labels directly;
-- all material defined-label disagreements, ontology conflicts and OOD triggers have exactly one orthogonal review decision;
-- a single final annotation accounts for the whole analysis set.
-- every whole-tissue/broad/targeted boundary passed complete catalog-by-cluster coverage, selected-plus-two-higher cross-resolution review, unexplained-program review and explicit signal closure.
+Never run SCTransform on SCT corrected counts. Never substitute whole-tissue BANKSY graph parameters for cohort PCs/k. Evaluate the complete grid, select by identity-program separation, anatomy, neighboring-resolution stability and absence of technical/state fragmentation, and scan every selected subcluster against the complete open catalog plus unexplained programs.
 
-Only after this audit, state/taxonomy/completion gates and main-Agent quality approval pass may the lightweight confirmation report be shown to the user. Full DEG/figures/report wait for explicit confirmation.
+The provisional parent must not narrow the candidates. **Direct cross-lineage return** and missing-broad reconstruction remain available to every second-round subcluster until full-catalog scores are frozen.
+
+Only after scores freeze may the controller read the provisional record and name an outcome `parent_return`, `cross_lineage_return`, `missing_broad_reconstruction`, `fine_candidate`, `state_annotation`, `unmodeled_lineage_candidate` or `unresolved_biological`. An underpowered cohort is explicitly `underpowered_not_evaluable`; it never inherits the first-pass name silently.
+
+A coherent high-purity subcluster may return wholesale. Sparse noncontradictory members inherit its broad identity. Dropout alone is not QC.
+
+Resolve broad identity before fine identity. If no independent child discriminator is evaluable, return the supported parent or cross-lineage broad and leave fine empty. When many small subclusters are marker-poor or unresolved, review the nearest lower resolution before accepting biological uncertainty.
+
+## Local mixed-subcluster resolution
+
+Observation-level splitting is a conditional local operation, not an all-object classifier. Two independently supported identity cores, or one specific core embedded in a generic parent, trigger a bounded separability check. Do not require positive whole-subcluster DEG: a real minority identity can be diluted by the parent. Write a subset only after observation discriminators, candidate-local pseudobulk/DEG, space or neighboring partitions demonstrate separable members; otherwise retain the supported parent and keep the alternative as watch.
+
+Each candidate independently proposes a spatial/expression subset. Resolve overlap with normalized evidence, pairwise discriminators and anti-programs. Specific lineages precede generic Stromal remainder. Ambiguous overlaps remain with a supported common parent or `unresolved_biological`; candidate ordering cannot assign them.
+
+Group thresholds validate a proposed component and never admit individual observations. Exact remainder closure is scoped to the source subcluster, preserves original scores, permits one additional extraction and never converts “not selected” into QC.
+
+## Broad freeze and final review
+
+After every initial-cluster cohort closes, merge whole-subcluster returns, supported local subsets and local parent remainders. Require an exact disjoint cover of `analysis_set`; unresolved conflicts stay biological. Only this phase freezes formal broad membership.
+
+Fine proposals become labels only under the matching frozen broad parent. State annotations remain separate from identity. The single all-cell Atlas pass occurs after broad freeze: it may rescue unlabeled moderate-or-higher, non-OOD, profile-compatible cells, but cannot silently overwrite a defined broad or create fine labels. Material conflicts reopen the complete source cohort once for query-derived evidence review.
+
+Present/zero-census lineages, embedded programs, unmodeled programs and the complete parent-by-fine catalog are audited after merge. A post-merge component that passed its own strict multi-family and spatial validation counts as source-linked local evidence even when the source subcluster aggregate diluted it. An anatomical parent override additionally requires an independently detected target-parent program in that same selected second-round subcluster; neighborhood or morphology alone cannot change identity, and an unsupported override remains `unresolved_biological`. Residual QC limits apply only during final materialization.
+
+For sheep ovary, a post-Atlas follicle-histology failure may trigger one canonical bounded iteration only when all open biological issues are tied to explicit follicle ROI IDs. Rebuild every affected ROI from the selected input's non-SCT raw-count assay through SCT/PCA/SNN/Leiden, score the full catalog, and authorize writeback only for typed failing wall layers. Direct coherent Theca, vascular and mature nonvascular Smooth-muscle identities compete before the generic Stromal remainder. Merge fresh ROI scores into the complete disjoint score ledger and rerun the biological validator on the full membership. A cropped ROI review cannot close Oocyte, other broad classes or whole-section spatial localization.
+
+## Determinism and completion
+
+Use stable ID sorting, a fixed master seed and deterministic per-resolution/per-cohort derived seeds. Identical input, contract and seed must yield identical partitions, membership and semantic hash. Completion additionally requires biological equivalence under neighboring resolution, PCs +/-5 and k +/-20% perturbations.
+
+`validate_lineage_controller_release.py` verifies:
+
+- no first-pass formal membership;
+- exactly one second-round cohort per initial cluster;
+- project-local raw-count ancestry and full-catalog evidence;
+- local splitting only behind a recorded mixed-subcluster trigger;
+- exact disjoint broad coverage at merge;
+- post-merge-only Atlas, fine and QC authority;
+- one raw-count, typed, bounded follicle iteration with full-membership revalidation;
+- typed residual reasons, completeness closure and final semantic hash.

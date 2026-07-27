@@ -51,6 +51,58 @@ def main() -> int:
     state = args.project_root / "state"
     config_path = args.project_root / "config/project.json"
     config = json.loads(config_path.read_text()) if config_path.exists() else {}
+    annotation_contract_path = args.project_root / "config/annotation_contract.json"
+    try:
+        annotation_contract = json.loads(
+            annotation_contract_path.read_text(encoding="utf-8")
+        ) if annotation_contract_path.is_file() else {}
+    except json.JSONDecodeError:
+        annotation_contract = {}
+    if annotation_contract.get("skill_release_version") == "2.2.0":
+        errors: list[str] = []
+        validation_path = args.project_root / "provenance/lineage_controller_release_validation.json"
+        try:
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            validation = {}
+            errors.append("v2.2 staged controller release validation is missing")
+        if validation.get("status") != "PASS":
+            errors.append("v2.2 staged controller release validation did not pass")
+        if validation.get("annotation_contract_sha256") != sha256(annotation_contract_path):
+            errors.append("v2.2 staged controller release validation is stale")
+        analysis_path = Path(str(annotation_contract.get("input_scope", {}).get("analysis_set", {}).get("path", "")))
+        final_path = Path(str(validation.get("final_membership", {}).get("path", "")))
+        analysis_ids = (
+            {row.get("cell_id", "") for row in rows(analysis_path)}
+            if analysis_path.is_file() else set()
+        )
+        final_rows = list(rows(final_path)) if final_path.is_file() else []
+        final_ids = [row.get("cell_id", "") for row in final_rows]
+        if not analysis_ids or set(final_ids) != analysis_ids or len(final_ids) != len(set(final_ids)):
+            errors.append("v2.2 final membership does not exactly cover analysis_set")
+        for index, row in enumerate(final_rows, 2):
+            broad = str(row.get("final_broad_label", ""))
+            fine = str(row.get("final_fine_label", ""))
+            state_value = str(row.get("final_state", ""))
+            if fine and (not broad or state_value != "defined_fine"):
+                errors.append(f"final membership line {index}: fine label violates broad parent/state")
+            if not broad and state_value != "qc_holdout":
+                errors.append(f"final membership line {index}: unlabeled member is not typed residual QC")
+            if state_value == "qc_holdout" and not row.get("qc_reason"):
+                errors.append(f"final membership line {index}: residual QC lacks typed reason")
+        result = {
+            "status": "PASS" if not errors else "FAIL",
+            "workflow_model": "initial_cluster_second_round_primary",
+            "errors": errors,
+            "validated_files": {
+                str(final_path): sha256(final_path) if final_path.is_file() else "",
+            },
+        }
+        out = args.project_root / "provenance/state_validation.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if not errors else 1
     workflow_required = bool(config.get("annotation_workflow_completion_required", config.get("multi_route_completion_required")))
     direct_workflow = config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts", "direct_cross_lineage_recluster_cohorts_global_atlas"}
     cell_ledger = args.cell_ledger

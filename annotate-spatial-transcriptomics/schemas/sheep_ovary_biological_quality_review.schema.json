@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sheep_ovary_biological_quality_review.schema.json",
+  "title": "Sheep ovary biological quality review",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "artifact_role",
+    "formal_membership_written",
+    "diagnostic_legacy_score_adapter_used",
+    "geometry_can_trigger_review_but_cannot_assign_labels",
+    "membership",
+    "candidate_catalog",
+    "observation_score_files",
+    "quality_endpoints",
+    "required_next_action_n",
+    "required_next_actions"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.2"},
+    "status": {"enum": ["PASS", "ITERATION_REQUIRED"]},
+    "artifact_role": {"const": "biological_quality_review"},
+    "formal_membership_written": {"const": false},
+    "diagnostic_legacy_score_adapter_used": {"type": "boolean"},
+    "geometry_can_trigger_review_but_cannot_assign_labels": {"const": true},
+    "membership": {"$ref": "#/$defs/artifact"},
+    "candidate_catalog": {"$ref": "#/$defs/artifact"},
+    "observation_score_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "spatial_scale": {"type": "number", "exclusiveMinimum": 0},
+    "quality_endpoints": {
+      "type": "object",
+      "required": [
+        "spatial_celltype_localization",
+        "oocyte_annotation_quality",
+        "follicle_roi_histology"
+      ],
+      "properties": {
+        "spatial_celltype_localization": {
+          "allOf": [
+            {"$ref": "#/$defs/endpoint"},
+            {
+              "type": "object",
+              "required": ["present_broad_n", "review"],
+              "properties": {
+                "present_broad_n": {"type": "integer", "minimum": 0},
+                "review": {"$ref": "#/$defs/artifact"}
+              }
+            }
+          ]
+        },
+        "oocyte_annotation_quality": {
+          "allOf": [
+            {"$ref": "#/$defs/endpoint"},
+            {
+              "type": "object",
+              "required": [
+                "final_oocyte_n",
+                "canonical_supported_group_n",
+                "spatial_object_n",
+                "edge_location_used_as_negative_evidence",
+                "review"
+              ],
+              "properties": {
+                "final_oocyte_n": {"type": "integer", "minimum": 0},
+                "canonical_supported_group_n": {"type": "integer", "minimum": 0},
+                "spatial_object_n": {"type": "integer", "minimum": 0},
+                "edge_location_used_as_negative_evidence": {"const": false},
+                "review": {"$ref": "#/$defs/artifact"}
+              }
+            }
+          ]
+        },
+        "follicle_roi_histology": {
+          "allOf": [
+            {"$ref": "#/$defs/endpoint"},
+            {
+              "type": "object",
+              "required": [
+                "follicle_roi_n",
+                "antral_roi_n",
+                "antral_cavity_status",
+                "roi_review",
+                "candidate_recall",
+                "layer_hierarchy",
+                "roi_membership"
+              ],
+              "properties": {
+                "follicle_roi_n": {"type": "integer", "minimum": 0},
+                "antral_roi_n": {"type": "integer", "minimum": 0},
+                "antral_cavity_status": {
+                  "enum": ["PASS", "ITERATION_REQUIRED", "NOT_EVALUABLE"]
+                },
+                "roi_review": {"$ref": "#/$defs/artifact"},
+                "candidate_recall": {"$ref": "#/$defs/artifact"},
+                "layer_hierarchy": {"$ref": "#/$defs/artifact"},
+                "roi_membership": {"$ref": "#/$defs/artifact"}
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "required_next_action_n": {"type": "integer", "minimum": 0},
+    "required_next_actions": {"$ref": "#/$defs/artifact"}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256", "n_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "n_bytes": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "endpoint": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["PASS", "ITERATION_REQUIRED", "NOT_EVALUABLE"]},
+        "rationale": {"type": "string"}
+      }
+    }
+  }
+}

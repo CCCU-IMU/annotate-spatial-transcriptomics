@@ -36,6 +36,56 @@ def write_tsv(path: Path, fields: list[str], rows: list[dict]) -> None:
 
 
 class V2ContractTests(unittest.TestCase):
+    def test_failed_diagnostic_snapshot_cannot_become_runtime_input(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "config").mkdir(); (root / "state").mkdir(); (root / "provenance").mkdir()
+            (root / "config/project.json").write_text(json.dumps({
+                "framework_version": "2.0.0", "project_id": "p", "sample_id": "s"
+            }))
+            failed_root = root / "failed_A08"
+            failed_root.mkdir()
+            source = failed_root / "input.rds"
+            source.write_text("diagnostic")
+            write_tsv(
+                root / "state/input_snapshot_registry.tsv",
+                ["snapshot_id", "sample_id", "path", "kind", "size_bytes", "sha256", "status", "created_at"],
+                [{
+                    "snapshot_id": "bad", "sample_id": "s", "path": str(source),
+                    "kind": "rds", "size_bytes": str(source.stat().st_size),
+                    "sha256": sha(source), "status": "frozen", "created_at": "now",
+                }],
+            )
+            write_tsv(
+                root / "provenance/failed_diagnostic_artifact_registry.tsv",
+                ["artifact_id", "artifact_root", "artifact_role"],
+                [{"artifact_id": "A08", "artifact_root": str(failed_root), "artifact_role": "failed_diagnostic"}],
+            )
+            analysis = root / "analysis.tsv"; excluded = root / "excluded.tsv"
+            write_tsv(analysis, ["cell_id"], [{"cell_id": "c1"}])
+            write_tsv(excluded, ["cell_id"], [])
+            grid = root / "grid.json"
+            grid.write_text(json.dumps({"candidate_resolutions": [0.2, 0.4, 0.8]}))
+            partitions = root / "partitions.tsv"
+            write_tsv(
+                partitions, ["cell_id", "resolution", "cluster"],
+                [
+                    {"cell_id": "c1", "resolution": str(resolution), "cluster": "0"}
+                    for resolution in (0.2, 0.4, 0.8)
+                ],
+            )
+            result = run(
+                SCRIPTS / "build_annotation_contract_v2.py", root,
+                "--workflow-profile", WORKFLOW, "--biological-profile", PROFILE,
+                "--candidate-catalog", CATALOG, "--analysis-membership", analysis,
+                "--excluded-initial-qc", excluded, "--snapshot-id", "bad",
+                "--whole-tissue-method", "BANKSY", "--whole-tissue-grid", "0.2,0.4,0.8",
+                "--grid-source", "bound_upstream_input", "--whole-tissue-grid-artifact", grid,
+                "--whole-tissue-partitions", partitions,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("failed_diagnostic", result.stdout + result.stderr)
+
     def test_annotation_contract_separates_banksy_and_query_grids(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -43,16 +93,32 @@ class V2ContractTests(unittest.TestCase):
             (root / "config/project.json").write_text(json.dumps({
                 "framework_version": "2.0.0", "project_id": "p", "sample_id": "s"
             }))
+            source = root / "input.rds"
+            source.write_text("fixture")
+            analysis = root / "analysis.tsv"
+            excluded = root / "excluded.tsv"
+            write_tsv(analysis, ["cell_id"], [{"cell_id": "c1"}])
+            write_tsv(excluded, ["cell_id"], [])
             write_tsv(root / "state/input_snapshot_registry.tsv",
                       ["snapshot_id", "sample_id", "path", "kind", "size_bytes", "sha256", "status", "created_at"],
-                      [{"snapshot_id": "raw", "sample_id": "s", "path": "/input", "kind": "rds", "size_bytes": "1", "sha256": "a" * 64, "status": "frozen", "created_at": "now"}])
+                      [{"snapshot_id": "raw", "sample_id": "s", "path": str(source), "kind": "rds", "size_bytes": "7", "sha256": sha(source), "status": "frozen", "created_at": "now"}])
             grid = root / "banksy_grid.json"
             grid.write_text(json.dumps({"candidate_resolutions": [0.2, 0.4, 0.8]}))
+            partitions = root / "partitions.tsv"
+            write_tsv(
+                partitions, ["cell_id", "resolution", "cluster"],
+                [
+                    {"cell_id": "c1", "resolution": str(resolution), "cluster": "0"}
+                    for resolution in (0.2, 0.4, 0.8)
+                ],
+            )
             built = run(SCRIPTS / "build_annotation_contract_v2.py", root,
                         "--workflow-profile", WORKFLOW, "--biological-profile", PROFILE, "--candidate-catalog", CATALOG,
+                        "--analysis-membership", analysis, "--excluded-initial-qc", excluded,
                         "--snapshot-id", "raw", "--whole-tissue-method", "BANKSY",
                         "--whole-tissue-grid", "0.2,0.4,0.8", "--grid-source", "bound_upstream_input",
-                        "--whole-tissue-grid-artifact", grid)
+                        "--whole-tissue-grid-artifact", grid,
+                        "--whole-tissue-partitions", partitions)
             self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
             contract = json.loads((root / "config/annotation_contract.json").read_text())
             self.assertEqual(Path(contract["workflow_profile"]["path"]).parent, root / "config/contract_profiles")
@@ -60,7 +126,34 @@ class V2ContractTests(unittest.TestCase):
             self.assertEqual(Path(contract["candidate_catalog"]["path"]).parent, root / "config/contract_profiles")
             self.assertEqual(contract["whole_tissue_partition"]["candidate_resolutions"], [0.2, 0.4, 0.8])
             self.assertEqual(contract["whole_tissue_partition"]["grid_artifact"]["sha256"], sha(grid))
+            self.assertEqual(
+                contract["whole_tissue_partition"]["partition_grid"]["sha256"],
+                sha(partitions),
+            )
             self.assertEqual(contract["query_reclustering"]["candidate_resolutions"], [0.1, 0.2, 0.3, 0.4, 0.6])
+            self.assertEqual(contract["skill_release_version"], "2.2.0")
+            controller = contract["canonical_lineage_controller"]
+            self.assertEqual(controller["controller_version"], "2.2.0")
+            self.assertFalse(controller["subset_policy"]["aggregate_winner_can_veto"])
+            self.assertEqual(
+                controller["resolution_evidence_builder"]["sha256"],
+                sha(SCRIPTS / "build_resolution_grid_evidence.py"),
+            )
+            for name in (
+                "run_observation_lineage_scoring.R",
+                "derive_candidate_local_subsets.R",
+                "close_exact_remainders.py",
+                "screen_rare_cell_programs.R",
+                "screen_spatial_foci.py",
+                "materialize_oocyte_cluster_membership.py",
+                "apply_cell_id_membership_patch.py",
+                "run_lineage_controller.py",
+            ):
+                self.assertEqual(controller["scripts"][name]["sha256"], sha(SCRIPTS / name))
+            self.assertEqual(
+                controller["dependencies"]["lineage_controller_lib.py"]["sha256"],
+                sha(SCRIPTS / "lineage_controller_lib.py"),
+            )
             validated = run(SCRIPTS / "validate_annotation_contract_v2.py", root / "config/annotation_contract.json")
             self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)
             self.assertTrue((root / "provenance/annotation_contract_validation.json").is_file())
@@ -71,7 +164,7 @@ class V2ContractTests(unittest.TestCase):
             result = run(SCRIPTS / "validate_broad_marker_family_contract.py", "--profile", PROFILE, "--catalog", CATALOG, "--out", out)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             payload = json.loads(out.read_text())
-            self.assertEqual(payload["review_required_candidates_checked"], 14)
+            self.assertEqual(payload["review_required_candidates_checked"], 33)
             self.assertTrue(all(row["positive_family_n"] >= 2 for row in payload["candidates"]))
             self.assertEqual(payload["profile_sha256"], sha(PROFILE))
 

@@ -79,7 +79,7 @@ def main() -> int:
     parser.add_argument("--catalog", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
-    parser.add_argument("--decision-version", default="2.1.0")
+    parser.add_argument("--decision-version", default="2.2.0")
     parser.add_argument("--source-run-id", required=True)
     parser.add_argument("--validation-artifact", required=True, type=Path)
     args = parser.parse_args()

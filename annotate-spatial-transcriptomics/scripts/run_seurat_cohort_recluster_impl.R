@@ -61,7 +61,33 @@ if(anchor_mode){
   if(uniqueN(as.character(mem[get(role_col)==anchor_value,get(anchor_col)]))<2L)stop("anchor-assisted interpretation requires at least two anchor labels")
 }else{query_ids<-mem[[cc]];anchor_ids<-character()}
 all_ids <- c(query_ids,anchor_ids); joint <- subset(obj,cells=all_ids); mem <- mem[match(colnames(joint),get(cc))]; stopifnot(all(mem[[cc]]==colnames(joint)))
-assay <- ifelse(is.null(a$assay),DefaultAssay(joint),a$assay); DefaultAssay(joint)<-assay
+if (is.null(a$assay)) {
+  assay_candidates <- Assays(joint)
+  if (method == "SCT") {
+    # A preprocessed SCT/BANKSY object may have DefaultAssay == "SCT".
+    # Cohort SCT must restart from the project-local raw-count assay; running
+    # SCTransform on corrected SCT counts is a forbidden expression boundary.
+    preferred <- c("RNA", "Spatial")
+    count_backed <- assay_candidates[vapply(assay_candidates, function(value) {
+      value != "SCT" && "counts" %in% Layers(joint[[value]])
+    }, logical(1))]
+    preferred <- preferred[preferred %in% count_backed]
+    assay <- if (length(preferred)) preferred[[1L]] else if (length(count_backed)) {
+      count_backed[[1L]]
+    } else {
+      stop("SCT cohort reclustering requires a non-SCT project-local raw-count assay")
+    }
+  } else {
+    assay <- DefaultAssay(joint)
+  }
+} else {
+  assay <- a$assay
+}
+if (!assay %in% Assays(joint)) stop("requested cohort assay is absent")
+if (method == "SCT" && identical(assay, "SCT")) {
+  stop("refusing to run SCTransform on the SCT assay; select RNA/Spatial raw counts")
+}
+DefaultAssay(joint)<-assay
 count_layer <- ifelse(is.null(a$`count-layer`),"counts",a$`count-layer`); cts <- tryCatch(LayerData(joint[[assay]],layer=count_layer),error=function(e)GetAssayData(joint[[assay]],slot=count_layer)); umi <- Matrix::colSums(cts)
 zero_ids <- names(umi)[!is.finite(umi)|umi<=0]; zero_query <- intersect(zero_ids,query_ids); zero_anchor <- intersect(zero_ids,anchor_ids)
 fwrite(data.table(cell_id=zero_query,route="qc_holdout",reason="zero_count_query_in_selected_assay"),file.path(a$out,"tables","zero_count_observations.tsv"),sep="\t")
@@ -96,7 +122,31 @@ q <- subset(joint,cells=query_ids)
 q <- FindNeighbors(q,reduction="pca",dims=seq_len(dims_use_n),k.param=k_param,nn.method="annoy",n.trees=50,annoy.metric="cosine",graph.name=c("COHORT_nn","COHORT_snn"),verbose=FALSE)
 resolution_parallel <- activate_resolution_parallelism(resolution_workers_requested,length(resolutions),resolution_future_plan_requested)
 message("Running ",length(resolutions)," cohort Leiden resolutions with ",resolution_parallel$workers," future worker(s) using ",resolution_parallel$plan)
-cluster_results <- FindClusters(object=q[["COHORT_snn"]],algorithm=4,resolution=resolutions,random.seed=seed,verbose=FALSE)
+resolution_seeds <- vapply(seq_along(resolutions), function(index) {
+  as.integer((as.double(seed) + index * 100003 + round(resolutions[[index]] * 10000)) %% 2147483646) + 1L
+}, integer(1))
+cluster_one_resolution <- function(index) {
+  result <- FindClusters(
+    object=q[["COHORT_snn"]], algorithm=4,
+    resolution=resolutions[[index]], random.seed=resolution_seeds[[index]],
+    verbose=FALSE
+  )
+  expected <- paste0("res.", resolutions[[index]])
+  if (!expected %in% names(result)) stop("missing Leiden result: ", expected)
+  result[, expected, drop=FALSE]
+}
+resolution_indices <- seq_along(resolutions)
+if (resolution_parallel$workers > 1L) {
+  if (!requireNamespace("future.apply", quietly=TRUE)) {
+    stop("future.apply is required for deterministic parallel resolution evaluation")
+  }
+  cluster_result_list <- future.apply::future_lapply(
+    resolution_indices, cluster_one_resolution, future.seed=TRUE
+  )
+} else {
+  cluster_result_list <- lapply(resolution_indices, cluster_one_resolution)
+}
+cluster_results <- do.call(cbind, cluster_result_list)
 q <- RunUMAP(q,reduction="pca",dims=seq_len(dims_use_n),n.neighbors=k_param,min.dist=umap_min_dist,metric="cosine",seed.use=seed,verbose=FALSE)
 if(requireNamespace("future",quietly=TRUE))future::plan(future::sequential)
 qmem<-mem[match(query_ids,get(cc))];stopifnot(all(qmem[[cc]]==query_ids))
@@ -144,7 +194,43 @@ if(length(anchor_all))fwrite(rbindlist(anchor_all,fill=TRUE),file.path(a$out,"ta
 fwrite(mem, file.path(a$out,"tables","analyzed_membership.tsv.gz"), sep="\t")
 saveRDS(q,file.path(a$out,"cohort_reclustered_query_seurat.rds"),compress=FALSE)
 if(anchor_mode)saveRDS(joint,file.path(a$out,"joint_query_anchor_pca_seurat.rds"),compress=FALSE)
-fwrite(data.table(parameter=c("normalization","full_feature_deg_assay","full_feature_normalization","sct_vst_flavor","sct_method","sct_ncells","sct_conserve_memory","sct_return_only_var_genes","pca_npcs_requested","pca_npcs_used","dims_requested","dims_used","neighbor_k","neighbor_method","neighbor_trees","neighbor_metric","umap_min_dist","umap_metric","nfeatures","resolutions","minimum_resolution","resolution_contract","resolution_selection","seed","future_globals_max_gb","future_plan","scheduler_cpus_detected","scheduler_cpu_source","resolution_workers_requested","resolution_workers_used","umap_threads","anchor_assisted","query_only_graph_umap_deg","spatial_x_col","spatial_y_col","n_query_input","n_query_analyzed","n_anchors_analyzed","n_zero_query_qc","n_zero_anchor_excluded"),value=c(method,assay,"LogNormalize_scale_factor_10000",if(method=="SCT")"v2"else"not_applicable",if(method=="SCT")sct_method else "not_applicable",if(method=="SCT")min(sct_ncells_cap,ncol(joint))else"not_applicable",if(method=="SCT")TRUE else"not_applicable",if(method=="SCT")TRUE else "not_applicable",pca_npcs,pca_npcs_use,dims_n,dims_use_n,k_param,"annoy",50,"cosine",umap_min_dist,"cosine",nfeatures,paste(resolutions,collapse=","),minimum_resolution,resolution_contract,"adaptive_cohort_review_required",seed,future_globals_max_gb,resolution_parallel$plan,if(is.finite(scheduler_cpu$cpus))scheduler_cpu$cpus else "",scheduler_cpu$source,resolution_workers_requested,resolution_parallel$workers,resolution_parallel$workers,anchor_mode,TRUE,if(length(spatial_pair))spatial_pair[[1]]else"",if(length(spatial_pair))spatial_pair[[2]]else"",length(query_ids)+length(zero_query),ncol(q),length(anchor_ids),length(zero_query),length(zero_anchor))),file.path(a$out,"run_manifest.tsv"),sep="\t")
+run_parameters <- c(
+  "normalization","full_feature_deg_assay","full_feature_normalization",
+  "sct_vst_flavor","sct_method","sct_ncells","sct_conserve_memory",
+  "sct_return_only_var_genes","pca_npcs_requested","pca_npcs_used",
+  "dims_requested","dims_used","neighbor_k","neighbor_method",
+  "neighbor_trees","neighbor_metric","umap_min_dist","umap_metric",
+  "nfeatures","resolutions","resolution_seeds","minimum_resolution",
+  "resolution_contract","resolution_selection","seed",
+  "future_globals_max_gb","future_plan","scheduler_cpus_detected",
+  "scheduler_cpu_source","resolution_workers_requested",
+  "resolution_workers_used","umap_threads","anchor_assisted",
+  "query_only_graph_umap_deg","spatial_x_col","spatial_y_col",
+  "n_query_input","n_query_analyzed","n_anchors_analyzed",
+  "n_zero_query_qc","n_zero_anchor_excluded"
+)
+run_values <- c(
+  method,assay,"LogNormalize_scale_factor_10000",
+  if(method=="SCT")"v2"else"not_applicable",
+  if(method=="SCT")sct_method else "not_applicable",
+  if(method=="SCT")min(sct_ncells_cap,ncol(joint))else"not_applicable",
+  if(method=="SCT")TRUE else"not_applicable",
+  if(method=="SCT")TRUE else "not_applicable",
+  pca_npcs,pca_npcs_use,dims_n,dims_use_n,k_param,"annoy",50,"cosine",
+  umap_min_dist,"cosine",nfeatures,paste(resolutions,collapse=","),
+  paste(resolution_seeds,collapse=","),minimum_resolution,
+  resolution_contract,"adaptive_cohort_review_required",seed,
+  future_globals_max_gb,resolution_parallel$plan,
+  if(is.finite(scheduler_cpu$cpus))scheduler_cpu$cpus else "",
+  scheduler_cpu$source,resolution_workers_requested,
+  resolution_parallel$workers,resolution_parallel$workers,anchor_mode,TRUE,
+  if(length(spatial_pair))spatial_pair[[1]]else"",
+  if(length(spatial_pair))spatial_pair[[2]]else"",
+  length(query_ids)+length(zero_query),ncol(q),length(anchor_ids),
+  length(zero_query),length(zero_anchor)
+)
+stopifnot(length(run_parameters) == length(run_values))
+fwrite(data.table(parameter=run_parameters,value=run_values),file.path(a$out,"run_manifest.tsv"),sep="\t")
 capture.output(sessionInfo(), file=file.path(a$out,"sessionInfo.txt"))
 writeLines(c("status\tPASS",paste0("completed_at\t",format(Sys.time(),tz="UTC",usetz=TRUE))),file.path(a$out,"RUN_COMPLETE.tsv"))
 quit(save="no",status=0,runLast=FALSE)

@@ -4,15 +4,17 @@
   "title": "V2 annotation execution contract",
   "type": "object",
   "required": [
-    "schema_version", "framework_version", "project_id", "sample_id",
+    "schema_version", "framework_version", "skill_release_version", "project_id", "sample_id",
     "project_config", "workflow_profile", "biological_profile", "candidate_catalog",
-    "selected_input_snapshot", "expression_ancestry_policy",
+    "selected_input_snapshot", "input_scope", "artifact_role_policy", "expression_ancestry_policy",
     "whole_tissue_partition", "query_reclustering", "broad_family_evidence",
+    "canonical_lineage_controller",
     "atlas_routing", "release_taxonomy"
   ],
   "properties": {
     "schema_version": {"const": "2.0"},
     "framework_version": {"const": "2.0.0"},
+    "skill_release_version": {"const": "2.2.0"},
     "project_id": {"type": "string", "minLength": 1},
     "sample_id": {"type": "string", "minLength": 1},
     "project_config": {"$ref": "#/$defs/artifact"},
@@ -21,11 +23,41 @@
     "candidate_catalog": {"$ref": "#/$defs/artifact"},
     "selected_input_snapshot": {
       "type": "object",
-      "required": ["registry_path", "snapshot_id", "sha256"],
+      "required": ["registry_path", "snapshot_id", "sha256", "path", "artifact_role"],
       "properties": {
         "registry_path": {"type": "string", "minLength": 1},
         "snapshot_id": {"type": "string", "minLength": 1},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "path": {"type": "string", "minLength": 1},
+        "artifact_role": {"const": "runtime_input"}
+      }
+    },
+    "input_scope": {
+      "type": "object",
+      "required": [
+        "full_object", "analysis_set", "excluded_initial_qc",
+        "analysis_set_n", "excluded_initial_qc_n",
+        "biological_unresolved_is_initial_qc"
+      ],
+      "properties": {
+        "full_object": {"$ref": "#/$defs/artifact"},
+        "analysis_set": {"$ref": "#/$defs/artifact"},
+        "excluded_initial_qc": {"$ref": "#/$defs/artifact"},
+        "analysis_set_n": {"type": "integer", "minimum": 1},
+        "excluded_initial_qc_n": {"type": "integer", "minimum": 0},
+        "biological_unresolved_is_initial_qc": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "artifact_role_policy": {
+      "type": "object",
+      "required": ["runtime_allowed_roles", "failed_diagnostic_runtime_forbidden", "diagnostic_registry"],
+      "properties": {
+        "runtime_allowed_roles": {"const": ["runtime_input", "external_reference"]},
+        "failed_diagnostic_runtime_forbidden": {"const": true},
+        "diagnostic_registry": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/artifact"}]
+        }
       }
     },
     "expression_ancestry_policy": {
@@ -38,13 +70,15 @@
     },
     "whole_tissue_partition": {
       "type": "object",
-      "required": ["method", "candidate_grid_source", "candidate_resolutions", "selection_endpoint"],
+      "required": ["method", "candidate_grid_source", "candidate_resolutions", "partition_grid", "selection_endpoint", "formal_membership_authority"],
       "properties": {
         "method": {"enum": ["BANKSY", "Seurat", "Scanpy", "external"]},
         "candidate_grid_source": {"enum": ["bound_upstream_input", "fresh_project_computation"]},
         "candidate_resolutions": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "number"}},
         "grid_artifact": {"$ref": "#/$defs/artifact"},
-        "selection_endpoint": {"const": "broad_recall_and_purity"}
+        "partition_grid": {"$ref": "#/$defs/artifact"},
+        "selection_endpoint": {"const": "stable_cohort_partition"},
+        "formal_membership_authority": {"const": false}
       },
       "allOf": [{
         "if": {"properties": {"candidate_grid_source": {"const": "bound_upstream_input"}}},
@@ -53,10 +87,20 @@
     },
     "query_reclustering": {
       "type": "object",
-      "required": ["candidate_resolutions", "separate_from_upstream_banksy_grid"],
+      "required": [
+        "candidate_resolutions", "separate_from_upstream_banksy_grid",
+        "cohort_unit", "normalization_path", "full_catalog_scan_required",
+        "provisional_broad_blinded_until_score_freeze",
+        "resolution_stability_neighbors"
+      ],
       "properties": {
         "candidate_resolutions": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "number"}},
-        "separate_from_upstream_banksy_grid": {"const": true}
+        "separate_from_upstream_banksy_grid": {"const": true},
+        "cohort_unit": {"const": "initial_cluster"},
+        "normalization_path": {"const": "raw_counts_SCTv2_PCA_SNN_Leiden"},
+        "full_catalog_scan_required": {"const": true},
+        "provisional_broad_blinded_until_score_freeze": {"const": true},
+        "resolution_stability_neighbors": {"const": "nearest_lower_and_higher_else_two_nearest"}
       }
     },
     "broad_family_evidence": {
@@ -68,13 +112,169 @@
         "complete_cartesian_product": {"const": true}
       }
     },
+    "canonical_lineage_controller": {
+      "type": "object",
+      "required": [
+        "controller_version", "formal_release_requires_canonical_chain",
+        "historical_labels_blinded_until_membership_freeze", "phase_order",
+        "phase_authority", "random_seed", "resolution_selector",
+        "resolution_evidence_builder", "unmodeled_discovery",
+        "cohort_reclustering", "scripts", "dependencies", "scoring_policy",
+        "subset_policy", "remainder_policy"
+      ],
+      "properties": {
+        "controller_version": {"const": "2.2.0"},
+        "formal_release_requires_canonical_chain": {"const": true},
+        "historical_labels_blinded_until_membership_freeze": {"const": true},
+        "phase_order": {
+          "const": [
+            "whole_tissue_partition", "cluster_cohort_recluster",
+            "local_mixed_subcluster_split", "merge_and_freeze_broad",
+            "atlas_and_completeness_review", "materialize_final_release"
+          ]
+        },
+        "phase_authority": {
+          "type": "object",
+          "required": [
+            "whole_tissue_partition", "cluster_cohort_recluster",
+            "local_mixed_subcluster_split", "merge_and_freeze_broad",
+            "atlas_and_completeness_review", "materialize_final_release"
+          ],
+          "properties": {
+            "whole_tissue_partition": {"const": "provisional_only_no_release_membership"},
+            "cluster_cohort_recluster": {"const": "candidate_only_no_release_membership"},
+            "local_mixed_subcluster_split": {"const": "candidate_only_no_release_membership"},
+            "merge_and_freeze_broad": {"const": "formal_broad_freeze"},
+            "atlas_and_completeness_review": {"const": "unlabeled_broad_rescue_only"},
+            "materialize_final_release": {"const": "final_broad_fine_state_release"}
+          },
+          "additionalProperties": false
+        },
+        "random_seed": {"type": "integer"},
+        "resolution_selector": {"$ref": "#/$defs/artifact"},
+        "resolution_evidence_builder": {"$ref": "#/$defs/artifact"},
+        "unmodeled_discovery": {"$ref": "#/$defs/artifact"},
+        "scripts": {
+          "type": "object",
+          "required": [
+            "run_observation_lineage_scoring.R",
+            "derive_candidate_local_subsets.R",
+            "close_exact_remainders.py",
+            "build_whole_tissue_cohort_plan.py",
+            "adjudicate_second_round_subclusters.py",
+            "merge_and_freeze_broad_membership.py",
+            "route_global_atlas_v2.py",
+            "validate_global_atlas_v2.py",
+            "apply_post_merge_atlas_routing.py",
+            "audit_post_merge_completeness.py",
+            "validate_sheep_ovary_biological_quality.py",
+            "materialize_parent_locked_fine_proposals.py",
+            "materialize_final_release_v2_2.py",
+            "evaluate_annotation_robustness.py",
+            "run_lineage_controller.py"
+          ],
+          "properties": {
+            "run_observation_lineage_scoring.R": {"$ref": "#/$defs/artifact"},
+            "derive_candidate_local_subsets.R": {"$ref": "#/$defs/artifact"},
+            "close_exact_remainders.py": {"$ref": "#/$defs/artifact"},
+            "build_whole_tissue_cohort_plan.py": {"$ref": "#/$defs/artifact"},
+            "adjudicate_second_round_subclusters.py": {"$ref": "#/$defs/artifact"},
+            "merge_and_freeze_broad_membership.py": {"$ref": "#/$defs/artifact"},
+            "route_global_atlas_v2.py": {"$ref": "#/$defs/artifact"},
+            "validate_global_atlas_v2.py": {"$ref": "#/$defs/artifact"},
+            "apply_post_merge_atlas_routing.py": {"$ref": "#/$defs/artifact"},
+            "audit_post_merge_completeness.py": {"$ref": "#/$defs/artifact"},
+            "validate_sheep_ovary_biological_quality.py": {"$ref": "#/$defs/artifact"},
+            "materialize_parent_locked_fine_proposals.py": {"$ref": "#/$defs/artifact"},
+            "materialize_final_release_v2_2.py": {"$ref": "#/$defs/artifact"},
+            "evaluate_annotation_robustness.py": {"$ref": "#/$defs/artifact"},
+            "run_lineage_controller.py": {"$ref": "#/$defs/artifact"}
+          },
+          "additionalProperties": false
+        },
+        "dependencies": {
+          "type": "object",
+          "required": ["lineage_controller_lib.py"],
+          "properties": {
+            "lineage_controller_lib.py": {"$ref": "#/$defs/artifact"}
+          },
+          "additionalProperties": false
+        },
+        "cohort_reclustering": {
+          "type": "object",
+          "required": ["entrypoint", "implementation", "sct_input_boundary", "clustering_path"],
+          "properties": {
+            "entrypoint": {"$ref": "#/$defs/artifact"},
+            "implementation": {"$ref": "#/$defs/artifact"},
+            "sct_input_boundary": {"const": "project_local_non_sct_raw_counts"},
+            "clustering_path": {"const": "SCT_PCA_SNN_Leiden"}
+          },
+          "additionalProperties": false
+        },
+        "scoring_policy": {
+          "type": "object",
+          "required": [
+            "gene_scale", "family_aggregation", "direct_weight",
+            "local_weight", "hard_contradiction"
+          ],
+          "properties": {
+            "gene_scale": {"const": "query_nonzero_q95_capped"},
+            "family_aggregation": {"const": "mean_top_two_available_genes"},
+            "direct_weight": {"const": 0.35},
+            "local_weight": {"const": 0.65},
+            "hard_contradiction": {"const": "coherent_multigene_multifamily_direct_anti_only"}
+          }
+        },
+        "subset_policy": {
+          "type": "object",
+          "required": [
+            "candidate_local_independent_proposals", "aggregate_winner_can_veto",
+            "identity_core_component_required",
+            "generic_support_cell_transitive_bridging",
+            "fine_candidate_parent_lock",
+            "fine_candidate_discriminator_seed_required",
+            "sparse_tail_inheritance_scope",
+            "subset_validation_supported_fraction",
+            "subset_validation_competitor_margin",
+            "maximum_contradiction_fraction", "maximum_second_subset_rounds",
+            "activation_scope"
+          ],
+          "properties": {
+            "candidate_local_independent_proposals": {"const": true},
+            "aggregate_winner_can_veto": {"const": false},
+            "identity_core_component_required": {"const": true},
+            "generic_support_cell_transitive_bridging": {"const": false},
+            "fine_candidate_parent_lock": {"const": true},
+            "fine_candidate_discriminator_seed_required": {"const": true},
+            "sparse_tail_inheritance_scope": {"const": "validated_high_purity_expression_subcluster_only"},
+            "subset_validation_supported_fraction": {"const": 0.70},
+            "subset_validation_competitor_margin": {"const": 0.30},
+            "maximum_contradiction_fraction": {"const": 0.05},
+            "maximum_second_subset_rounds": {"const": 1},
+            "activation_scope": {"const": "second_round_mixed_subcluster_only"}
+          }
+        },
+        "remainder_policy": {
+          "type": "object",
+          "required": ["allowed_scopes", "first_round_forbidden", "unselected_member_is_qc"],
+          "properties": {
+            "allowed_scopes": {"const": ["local_mixed_subcluster", "post_merge_reconciliation"]},
+            "first_round_forbidden": {"const": true},
+            "unselected_member_is_qc": {"const": false}
+          }
+        }
+      }
+    },
     "observation_writeback": {
       "type": "object",
       "required": [
+        "first_round_formal_writeback", "local_mixed_subcluster_only",
         "subset_writeback_required", "whole_subcluster_purity_evidence_required", "terminal_return_purity_audit_required",
         "raw_two_family_writeback_audit_required", "complete_fine_candidate_audit_required", "policy"
       ],
       "properties": {
+        "first_round_formal_writeback": {"const": false},
+        "local_mixed_subcluster_only": {"const": true},
         "subset_writeback_required": {"type": "boolean"},
         "whole_subcluster_purity_evidence_required": {"type": "boolean"},
         "terminal_return_purity_audit_required": {"type": "boolean"},
@@ -90,6 +290,10 @@
             "whole_subcluster_min_raw_two_family_supported_fraction",
             "whole_subcluster_min_raw_two_family_margin",
             "whole_subcluster_embedded_competitor_raw_trigger",
+            "whole_subcluster_dominant_seed_fraction",
+            "whole_subcluster_dominant_direct_core_fraction",
+            "whole_subcluster_dominant_identity_core_fraction",
+            "whole_subcluster_dominant_max_contradiction_fraction",
             "supported_subset_min_lineage_supported_fraction",
             "supported_subset_min_purity_margin",
             "present_label_min_lineage_supported_fraction",
@@ -106,7 +310,7 @@
       "properties": {
         "authoritative_router": {"const": "route_global_atlas_v2.py"},
         "mapping_scope": {"const": "complete_analysis_set"},
-        "writeback_scope": {"const": "unlabeled_frozen_qc_only"},
+        "writeback_scope": {"const": "unlabeled_after_broad_merge_only"},
         "fine_anchor_eligible": {"const": false}
       }
     },
@@ -122,10 +326,13 @@
   "$defs": {
     "artifact": {
       "type": "object",
-      "required": ["path", "sha256"],
+      "required": ["path", "sha256", "artifact_role"],
       "properties": {
         "path": {"type": "string", "minLength": 1},
-        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "artifact_role": {
+          "enum": ["runtime_input", "external_reference", "failed_diagnostic_registry"]
+        }
       }
     }
   }

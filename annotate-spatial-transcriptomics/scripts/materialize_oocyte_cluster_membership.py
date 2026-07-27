@@ -8,14 +8,16 @@ cluster-adjudication evidence, not observation-level inclusion filters.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 from pathlib import Path
 
+from lineage_controller_lib import read_tsv, sha256, write_tsv
 
-def read_rows(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8") as handle:
-        return list(csv.DictReader(handle, delimiter="\t"))
+
+ALLOWED_EXCLUSION_CLASSES = {
+    "direct_multifamily_somatic_hard_contradiction",
+    "objective_input_qc",
+}
 
 
 def main() -> int:
@@ -28,8 +30,8 @@ def main() -> int:
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
-    canonical = read_rows(args.canonical_membership)
-    passing_rows = read_rows(args.passing_clusters)
+    canonical = read_tsv(args.canonical_membership)
+    passing_rows = read_tsv(args.passing_clusters)
     if not canonical:
         raise SystemExit("canonical Oocyte membership is empty")
     required = {args.cell_id_column, args.cluster_column}
@@ -48,12 +50,17 @@ def main() -> int:
 
     exclusions: dict[str, str] = {}
     if args.explicit_exclusions:
-        for row in read_rows(args.explicit_exclusions):
+        for row in read_tsv(args.explicit_exclusions):
             cell = str(row.get(args.cell_id_column, "")).strip()
-            reason = str(row.get("exclusion_reason", "")).strip()
-            if not cell or not reason:
-                raise SystemExit("explicit exclusions require cell ID and exclusion_reason")
-            exclusions[cell] = reason
+            exclusion_class = str(row.get("exclusion_class", "")).strip()
+            if not cell or exclusion_class not in ALLOWED_EXCLUSION_CLASSES:
+                raise SystemExit(
+                    "explicit Oocyte exclusions require cell_id and an allowed "
+                    "exclusion_class"
+                )
+            if cell in exclusions:
+                raise SystemExit("explicit Oocyte exclusions contain duplicate cell IDs")
+            exclusions[cell] = exclusion_class
 
     seen: set[str] = set()
     materialized: list[dict[str, str]] = []
@@ -88,12 +95,23 @@ def main() -> int:
         "decision_basis",
         "fine_anchor_eligible",
     ]
-    with table.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fields, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(materialized)
+    unknown_exclusions = sorted(set(exclusions).difference(seen))
+    if unknown_exclusions:
+        raise SystemExit("explicit Oocyte exclusions are outside the canonical cohort")
+    passing_eligible = {
+        str(row[args.cell_id_column]).strip()
+        for row in canonical
+        if str(row[args.cluster_column]).strip() in passing
+    }
+    outside_passing = sorted(set(exclusions).difference(passing_eligible))
+    if outside_passing:
+        raise SystemExit("explicit Oocyte exclusions are outside passing clusters")
+    write_tsv(table, materialized, fields)
     manifest = {
         "status": "PASS",
+        "schema_version": "2.2",
+        "canonical_membership_sha256": sha256(args.canonical_membership),
+        "passing_clusters_sha256": sha256(args.passing_clusters),
         "canonical_n": len(canonical),
         "passing_clusters": sorted(passing),
         "eligible_canonical_members_n": eligible_n,
@@ -101,6 +119,8 @@ def main() -> int:
         "final_oocyte_n": len(materialized),
         "strict_seed_used_as_membership_filter": False,
         "spatial_object_used_as_membership_filter": False,
+        "only_allowed_hard_exclusions_applied": True,
+        "exclusion_classes": sorted(set(exclusions.values())),
     }
     (args.out / "materialized_oocyte_membership_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

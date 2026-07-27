@@ -17,6 +17,11 @@ BANNED = (
     "bgi" + "_" + "xinq",
     "D055" + "22A3",
 )
+PORTABILITY_TOKEN_EXEMPT = {
+    # User-approved internal implementation plan. This file is not part of the
+    # portable Skill archive assembled by the release workflow.
+    Path("docs/v2.2.0_algorithm_stabilization_plan_v2.md"),
+}
 
 
 def fail(message: str) -> None:
@@ -41,6 +46,7 @@ def main() -> int:
         SKILL / "references" / "profiles" / "sheep_ovary_literature_2025_2026.md",
         SKILL / "references" / "profiles" / "sheep_ovary_rfirst_case_reference.md",
         SKILL / "references" / "profiles" / "sheep_ovary_standard_workflow.md",
+        SKILL / "references" / "profiles" / "sheep_ovary_biological_quality_review.md",
         SKILL / "references" / "efficient-operation.md",
         SKILL / "references" / "r-first-workflow.md",
         SKILL / "references" / "taxonomy-and-cohort-design.md",
@@ -77,6 +83,25 @@ def main() -> int:
         SKILL / "scripts" / "validate_global_atlas_v2.py",
         SKILL / "scripts" / "build_annotation_contract_v2.py",
         SKILL / "scripts" / "validate_annotation_contract_v2.py",
+        SKILL / "scripts" / "lineage_controller_lib.py",
+        SKILL / "scripts" / "run_observation_lineage_scoring.R",
+        SKILL / "scripts" / "derive_candidate_local_subsets.R",
+        SKILL / "scripts" / "close_exact_remainders.py",
+        SKILL / "scripts" / "run_lineage_controller.py",
+        SKILL / "scripts" / "select_lineage_resolution.py",
+        SKILL / "scripts" / "build_resolution_grid_evidence.py",
+        SKILL / "scripts" / "extract_seurat_partition_grid.R",
+        SKILL / "scripts" / "discover_unmodeled_lineages.py",
+        SKILL / "scripts" / "validate_lineage_controller_release.py",
+        SKILL / "scripts" / "validate_sheep_ovary_biological_quality.py",
+        SKILL / "scripts" / "apply_sheep_ovary_follicle_roi_repair.py",
+        SKILL / "scripts" / "screen_rare_cell_programs.R",
+        SKILL / "scripts" / "screen_spatial_foci.py",
+        SKILL / "scripts" / "materialize_oocyte_cluster_membership.py",
+        SKILL / "scripts" / "apply_cell_id_membership_patch.py",
+        SKILL / "scripts" / "write_frozen_annotations_to_seurat.R",
+        SKILL / "scripts" / "build_frozen_review_report.py",
+        SKILL / "scripts" / "build_release_evidence_tables.py",
         SKILL / "scripts" / "run_broad_family_evidence.R",
         SKILL / "scripts" / "validate_broad_family_evidence.py",
         SKILL / "scripts" / "audit_project_results_v2.py",
@@ -97,6 +122,7 @@ def main() -> int:
         SKILL / "schemas" / "annotation_contract.schema.json",
         SKILL / "schemas" / "broad_family_evidence.schema.json",
         SKILL / "schemas" / "residual_qc_audit.schema.json",
+        SKILL / "schemas" / "sheep_ovary_biological_quality_review.schema.json",
         SKILL / "scripts" / "validate_direct_lineage_workflow.py",
         SKILL / "scripts" / "register_recluster_cohort.py",
         SKILL / "scripts" / "register_direct_return.py",
@@ -139,9 +165,11 @@ def main() -> int:
             except UnicodeDecodeError as exc:
                 problems.append(f"not UTF-8 text: {path.relative_to(ROOT)}: {exc}")
                 continue
-            for token in BANNED:
-                if token in text:
-                    problems.append(f"private/sample token {token!r} in {path.relative_to(ROOT)}")
+            relative_path = path.relative_to(ROOT)
+            if relative_path not in PORTABILITY_TOKEN_EXEMPT:
+                for token in BANNED:
+                    if token in text:
+                        problems.append(f"private/sample token {token!r} in {relative_path}")
             if path.suffix == ".py":
                 try:
                     ast.parse(text, filename=str(path))
@@ -170,6 +198,8 @@ def main() -> int:
         problems.append("missing v2 contract regression tests")
     if not (ROOT / "tests/test_v2_0_2_contract.py").is_file():
         problems.append("missing v2.0.2 biological-writeback regression tests")
+    if not (ROOT / "tests/test_v2_2_algorithm_stability.py").is_file():
+        problems.append("missing v2.2 algorithm-stability regression tests")
 
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     readme = (ROOT / "README.md").read_text(encoding="utf-8")

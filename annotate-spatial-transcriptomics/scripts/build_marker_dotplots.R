@@ -215,7 +215,8 @@ make_source <- function(label_col, level_name, panel_name) {
 }
 
 assets <- list(); z <- 1L
-for (lev in c("broad", "subtype")) {
+levels_to_render <- c("broad", if (is.null(arg$`skip-subtype`)) "subtype")
+for (lev in levels_to_render) {
   col <- if (lev == "broad") arg$`broad-col` else arg$`subtype-col`
   for (panel_name in unique(markers$panel)) {
     message("Rendering ", lev, " / ", panel_name)
@@ -225,6 +226,6 @@ for (lev in c("broad", "subtype")) {
 }
 asset_dt <- rbindlist(assets, fill = TRUE)
 fwrite(asset_dt, file.path(arg$out, "marker_dotplot_asset_index.tsv"), sep = "\t", quote = FALSE)
-required_levels <- c("broad", if(any(!is.na(meta[[arg$`subtype-col`]]) & nzchar(as.character(meta[[arg$`subtype-col`]])))) "subtype")
+required_levels <- levels_to_render
 if (!all(required_levels %in% asset_dt$level)) stop("Required broad/high-confidence subtype dotplots are missing")
 message("Completed marker dotplots: ", nrow(asset_dt), " assets")

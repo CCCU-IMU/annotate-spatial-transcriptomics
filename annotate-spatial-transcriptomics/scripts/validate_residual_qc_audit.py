@@ -14,7 +14,13 @@ from evidence_schema_lib import validate_evidence_artifact, validate_json_agains
 
 
 QC_STATES = {"qc_holdout", "low_information_qc_holdout", "pending_qc", "unknown_candidate"}
-REQUIRED_REVIEWS = {
+V2_2_REQUIRED_REVIEWS = {
+    "second_round_cohort_recall_review",
+    "selected_and_neighbor_catalog_scan",
+    "mixed_subcluster_local_split_review",
+    "post_merge_atlas_unresolved_review",
+}
+LEGACY_REQUIRED_REVIEWS = {
     "initial_broad_resolution_recall_review",
     "selected_plus_two_higher_catalog_scan",
     "large_label_embedded_program_review",
@@ -37,6 +43,7 @@ def main() -> int:
     ap.add_argument("--state-column", default="auto")
     ap.add_argument("--qc-reason-column", default="auto")
     ap.add_argument("--require-v2", action="store_true")
+    ap.add_argument("--require-v2-2", action="store_true")
     ap.add_argument("--fraction-trigger", type=float, default=0.10)
     ap.add_argument("--count-trigger", type=int, default=50000)
     ap.add_argument("--out", required=True, type=Path)
@@ -68,6 +75,10 @@ def main() -> int:
     errors: list[str] = []
     audit_payload: dict = {}
     if triggered:
+        if args.require_v2_2:
+            errors.append(
+                "v2.2 residual QC reaches 10% or 50,000 and must return to upstream iteration"
+            )
         if not args.audit or not args.audit.is_file():
             errors.append("large residual QC requires a hash-bound upstream broad-recall audit")
         else:
@@ -83,7 +94,8 @@ def main() -> int:
             if int(audit_payload.get("residual_qc_n", -1)) != qc_n:
                 errors.append("residual-QC audit count does not match the ledger")
             reviews = set(audit_payload.get("completed_reviews", []))
-            missing = sorted(REQUIRED_REVIEWS.difference(reviews))
+            required_reviews = V2_2_REQUIRED_REVIEWS if args.require_v2_2 else LEGACY_REQUIRED_REVIEWS
+            missing = sorted(required_reviews.difference(reviews))
             if missing:
                 errors.append("residual-QC audit lacks required reviews: " + ", ".join(missing))
             if audit_payload.get("unresolved_query_lineage_signals", 1) != 0:
@@ -121,6 +133,7 @@ def main() -> int:
         "residual_qc_fraction": fraction,
         "audit_triggered": triggered,
         "v2_evidence_required": args.require_v2,
+        "v2_2_return_upstream_required": args.require_v2_2,
         "count_trigger": args.count_trigger,
         "fraction_trigger": args.fraction_trigger,
         "errors": errors,

@@ -1,27 +1,29 @@
-# Iterative annotation controller
+# Iterative controller
 
-The first clustering is a proposal generator, not the final annotation. New projects use the direct-lineage cohort architecture in `direct-lineage-controller.md`; persistent biological pools are not part of the active state machine.
+Iteration occurs inside explicit v2.2 phases. It does not mean repeatedly tuning a first-pass all-object cellbin classifier.
 
-## Round 0: context and input
+## Round 0: freeze inputs
 
-Validate biological context, discover and hash inputs, freeze the analysis set, verify the full-feature evidence layer and resume existing completed cohorts without recomputing them.
+Bind full object, analysis set, excluded initial QC, project-local raw counts, profiles, catalog, seed and artifact roles. Historical labels and failed diagnostics remain outside runtime evidence.
 
-## Round 1: whole-tissue broad annotation
+## Round 1: build cohorts
 
-Select a broad clustering adaptively. Before paper context or label interpretation, freeze label-blind positive/anti DEG, all eligible broad-lineage programs, winner/runner-up margin, contradictions and technical flags. Only then perform open-world review and write a supported `initial_broad_label`. Send low-information, contradicted or irreducibly mixed observations to `qc_holdout`.
+Select a stable whole-tissue partition and create exactly one cohort for every initial cluster. Record only provisional biology, mixed/unknown status and lineage watches. No formal label or QC membership exists in this round.
 
-## Round 2: broad-class cohorts
+## Round 2: annotate second-round subclusters
 
-For every supported initial broad class, freeze one `broad_class_recluster` cohort, run a cohort-specific candidate resolution grid and adjudicate every subcluster. Outcomes are mutually exclusive: high-confidence fine label, direct parent-broad return, direct cross-lineage return, one decision-relevant targeted cohort, or QC/technical retention. A small class may remain broad-only after a recorded underpowered skip.
+Recompute SCT/PCA/SNN/Leiden from raw counts independently inside every cohort. Select a resolution from the full grid and nearest neighboring resolutions. Score each subcluster against the full catalog before revealing its provisional parent. Return high-purity subclusters wholesale; preserve a supported broad when fine evidence is weak; mark genuinely mixed subclusters for local resolution. If high resolution creates many marker-poor unresolved fragments, review the nearest lower stable resolution.
 
-At whole-tissue, broad-cohort and targeted-cohort boundaries, repeat a complete catalog-by-cluster lineage scan at the selected resolution and the next two higher available resolutions. Do not inherit the parent label as a candidate filter. Preserve subthreshold but coherent evidence as `watch` in `lineage_signal_registry.tsv`; later clustering can strengthen it into a lineage even when the initial broad pass could not. A signal may disappear from the active queue only through a hash-bound supported outcome or multichannel refutation.
+## Round 3: resolve local mixtures
 
-## Round 3: targeted questions
+Inside a triggered mixed subcluster, form independent lineage components, adjudicate overlaps and rescore the exact local remainder once. Unselected or ambiguous members are not technical QC. A missing broad can be reconstructed here even if it never appeared in Round 1.
 
-Use a temporary targeted cohort only for an interpretable local mixture, contamination boundary or context-gated identity. RCTD/reference assistance is optional and lower priority. Canonical high plus independent evidence may support fine; moderate supports broad-only; low enters the final QC holdout.
+## Round 4: merge and freeze
 
-## Round 4: residual QC and closure
+Merge all cohort outcomes into an exact, mutually exclusive analysis-set partition. Freeze broad labels, then parent-lock fine proposals and retain state programs in separate fields.
 
-After every broad and targeted cohort is terminal, freeze residual QC. Do not recluster it. Run one calibrated broad-only mapping over the complete analysis set. Directly return unlabeled frozen-QC observations with moderate-or-higher calibrated support after OOD, ontology and profile-scope safety gates; marker/spatial evidence is an audit or group-level challenge, not a duplicate per-cell gate. Compare every defined broad label with the same Atlas result. Reopen only material cluster/cohort disagreement or coherent OOD once, using independent query evidence. If residual QC remains at least 10% or 50,000 observations, reopen the upstream initial broad-recall audit before completion. Materialize one final annotation and run both Atlas-concordance and direct-workflow validators.
+## Round 5: Atlas and completeness
 
-Run `plan_next_iteration.py` after every atomic writeback. A non-empty queue blocks completion. Calibrated reference predictions may directly fill an empty frozen-QC broad label under the state-aware safety gates; they never overwrite a defined label or write fine labels directly.
+Map all cells once at broad level. Directly rescue only unlabeled, moderate-or-higher, non-OOD and profile-compatible observations. Review material conflicts with the complete source cohort. Audit present, missing and unmodeled lineages, then convert the remaining unresolved cells to typed QC during final materialization.
+
+An excessive final QC fraction routes to the specific contributing second-round cohort or post-merge unresolved group. It never routes to whole-object per-cellbin threshold tuning.

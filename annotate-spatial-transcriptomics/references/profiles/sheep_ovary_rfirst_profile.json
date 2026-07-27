@@ -15,14 +15,19 @@
     "candidate_resolutions": [0.1, 0.2, 0.3, 0.4, 0.6],
     "minimum_resolution": 0.1,
     "allow_below_minimum": false,
-    "rule": "use the same normal candidate range for every sheep-ovary broad-class or targeted cohort; adapt the selected resolution, PCs and k within current-cohort evidence, never recluster final QC, and never lower resolution to compensate for a defective graph"
+    "default_boundary": "one cohort per whole-tissue initial cluster",
+    "raw_count_chain": "project-local non-SCT raw counts -> SCT v2/glmGamPoi -> PCA -> query-only SNN -> Leiden",
+    "provisional_label_blind_until_score_freeze": true,
+    "full_catalog_scan_required": true,
+    "rule": "use the complete candidate range for every initial-cluster cohort; adapt selected resolution, PCs and k within current-cohort evidence, compare nearest neighboring resolutions, never recluster final QC, and never lower resolution to compensate for a defective graph"
   },
   "whole_tissue_partition_contract": {
     "fresh_sct_banksy_grid": [0.2, 0.4, 0.6, 0.8],
     "upstream_banksy_grid_policy": "use every resolution actually present in the hash-bound BANKSY input; do not silently replace it with the query-reclustering grid",
     "minimum_candidates": 3,
-    "required_review_window": "selected plus the next two higher available resolutions; if fewer exist, review every higher candidate and record the upstream-grid limitation",
-    "selection_endpoint": "broad-lineage recall and cluster purity across the complete catalog, not cluster count or agreement with a prior annotation",
+    "required_review_window": "complete grid for partition choice; record lineage watch signals but do not release labels",
+    "selection_endpoint": "stable major tissue structure without technical fragmentation; the first pass constructs cohorts and need not separate every lineage",
+    "release_authority": false,
     "separate_from_cohort_reclustering": true
   },
   "stereopy_cellbin_pped_contract": {
@@ -87,8 +92,8 @@
       "cross_species_support"
     ],
     "primary_public_atlas": "GSE233801",
-    "atlas_mapping_scope": "complete_analysis_set_once_after_terminal_qc_freeze",
-    "atlas_direct_writeback_scope": "complete_residual_qc_holdout_only",
+    "atlas_mapping_scope": "complete_analysis_set_once_after_merge_and_freeze_broad",
+    "atlas_direct_writeback_scope": "unlabeled_post_merge_observations_only",
     "defined_label_atlas_policy": "concordance_challenge_only_until_orthogonal_query_evidence_review",
     "open_set_ood_required": true,
     "reusable_fixed_reference_index_required": true,
@@ -109,7 +114,7 @@
     "accepted_calibrated_tiers": ["high", "moderate_only"],
     "moderate_or_higher_target_precision": 0.9,
     "high_target_precision": 0.95,
-    "qc_direct_return_safety_gates": ["calibrated_moderate_or_higher", "unlabeled_frozen_qc", "non_ood", "no_ontology_conflict", "candidate_within_atlas_scope"],
+    "unlabeled_direct_return_safety_gates": ["calibrated_moderate_or_higher", "unlabeled_after_broad_freeze", "non_ood", "no_ontology_conflict", "candidate_within_atlas_scope"],
     "marker_spatial_evidence_role": "mandatory audit and coherent-group challenge; not a duplicate per-observation prerequisite after query-anchor calibration",
     "calibration_origin": "query_like_heldout_current_query_anchors",
     "minimum_heldout_observations_per_return_class": 30,
@@ -129,7 +134,7 @@
     "broad_only_rescues_enter_fine_marker_discovery": false,
     "oocyte_rule": "send the complete multi-module starting candidate cohort to adaptive query-only reclustering; use strict marker/anti-program seeds and spatial foci to adjudicate clusters, never as a per-cell membership filter; after a cluster passes non-ZP/maternal, somatic-clearance and object-ensemble morphology review, release every canonical member except explicit hard-exclusion cells and return somatic neighbours directly to supported lineages with ambient tags",
     "vascular_release_rule": "use Vascular-associated as the shared broad parent of blood endothelial, lymphatic endothelial and pericyte/mural cells; keep mature Smooth muscle separate",
-    "large_residual_qc_rule": "10% or 50000 residual observations triggers upstream broad-recall re-audit before completion",
+    "large_residual_qc_rule": "10% or 50000 final residual observations returns to the contributing second-round cohort or post-merge unresolved review; it never triggers first-pass whole-object per-cell threshold tuning",
     "neural_candidate_rule": "SOX10/S100B/PLP1/MPZ-like glial backbone or a coherent neuronal program plus track-like morphology; DLG2 or another single neuronal gene is insufficient. Candidate discovery is required even when the reference case lacked this class."
   }
 }

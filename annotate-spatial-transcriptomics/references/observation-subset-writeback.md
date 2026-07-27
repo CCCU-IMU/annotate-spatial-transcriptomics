@@ -1,28 +1,55 @@
-# Observation-level subset writeback
+# Local mixed-subcluster splitting and exact remainder
 
-## Principle
+## Scope and authority
 
-A Leiden/Louvain/BANKSY cluster is a computational query boundary, not an indivisible biological unit. Whole-subcluster writeback is only a high-purity fast path. When a subcluster contains two coherent resident programs, freeze disjoint observation-level subsets and adjudicate the exact remainder independently.
+This route is available only after second-round cohort scoring identifies one exact Leiden subcluster with either two independently supported specific identity cores, or one orthogonally supported specific identity embedded in a supported generic remainder. Whole-subcluster DEG is supporting evidence, not a trigger requirement: a minority Granulosa, Smooth muscle, Vascular-associated or other lineage can have negative aggregate DEG after dilution by the majority parent. Such a program triggers one bounded candidate-local separability check. It is written back only if observation discriminators, candidate-local pseudobulk/DEG, spatial components or neighboring-resolution partitions show that the signal belongs to a separable member set. The route must never run as a whole-tissue or whole-cohort per-cellbin classifier.
 
-This permits, for example, a Stromal-dominant follicular-wall subcluster to return a mature Smooth muscle subset while the remainder returns to Stromal/mesenchymal. The aggregate subcluster winner does not constrain a supported subset; the subset's own complete-catalog numerical evidence is authoritative.
+Formal execution is contract-bound through `run_lineage_controller.py`, which may invoke `run_observation_lineage_scoring.R`, `derive_candidate_local_subsets.R` and `close_exact_remainders.py`. Project-local variants are experimental.
 
-## Required execution
+## Observation evidence
 
-1. Score every observation against the complete broad candidate catalog on the project-local full-feature object. Use lineage-specific identity/core and an independent support family, plus anti-programs. ACTA2/TAGLN, one keratin, one ECM marker, spatial location or one paper marker cannot define a subset.
-2. Propose a target subset only when its per-observation winner is stable and its exact membership has at least two positive families, low hard anti-program burden, a positive score margin and coherent spatial structure.
-3. Validate the frozen subset with `observation_subset_evidence.schema.json`. The default gate is at least 0.70 lineage-supported observations, at least 0.30 support advantage over the strongest competitor and at most 0.05 contradiction fraction. Thresholds are project-bound in `observation_writeback_policy`.
-4. Allow multiple disjoint biological returns from the same source subcluster. Their memberships plus targeted/QC successors must exactly partition the source membership.
-5. Remove accepted subsets and rescore the exact remainder against the complete catalog. The remainder may return to any supported broad class or remain QC; parent identity, aggregate winner and spatial adjacency are not priors.
-6. Preserve shared programs such as contractility, ECM, hypoxia, stress and follicle adjacency as state tags. A double-positive interface remains broad-only or QC when no subset passes.
+- Score the complete catalog within the exact source subcluster and nearest-resolution evidence.
+- Scale each gene by the current query's nonzero 95th percentile.
+- Aggregate a family with the two strongest available genes.
+- Combine fixed-kNN direct/local evidence at `0.35/0.65` by default.
+- One anti-marker or local anti signal lowers confidence; only direct multigene contradictions spanning independent anti-families are hard.
+- Freeze scores before proposal construction and do not read provisional/historical labels.
 
-## Whole-subcluster gate
+## Independent candidate components
 
-Whole-subcluster writeback requires all of the following: complete-catalog positive-margin winner, at least two independent positive families, no unresolved contradiction, raw two-family support of at least 0.40 and a raw support advantage of at least 0.20. Every other eligible broad lineage with raw support at least 0.35 triggers an embedded-component audit; the whole return passes only when that competitor is shown to be spatially incoherent or contradicted. A coherent competitor requires `supported_subset` extraction or a targeted successor. This avoids treating ubiquitous ECM in Granulosa cellbins as true Stroma while still reopening the large follicular-ring Smooth muscle signal. When a legacy table lacks raw support, the conservative fallback is effective support at least 0.25 with margin at least 0.10. Relative winner status alone never passes, and project-specific calibrated values are frozen in the annotation contract.
+Generate every candidate's identity-core seed and local spatial/expression components independently. Generic ECM, a shared parent program or `ACTA2/TAGLN` cannot bridge distant identity cores. The aggregate winner cannot suppress another candidate.
 
-## Final audit
+One source subcluster may therefore propose multiple subsets. Resolve overlap using normalized evidence, pairwise discriminators and anti-programs. A clear winner receives the cell; unresolved overlap stays with a supported common parent or `unresolved_biological`. Catalog order is never a tie-breaker. Specific lineages are adjudicated before generic Stromal remainder. If simultaneous lineage signals remain coexpressed in the same observations and no expression/spatial partition is validated, do not split or invent a lineage; retain the supported broad parent and keep the alternative as `watch`.
 
-The post-Atlas broad-class completeness artifact must enumerate every source writeback that contributes to the final class. Query-derived whole/subset returns retain their own purity metrics and membership hashes; calibrated Atlas and canonical Oocyte returns retain their route-specific validation. Counts must exactly reproduce the final class. This prevents a strong majority return from hiding one weak whole-cluster expansion.
+Generic Stromal/ECM coherence is a possible final remainder parent, not an independent competing identity by itself. A specific candidate must demonstrate its own multi-family core plus orthogonal group evidence before it can displace that parent or trigger a split.
 
-## Fine candidates
+Do not use the aggregate subcluster contradiction fraction as a candidate-visibility filter. A true mixed subcluster is expected to be contradictory before its memberships are separated. Candidate visibility requires multi-family direct identity-core, stable and orthogonal group evidence; the contradiction ceiling is applied only after a candidate-local subset has formed, or when deciding whether the entire subcluster is pure enough to inherit one identity.
 
-After broad labels are locked, audit the complete parent-specific fine-candidate catalog, not only vascular children. Every optional child is recorded as `supported`, `refuted` or `not_evaluable`; zero fine labels is valid only after this audit. Fine labels never repair an incorrect broad label, and state-only splits remain tags.
+The default `0.70 support / 0.30 competitor margin / <=0.05 contradiction` thresholds validate an already formed group. They are not per-observation admission gates.
+
+## Whole-subcluster fast path
+
+Do not call the local splitter when a second-round subcluster has a coherent multigene identity, DEG/pseudobulk support, reasonable morphology, neighboring-resolution stability and no independent competitor. Return it wholesale; sparse noncontradictory members inherit broad identity.
+
+## Exact local remainder
+
+After accepting disjoint candidate subsets:
+
+1. remove their exact IDs from the original source subcluster;
+2. keep observation scores immutable;
+3. recompute candidate prevalence, competition, spatial components and group evidence on the exact remainder;
+4. return a reliable common parent when no embedded competitor remains;
+5. allow one final candidate extraction if a new coherent component appears;
+6. retain genuinely ambiguous members as `unresolved_biological`.
+
+An independently certified cross-lineage identity remains a remainder blocker even when the unsplit aggregate remainder exceeds the ordinary 5% contradiction ceiling. Do not reapply that ceiling to hide the blocker and return the whole remainder to one parent. State-only programs are stored in the state column and are not broad-parent blockers by themselves.
+
+The final extraction may only revalidate residual membership from candidate-local spatial components already generated inside the source mixed subcluster. It cannot rerun an unrestricted per-observation candidate scan. The Oocyte canonical-component route is candidate-specific: it requires a canonical group challenger, an identity-core-only spatial component, two supported families, positive program/direct enrichment and local spatial support. Somatic anti signal remains reported but cannot veto that route by itself; no other candidate inherits the exception.
+
+Failure to enter a subset is never, by itself, a QC reason. Local remainder artifacts cannot read or modify full-object membership outside their source subcluster.
+
+## Required audit
+
+The local artifact records its trigger, source cohort/subcluster and membership hash, each candidate proposal, overlap decision, accepted disjoint subsets, remainder rounds and final coverage. The union of accepted subsets plus parent/unresolved remainder must exactly equal the source subcluster.
+
+Before overlaying any accepted repair on a frozen membership, run `apply_cell_id_membership_patch.py` with the exact columns authorized for change. The base and proposal must contain unique, nonempty `cell_id`; proposal IDs must be a subset of the base; output order must equal base order; and every non-proposal value in an updated column must remain unchanged. Never assign a marker matrix, score table or proposal vector to membership rows by position, even when both tables have the same row count.

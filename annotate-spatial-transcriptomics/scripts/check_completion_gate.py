@@ -81,7 +81,7 @@ def main():
         else:
             record=json.loads(contract_gate.read_text())
             if record.get("status")!="PASS" or not contract.is_file() or record.get("contract_sha256")!=sha256(contract):errors.append("v2 annotation contract validation is failed or stale")
-        if project.get("global_atlas_concordance_required_when_reference_applicable",False) is True:
+        if project.get("global_atlas_concordance_required_when_reference_applicable",False) is True and contract_payload.get("skill_release_version")!="2.2.0":
             atlas_gate=r/"provenance/atlas_state_routing_validation.json"
             if not atlas_gate.is_file():errors.append("v2 authoritative all-cell Atlas routing has not been validated")
             else:
@@ -90,6 +90,33 @@ def main():
                 elif contract_payload:
                     routing=json.loads(manifest.read_text(encoding="utf-8"));expected=contract_payload.get("workflow_profile",{});actual=routing.get("workflow_profile",{})
                     if actual.get("sha256")!=expected.get("sha256"):errors.append("v2 Atlas routing uses a workflow profile different from the annotation contract")
+        if project.get("canonical_lineage_controller_required",False) is True:
+            controller_gate=r/"provenance/lineage_controller_release_validation.json"
+            if not controller_gate.is_file():errors.append("v2.2 canonical lineage-controller release has not been validated")
+            else:
+                controller_validation=json.loads(controller_gate.read_text())
+                if controller_validation.get("status")!="PASS":errors.append("v2.2 canonical lineage-controller release validation is blocked")
+                if contract.is_file() and controller_validation.get("annotation_contract_sha256")!=sha256(contract):errors.append("v2.2 lineage-controller release validation is stale for the annotation contract")
+        if contract_payload.get("skill_release_version")=="2.2.0":
+            controller_gate=r/"provenance/lineage_controller_release_validation.json"
+            final_record={}
+            if controller_gate.is_file():
+                try:final_record=json.loads(controller_gate.read_text()).get("final_membership",{})
+                except (OSError,json.JSONDecodeError):errors.append("v2.2 controller release validation is unreadable")
+            final_path=Path(str(final_record.get("path","")))
+            if not final_path.is_file() or (final_record and final_record.get("sha256")!=sha256(final_path)):errors.append("v2.2 final membership is missing or stale")
+            result={
+                "status":"PASS" if not errors else "BLOCKED",
+                "errors":errors,
+                "workflow_model":"initial_cluster_second_round_primary",
+                "annotation_contract_sha256":sha256(contract) if contract.is_file() else "",
+                "controller_release_validation":str(controller_gate.resolve()),
+                "final_membership":final_record,
+            }
+            completion_path=r/"provenance/completion_gate.json";completion_path.parent.mkdir(parents=True,exist_ok=True);completion_path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
+            dependencies=[path for path in [contract,contract_gate,controller_gate,final_path] if path.is_file()]
+            build_dependency_manifest(completion_path,dependencies,{"gate":"v2.2_staged_completion"})
+            print(json.dumps(result,ensure_ascii=False,indent=2));return 0 if not errors else 2
     if preset_requested:
         preset_path=r/"config/active_strategy_preset.json"
         if not preset_path.exists():errors.append("requested strategy preset is not activated in config/active_strategy_preset.json")
@@ -275,6 +302,7 @@ def main():
             if residual.get("status")!="PASS":errors.append("residual-QC upstream-recall audit is blocked")
             if not cell_ledger.is_file() or residual.get("cell_ledger_sha256")!=sha256(cell_ledger):errors.append("residual-QC upstream-recall audit is stale for the current cell ledger")
             if v2 and residual.get("v2_evidence_required") is not True:errors.append("v2 residual-QC audit did not enforce typed reasons and evidence artifacts")
+            if project.get("canonical_lineage_controller_required",False) is True and residual.get("v2_2_return_upstream_required") is not True:errors.append("v2.2 residual-QC validation did not enforce return-upstream thresholds")
     if v2:
         taxonomy_path=r/"provenance/release_taxonomy_audit.json"
         if taxonomy_path.is_file() and json.loads(taxonomy_path.read_text()).get("v2_contract_required") is not True:errors.append("v2 release taxonomy audit did not enforce broad-fine hierarchy")
@@ -297,7 +325,7 @@ def main():
     if multi.get("status")!="PASS":errors.append(f"annotation workflow completion is blocked: {len(multi.get('gaps',[]))} gaps, {len(multi.get('invalid_attempts',[]))} invalid attempts, missing views={multi.get('missing_views',[])}")
     result={"status":"PASS" if not errors else "BLOCKED","errors":errors,"active_decisions":len(clusters),"historical_decisions":len(all_clusters),"recluster_cohorts":len(cohorts),"direct_returns":len(returns),"persistent_biological_pools":False,"runs":len(runs),"annotation_workflow_status":multi.get("status"),"lineage_signal_coverage_status":lineage_signal.get("status"),"lineage_signal_boundaries":lineage_signal.get("boundaries",0),"lineage_signal_rows":lineage_signal.get("signal_rows",0),"project_input_boundary_status":input_boundary.get("status"),"broad_class_completeness_status":broad_completeness.get("status"),"strategy_preset_requested":preset_requested,"strategy_preset_id":preset_record.get("strategy_preset_id"),"context":context}
     completion_path=r/"provenance/completion_gate.json";completion_path.parent.mkdir(parents=True,exist_ok=True);completion_path.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n")
-    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"state/lineage_signal_boundary_registry.tsv",r/"state/lineage_signal_registry.tsv",r/"state/derived_expression_registry.tsv",r/"state/broad_class_completeness_registry.tsv",r/"provenance/lineage_signal_coverage_validation.json",r/"provenance/project_input_boundary_validation.json",r/"provenance/broad_class_completeness_validation.json",r/"provenance/broad_marker_family_contract_validation.json",r/"provenance/broad_family_evidence_validation.json",r/"provenance/residual_qc_audit_validation.json",r/"provenance/banksy_broad_resolution_selection_validation.json",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/atlas_state_routing_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/annotation_contract.json",r/"provenance/annotation_contract_validation.json",r/"provenance/project_results_audit.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
+    dependencies=[path for path in [cell_ledger,r/"state/cluster_decision_ledger.tsv",r/"state/recluster_cohort_registry.tsv",r/"state/direct_return_registry.tsv",r/"state/route_attempt_registry.tsv",r/"state/annotation_support_registry.tsv",r/"state/lineage_signal_boundary_registry.tsv",r/"state/lineage_signal_registry.tsv",r/"state/derived_expression_registry.tsv",r/"state/broad_class_completeness_registry.tsv",r/"provenance/lineage_signal_coverage_validation.json",r/"provenance/project_input_boundary_validation.json",r/"provenance/broad_class_completeness_validation.json",r/"provenance/broad_marker_family_contract_validation.json",r/"provenance/broad_family_evidence_validation.json",r/"provenance/residual_qc_audit_validation.json",r/"provenance/banksy_broad_resolution_selection_validation.json",r/"provenance/prelabel_broad_evidence_validation.json",r/"provenance/atlas_state_routing_validation.json",r/"provenance/lineage_controller_release_validation.json",r/"provenance/annotation_membership_partition_audit.json",r/"provenance/annotation_support_validation.json",r/"provenance/direct_lineage_workflow_audit.json",r/"provenance/whole_tissue_resolution_grid_validation.json",r/"config/annotation_contract.json",r/"provenance/annotation_contract_validation.json",r/"provenance/project_results_audit.json",r/"config/active_workflow_profile.json",r/"config/active_strategy_preset.json",r/"provenance/input_contract_validation.json"] if path.is_file()]
     dependencies.extend(path for path in referenced_files(r,clusters+cohorts+returns+read(r/"state/route_attempt_registry.tsv")+read(r/"state/annotation_support_registry.tsv")) if path not in dependencies)
     if profile_path and profile_path.is_file() and profile_path not in dependencies:dependencies.append(profile_path)
     build_dependency_manifest(completion_path,dependencies,{"gate":"completion"})

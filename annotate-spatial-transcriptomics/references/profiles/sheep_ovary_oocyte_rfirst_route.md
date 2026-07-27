@@ -1,41 +1,37 @@
-# Sheep-ovary R-first Oocyte route
+# Sheep-ovary Oocyte canonical-cluster route
 
-Use this contamination-safe targeted-cohort route whenever sheep ovarian spatial observations may contain Oocyte. It contains no reusable sample label map or fixed selected resolution.
+Use this rule whenever a second-round sheep-ovary cohort contains a plausible Oocyte program. It contains no sample label map or fixed selected resolution.
 
-## Four distinct memberships
+## Evidence layers
 
-1. **Canonical targeted cohort (recall set):** every observation passing the predeclared multi-module full-count gate. The complete set enters query-only reclustering and is the only membership eligible to contribute to the Oocyte census.
-2. **Strict seeds/spatial foci (support):** high non-ZP/maternal evidence, low somatic contradiction and/or coherent spatial objects. These identify an enriched recluster cluster but are not the final census or sole cohort membership.
-3. **Spatial context window (evidence only):** strict-seed neighbours used to discover adjacent pregranulosa/granulosa, epithelial-like or stromal observations. Context-only observations cannot become Oocyte in this route.
-4. **Final broad Oocyte membership:** every canonical-cohort observation in recluster clusters passing program, anti-program and cluster/object-ensemble morphology adjudication, except a recorded cell-level hard contradiction or QC exclusion. It is normally larger than strict seeds and may be smaller than the starting cohort only because entire non-passing clusters or explicit hard-exclusion observations are removed.
+1. **Non-ZP identity:** ooplasm/maternal and oocyte-regulatory programs, not zona genes alone.
+2. **Zona support:** ZP2/ZP3/ZP4 supports a coherent identity but is ambient-prone and never seeds the census alone.
+3. **Somatic competitors:** Granulosa, Stromal, Vascular, Epithelial and Immune programs.
+4. **Object/ensemble morphology:** compact follicular topology supports a subcluster-level call but is not a per-cell admission gate.
+5. **Spatial context window:** nearby observations are evidence for pregranulosa/cumulus or ambient contamination; they cannot become Oocyte by adjacency.
 
-This prevents both loss of small/isolated true candidates and overcalling zona-contaminated neighbouring somatic cellbins.
+## Canonical second-round rule
 
-## Required route
+At every second-round cohort resolution, scan all subclusters for non-ZP identity, maternal/ooplasm support, zona support, somatic anti-programs and morphology. Select the cohort resolution using the same full-grid and neighboring-resolution rule as other lineages.
 
-1. Screen full-feature counts for non-ZP identity, maternal/ooplasm and zona modules plus Granulosa, stromal, vascular, epithelial and immune anti-programs.
-2. Build one immutable `oocyte_targeted_recluster` cohort from the multi-module gate. Do not enlarge it from `ZP2/ZP3/ZP4`, location or morphology alone.
-3. Calculate query-calibrated strict seeds. Group candidates for object-level evidence, but retain isolated high-evidence candidates in the full cohort.
-4. Recluster the complete cohort with a query-only graph. Select the candidate with the best integrated evidence for the Oocyte-versus-somatic question: preserve a stable Oocyte program or coherent somatic alternative first, reject state/technical fragmentation second, and use lower complexity only when candidates are otherwise equivalent.
-5. Compare every cluster for absolute detection and coherence of non-ZP identity/maternal modules, zona support, somatic anti-programs, QC complexity and spatial objects. A seed-rich cluster remains only a candidate until this passes.
-6. Freeze broad Oocyte only for passing clusters, then run `materialize_oocyte_cluster_membership.py`. Include all canonical-cohort members of each passing cluster; do not require each cellbin to be a strict seed, belong to a seed-derived spatial object or individually cross the strict molecular threshold. A cell-level removal requires an explicit hard contradiction/QC exclusion record. Return Granulosa-dominant, ECM/stromal-dominant or other coherent somatic clusters directly to their supported broad/fine labels and preserve `oocyte_adjacent`/`zona_ambient` tags. Send non-interpretable remainder to QC. Do not create an intermediate cohort or automatically recluster a direct return again.
-7. Group contiguous positive cellbins into putative objects for reporting. Observation count and putative-object count are separate; neither proves a histological oocyte count without image review.
-8. When a context-window branch suggests pregranulosa, require developmental identity (`FOXL2` plus stage-compatible `KITL/WNT4/RSPO1/LGR5` evidence), follicular support (`FST/GJA1/CDH2/INHBB/SERPINE2`), maturation comparison, stromal/mural/non-ZP-oocyte anti-program clearance and compatible topology. FOXL2, proximity or increased cluster count alone is insufficient.
+Strict seeds/spatial foci are discovery aids and never the final census.
 
-## Spatial interpretation
+Within the complete cohort, when a second-round Leiden subcluster has a coherent non-ZP/maternal identity, somatic clearance, neighboring-resolution stability and compatible object-level morphology, return the complete subcluster as broad Oocyte except observations with a direct hard contradiction or objective input QC failure. Do not require each member to be a strict seed, a seed-derived spatial object or individually above a two-family threshold. This preserves sparse canonical members.
 
-- Cortical, subcortical, peripheral or section-edge location is never negative evidence; small/primordial oocytes may occur in the cortex.
-- Compact follicular morphology supports cluster identity at the object/ensemble level but is not an observation-level membership filter after a cluster passes.
-- Location alone is never positive evidence and cannot relax molecular/anti-program gates.
-- A singleton with strong multi-module evidence remains in the cohort but is not automatically Oocyte.
+If the subcluster also contains a separable somatic identity core, trigger the standard local mixed-subcluster route. Return coherent Granulosa/ECM/vascular/epithelial components to those identities and keep `oocyte_adjacent` or `zona_ambient` as state tags. Nonselection never becomes QC automatically.
 
-## Regression lesson
+If no canonical subcluster exists, retain a watch or negative Oocyte audit. Do not create an all-object per-cell Oocyte classifier and do not widen from zona, location or morphology alone.
 
-The deidentified R-first reference separated an Oocyte-enriched cluster from an ECM/stromal cluster despite overlap in raw marker-hit counts. Cluster-level non-ZP/maternal enrichment versus `MFAP4/LTBP4/IGFBP5/DCN`-like somatic coherence was decisive. Marker count, strict-seed membership or spatial focus must never replace full targeted-cohort reclustering, and strict-seed/object membership must never shrink an already passing cluster's canonical membership.
+## Zero-census canonical challenger
 
-## Fail-closed outcomes
+When ordinary second-round scanning returns no Oocyte, screen the complete analysis set once with the same label-blind multi-module starting rule. If that screen is nonzero, form exactly one query-only targeted cohort containing **all** starting-gate observations across initial clusters and recluster it from project-local raw counts. Existing broad/fine labels, Atlas labels, prior repair membership and spatial position remain invisible until the candidate cluster and exclusions are frozen.
 
-- If the cohort is too small for defensible reclustering, record `not_applicable_reviewed` and retain evidence-positive observations for manual/image review; never widen from zona genes.
-- If no cluster clears the somatic anti-program, return coherent somatic candidates directly to those lineages, retain the remainder in QC with contamination tags and record a negative Oocyte audit.
-- If morphology is unavailable, broad Oocyte needs exceptionally coherent molecular separation and pending morphology must be visible to master/user review.
-- Oocyte observations are not eligible for stage-specific subtypes without independent stage programs and morphology.
+This route is a cohort-level challenger, not a whole-object per-cell classifier. A passing canonical cluster returns all of its members except objective input-QC failures or direct multigene somatic contradictions spanning independent families. Strict seeds, zona signal, spatial foci and putative object IDs support the cluster decision but cannot shrink the passing cluster. If the complete starting gate is empty or its targeted cohort has no stable canonical cluster, record a justified negative census.
+
+## Pregranulosa/cumulus context
+
+A context window may identify adjacent pregranulosa/cumulus candidates but does not expand Oocyte. Require FOXL2 plus stage-compatible KITL/WNT4/RSPO1/LGR5 evidence, follicular support such as FST/GJA1/CDH2/INHBB/SERPINE2, somatic competitor clearance and compatible topology. Proximity, FOXL2 alone or additional graph clusters are insufficient.
+
+## Reporting
+
+Group contiguous Oocyte-positive cellbins into putative objects only for visualization. Cellbin count and putative-object count are separate and neither equals histological oocyte count without image review. No stage-specific Oocyte subtype is released without an independent stage program and morphology.

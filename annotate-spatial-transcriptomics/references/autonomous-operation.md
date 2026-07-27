@@ -10,10 +10,10 @@ Pause only when a missing fact would materially change the biological question o
 
 ## Continuous control loop
 
-1. Run `autopilot_status.py PROJECT_ROOT` at startup and after every atomic writeback, repaired job, report build or release audit.
-2. Execute the first emitted phase to completion. A biological phase may require Agent judgment and multiple submitted jobs; a file-existing check alone is insufficient.
+1. Run the staged `run_lineage_controller.py` entry and inspect current project state at startup and after every atomic writeback, repaired job, report build or release audit.
+2. Execute the next authorized phase to completion. A biological phase may require Agent judgment and multiple submitted jobs; file existence alone is insufficient.
 3. Validate artifacts before changing the run from `submitted` to `validated_done`.
-4. Run `plan_next_iteration.py` after every biological writeback. Execute the entire queue, including direct returns and targeted cohorts created by the current question.
+4. Complete every initial-cluster cohort, then every triggered local mixed-subcluster question, before broad merge. Iterate only within the specific failing cohort/local/post-merge boundary.
 5. Re-run state validation and the completion gate after the last **biological-analysis** run registry update. Never trust a PASS artifact older than a biological ledger or registry before confirmation.
 6. Build one final annotation: moderate-or-higher broad labels and high-confidence fine labels. After the biological completion and incident gates pass, generate only the frozen broad spatial and canonical-marker evidence assets. Then freeze `master_quality_review_request.json`. The main conversation Agent—not the sample worker—performs a concise annotation-quality review against the validated R-first reference and records `PASS`, `PASS` with concerns, or `RETURN_FOR_ITERATION`. Completion is already proven by the completion gate; this approval evaluates biological reasonableness and must never be requested after broad annotation alone.
 7. After main-Agent quality approval, build the lightweight confirmation HTML from the support registry and approved evidence, then pause for explicit user approval. Do not generate final DEG, full tree dotplots, per-node/per-gene maps or the release HTML before approval.
@@ -26,8 +26,8 @@ Pause only when a missing fact would materially change the biological question o
 Do not stop because:
 
 - the original graph clusters have tentative labels;
-- the broad annotation fraction is high;
-- one broad-class cohort completed;
+- the first-pass provisional partition looks convincing;
+- one initial-cluster cohort completed;
 - RCTD or atlas mapping produced labels;
 - QC holdout shrank but remains unreviewed;
 - a report can be opened;
@@ -39,6 +39,17 @@ These are intermediate states. Continue autonomously while an in-scope safe next
 ## Biological judgment contract
 
 Use profiles as priors and safety gates, never as an answer key. Derive global and cohort resolution from the current data. Choose the integrated-evidence optimum: preserve stable compartments first, roll back state-only fragmentation second, and use lower complexity only to break an evidence tie. Allow broad-only and retained interface/QC outcomes when fine evidence fails. For contamination-prone identities, require the profile’s multi-module, anti-program, spatial-object and targeted-recluster gates even if a reference prediction is confident.
+
+## Conversation brief
+
+Keep validator, hash, file and state-machine details in project artifacts. In conversation, output no more than five short biological bullets for one event:
+
+- whole tissue: selected resolution, major compartments, persistent hidden signals and cohort count;
+- cohort: selected resolution, main programs, parent/cross-lineage/missing-broad returns and unresolved biology;
+- Atlas/completeness: unlabeled rescue, material broad conflicts and zero-census conclusion;
+- final: broad/fine census, spatial structures, retained QC/Unknown and review targets.
+
+Do not narrate gates, file creation or controller stages unless one concrete failure blocks the next biological action.
 
 ## Failure recovery
 

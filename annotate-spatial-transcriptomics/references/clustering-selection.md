@@ -35,9 +35,9 @@ Neighborhood size changes spatial smoothing and cannot be treated as another res
 
 For a fresh verified same-batch SCT+BANKSY result, the whole-tissue grid is `0.2,0.4,0.6,0.8`. For a reusable upstream BANKSY result, the candidate grid is exactly the complete grid present in the frozen input and recorded in `annotation_contract.json`. Do not replace either BANKSY grid with the query-only cohort grid `0.1,0.2,0.3,0.4,0.6`. BANKSY resolution, BANKSY neighborhood `k`, Leiden/Louvain resolution and graph-neighbor `k` are separate parameters and must never be used interchangeably in evidence or prose.
 
-When BANKSY memberships are the requested whole-tissue starting point, freeze one initial broad-annotation resolution only after every formal resolution has a query-derived broad-evidence review. Rank preservation of supported/default broad lineages and large-label purity first; then marker/DEG coherence, spatial morphology and adjacent-resolution migration; penalize technical fragmentation. Cluster count, UMAP appearance and a target number of clusters are shortlist aids only. A resolution with fewer clusters is preferred only when broad evidence is otherwise equivalent.
+When BANKSY memberships are the requested whole-tissue starting point, select one stable cohort-partition resolution after reviewing the complete formal grid. Preserve major spatial structure and avoid technical fragmentation; do not require the first pass to separate every lineage. Candidate programs and embedded signals become provisional `watch` evidence for second-round cohorts, not first-pass labels. Cluster count, UMAP appearance and a target number of clusters are shortlist aids only.
 
-Record weak coherent programs seen only at a rejected or higher resolution in the continuous signal ledger. If no single resolution separates every lineage, choose the most defensible broad-resolution anchor and rely on open-world broad-cohort reclustering/direct cross-lineage return; never silently close the missing lineage.
+Record weak coherent programs seen at any reviewed resolution in the watch ledger. If no first-pass resolution separates every lineage, choose the most stable anatomical partition and rely on full-catalog second-round reconstruction; never silently close the missing lineage.
 
 ## Seurat/R-first
 
@@ -45,6 +45,8 @@ When a full-feature Seurat RDS exists, make Seurat the default whole-tissue and 
 
 For mesenchymal-rich tissues, candidate selection must demonstrate whether generic stroma, mesenchymal-progenitor-like, mature smooth muscle, pericyte/mural and endothelial programs are separable. Do not prefer a resolution merely because it creates all named literature classes; require stable multi-gene and spatial evidence.
 
-## Subset reclustering
+## Second-round cohort reclustering
 
-Repeat biological selection inside every broad-class cohort. For sheep ovary, keep the fixed formal resolution candidates `0.1,0.2,0.3,0.4,0.6` while adapting the selected value, PCs and k; do not introduce below-floor resolutions. Other profiles may declare different grids.
+Repeat biological selection independently inside every initial-cluster cohort. For sheep ovary, keep `0.1,0.2,0.3,0.4,0.6` while adapting selected resolution, PCs and k from current-cohort evidence. Compare the selected partition with the nearest lower/higher resolutions; at a grid edge use the two nearest candidates. Do not require two higher resolutions and do not reuse whole-tissue BANKSY graph parameters. Other profiles may declare different grids.
+
+The second round optimizes stable broad identity before subtype yield. If many small subclusters are marker-poor or unresolved while a lower neighboring resolution restores coherent parent or cross-lineage broad programs without hiding a validated minority component, treat the selected resolution as overfragmented and prefer the lower stable candidate. Do not force a named subtype from weak markers. A subcluster with a supported broad background and no independent child discriminator remains broad-only; an independently supported different lineage returns to that broad even when no fine subtype is available.

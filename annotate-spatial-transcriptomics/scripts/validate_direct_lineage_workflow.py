@@ -49,6 +49,49 @@ def gap(code: str, entity_type: str, entity_id: str, required_action: str, detai
 
 
 def audit(root: Path) -> dict:
+    annotation_contract_path = root / "config/annotation_contract.json"
+    if annotation_contract_path.is_file():
+        try:
+            annotation_contract = json.loads(
+                annotation_contract_path.read_text(encoding="utf-8")
+            )
+        except json.JSONDecodeError:
+            annotation_contract = {}
+        if annotation_contract.get("skill_release_version") == "2.2.0":
+            validation_path = root / "provenance/lineage_controller_release_validation.json"
+            gaps: list[dict] = []
+            try:
+                validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                validation = {}
+                gaps.append(gap(
+                    "STAGED_CONTROLLER_VALIDATION_MISSING", "project", "v2.2",
+                    "run_staged_controller_release_validator",
+                    "v2.2 staged controller release validation is missing",
+                ))
+            if validation.get("status") != "PASS":
+                gaps.append(gap(
+                    "STAGED_CONTROLLER_BLOCKED", "project", "v2.2",
+                    "close_second_round_atlas_and_final_release",
+                    "v2.2 staged controller has not reached a valid final release",
+                ))
+            if validation.get("annotation_contract_sha256") != sha256(annotation_contract_path):
+                gaps.append(gap(
+                    "STAGED_CONTROLLER_STALE", "project", "v2.2",
+                    "rerun_staged_controller_validation",
+                    "v2.2 staged controller validation is stale for the contract",
+                ))
+            blocking = [item for item in gaps if item["blocking"]]
+            return {
+                "status": "PASS" if not blocking else "BLOCKED",
+                "controller_state": "CONTINUE" if not blocking else "ITERATION_REQUIRED",
+                "workflow_model": "initial_cluster_second_round_primary",
+                "active_workflow_contract": annotation_contract,
+                "errors": [item["detail"] for item in blocking],
+                "gaps": gaps,
+                "invalid_attempts": [],
+                "missing_views": [],
+            }
     gaps: list[dict] = []
 
     def add(code: str, entity_type: str, entity_id: str, action: str, detail: str, blocking: bool = True) -> None:

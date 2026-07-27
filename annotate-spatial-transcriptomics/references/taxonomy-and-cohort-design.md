@@ -16,19 +16,20 @@ Targeted high-level sheep studies answer narrower questions. A 2026 *FASEB Journ
 
 Cross-species studies may clarify boundaries but do not override the query. Human theca/stroma work (PMID 36599970) supports a progenitor-to-structural/perifollicular/androgenic continuum. Human morphologically guided spatial work (PMID 38578993) emphasizes oocyte, theca and granulosa programs and cortex/medulla variation while reporting only four major scRNA-seq types. These differences demonstrate why missing literature labels must be audited, not manufactured.
 
-The cross-study adult sheep candidate backbone is therefore `Granulosa`, `Stromal/mesenchymal`, `Vascular-associated`, `Immune`, `Epithelial/mesothelial` and strict `Oocyte`. `Vascular-associated` is the release umbrella for endothelial and mural/pericyte vascular cells; it preserves `Blood endothelial`, `Lymphatic endothelial` and `Pericyte/mural` as optional fine children. This follows the 2025 *Science* ovary atlas statement that endothelial cells and pericytes form the ovarian vasculature, while keeping mature Smooth muscle separate. `profiles/sheep_ovary_candidate_lineage_catalog.json` expands the mandatory boundary audit to evidence-, stage- and anatomy-dependent alternatives including steroidogenic Theca/luteal, mature Smooth muscle, Mesenchymal progenitor-like, lymphatic endothelial, pericyte/mural and neural/glial/neuroendocrine programs. It is non-exhaustive and is still an audit surface, not a requirement that every label appear.
+No study defines a fixed sheep-ovary broad list. The catalog therefore starts with common review boundaries but remains open to stage-, breed- and section-specific luteal, neural/glial or other programs. `Vascular-associated` is the release umbrella for endothelial and mural/pericyte vascular cells; it preserves `Blood endothelial`, `Lymphatic endothelial` and `Pericyte/mural` as optional fine children while keeping mature nonvascular Smooth muscle separate. The catalog is an audit surface and permission model, not a required output list.
 
-## 2. Computational cohorts and QC state
+## 2. Computational cohorts and unresolved state
 
-New projects use three auditable computational boundaries:
+New projects use these boundaries:
 
 | Boundary | Membership | Purpose |
 |---|---|---|
-| `broad_class_recluster` | all observations assigned to one supported initial broad class | Test shallow subtypes and purity within the parent class. |
-| `targeted_recluster` | only observations needed to answer one local mixture, contamination or context-gated question | Resolve that question once; it cannot become a long-lived catch-all. |
-| `qc_holdout` | all final low-information or irreducibly mixed observations after broad/targeted decisions | Exact query boundary for the terminal calibrated Atlas review; it is not reclustered. |
+| `whole_tissue_partition` | every analysis observation in exactly one initial cluster | Build second-round cohorts; record provisional biology only. |
+| `initial_cluster_cohort` | exact members of one initial cluster | Perform the main SCT/PCA/SNN/Leiden annotation against the full catalog. |
+| `local_mixed_subcluster` | one triggered second-round subcluster | Resolve two or more separable competing identities and its exact remainder. |
+| `post_merge_unresolved` | biological members still unlabeled after all cohorts merge | Receive Atlas challenge/rescue and final typed closure. |
 
-A cohort is a computational membership, not a biological category. Every subcluster returns directly to a supported broad/fine label, crosses directly to another lineage, enters one targeted question, or remains QC/technical. A cross-lineage return never creates an intermediate cohort and does not automatically trigger another target-lineage reclustering.
+A cohort is a computational membership, not a biological category. It is never named from the first-pass provisional record, and cross-lineage or missing-broad returns do not automatically enter another cohort. `unresolved_biological` remains distinct from technical QC until final materialization.
 
 ## 3. Release broad classes
 
@@ -46,12 +47,12 @@ Release labels describe biology and require query-specific evidence. Use the fol
 ### Evidence-dependent standalone broad classes
 
 - `Theca`: reserve for a coherent steroidogenic/androgenic theca program with follicular outer-ring morphology. Do not publish `Theca/follicular wall` as a broad label; structural follicular wall may be stroma, smooth muscle, pericyte or interface.
-- `Smooth muscle`: publish when a mature contractile backbone, stable separation and coherent vessel-wall/hilar/structural tracks pass. This is not synonymous with ACTA2/TAGLN-positive stroma.
+- `Smooth muscle`: publish when a mature contractile backbone, stable separation and coherent nonvascular follicular/hilar/structural tracks pass. This is not synonymous with ACTA2/TAGLN-positive stroma or vascular-wall mural cells.
 - `Pericyte/mural` is not a standalone broad class: publish it as an optional fine child of `Vascular-associated` when the RGS5/PDGFRB/CSPG4/NOTCH3/MCAM backbone separates it from endothelial, smooth muscle and generic stroma. Otherwise retain broad `Vascular-associated` or, when vascular identity itself is unsupported, a mural state tag under the supported resident parent.
-- `Mesenchymal progenitor-like`: publish separately from `Stromal/mesenchymal` only when a stable S100A4/progenitor-like program and morphology pass the profile gate. Absence after a documented negative audit is valid.
-- `Luteal steroidogenic`: requires stage/context plus a coherent corpus-luteum-like spatial structure; STAR/CYP11A1 alone is insufficient.
-- `Neural/Schwann`: requires a coherent glial program and nerve-track morphology.
-- `Neuroendocrine`: requires a secretory-neuroendocrine core (`CHGA/CHGB/SYP/SCG/INSM1`), neuronal support and coherent rare-focus morphology. `DLG2/RBFOX1/TENM3` alone remains a state tag under the resident class.
+- `Luteal`: requires bound stage/context, a coherent steroidogenic core, an independent corpus-luteum identity family and a corpus-luteum-like spatial structure; STAR/CYP11A1, PGR/APOD/SFRP4 or a solid component alone is insufficient. Granulosa- and Theca-lineage-of-origin programs are not hard contradictions because both contribute luteal cells. They remain competing origins that must be resolved with luteal-specific programs, DEG/pseudobulk and mass-like rather than thin perifollicular morphology.
+- `Glial/Schwann-like`: requires a coherent glial program and nerve-track morphology.
+
+`Mesenchymal progenitor-like`, `Neuroendocrine-like` and structural/perifollicular Theca remain exploratory records. They do not become broad labels without a future catalog revision based on independent sheep-ovary identity evidence.
 
 The final label must be the least specific honest name. For example, use `Vascular-associated` when endothelial versus pericyte/mural or blood versus lymphatic separation is ambiguous; use `Immune` when myeloid versus lymphoid support is too shallow; use `Stromal/mesenchymal` when a standalone Mesenchymal class is unsupported.
 
@@ -68,13 +69,13 @@ Report them in a separate retained-state census and spatial layer. They remain m
 
 ## 4. Release decision rules
 
-Before a broad label is frozen:
+Before a broad label is frozen from a second-round outcome:
 
 1. Demonstrate at least two explicit independent positive marker families on the full-feature object. Validate the profile contains those families before applying the gate. Use absolute detection/prevalence and pseudobulk for broad presence; centered module scores and one-vs-rest DEG cannot reject a parent program merely because it is shared by several abundant clusters.
 2. Quantify major anti-program leakage at observation level, not only cluster-average DEG.
 3. Verify spatial morphology when coordinates exist.
-4. Review stability across adjacent whole-tissue or cohort resolutions.
-5. For a large heterogeneous label, use its broad-class or targeted query-only cohort before closure.
+4. Review stability across the selected cohort resolution and its nearest neighbors.
+5. For a mixed subcluster, use the local candidate-component and exact-remainder route before closure.
 6. Record a negative audit for every biologically plausible but unsupported standalone class; never lower its gate merely to match a paper.
 
 If a fine label fails, roll it back to the supported broad parent and retain its ECM, contractile, hypoxic, stress, cycle, ambient or anatomical characteristics as tags. If a broad biological label fails but the population is a genuine interface or irreducible low-information state, retain that state explicitly rather than forcing the closest atlas label.

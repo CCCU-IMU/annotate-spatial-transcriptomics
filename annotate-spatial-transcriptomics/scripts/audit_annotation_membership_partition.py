@@ -59,6 +59,60 @@ def registry_membership_allow_empty(
 
 
 def audit(root: Path) -> dict:
+    contract_path = root / "config/annotation_contract.json"
+    if contract_path.is_file():
+        try:
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            contract = {}
+        if contract.get("skill_release_version") == "2.2.0":
+            errors: list[str] = []
+            validation_path = root / "provenance/lineage_controller_release_validation.json"
+            try:
+                validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                validation = {}
+                errors.append("v2.2 staged controller release validation is missing")
+            if validation.get("status") != "PASS":
+                errors.append("v2.2 staged controller release validation did not pass")
+            if validation.get("annotation_contract_sha256") != sha256(contract_path):
+                errors.append("v2.2 staged controller validation is stale")
+            analysis_record = contract.get("input_scope", {}).get("analysis_set", {})
+            analysis_path = Path(str(analysis_record.get("path", "")))
+            final_record = validation.get("final_membership", {})
+            final_path = Path(str(final_record.get("path", "")))
+            if (
+                not analysis_path.is_file()
+                or analysis_record.get("sha256") != sha256(analysis_path)
+            ):
+                errors.append("v2.2 frozen analysis_set is missing or stale")
+                analysis_ids: set[str] = set()
+            else:
+                analysis_ids = {row.get("cell_id", "") for row in read_tsv(analysis_path)}
+            if (
+                not final_path.is_file()
+                or final_record.get("sha256") != sha256(final_path)
+            ):
+                errors.append("v2.2 final membership is missing or stale")
+                final_rows: list[dict[str, str]] = []
+            else:
+                final_rows = read_tsv(final_path)
+            final_ids = [row.get("cell_id", "") for row in final_rows]
+            if set(final_ids) != analysis_ids or len(final_ids) != len(set(final_ids)):
+                errors.append("v2.2 final membership does not exactly cover analysis_set")
+            if any(
+                not row.get("final_broad_label")
+                and row.get("final_state") != "qc_holdout"
+                for row in final_rows
+            ):
+                errors.append("v2.2 final membership has an untyped uncovered member")
+            return {
+                "status": "PASS" if not errors else "BLOCKED",
+                "workflow_model": "initial_cluster_second_round_primary",
+                "n_analysis_set": len(analysis_ids),
+                "n_final": len(final_rows),
+                "errors": errors,
+            }
     errors: list[str] = []
     cell_path = root / "state/cell_ledger.tsv.gz"
     if not cell_path.exists():

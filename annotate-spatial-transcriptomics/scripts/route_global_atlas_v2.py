@@ -15,6 +15,7 @@ from evidence_schema_lib import sha256, validate_artifact_ref
 
 ACCEPTED_TIERS = {"high", "moderate_only"}
 QC_STATES = {"qc_holdout", "low_information_qc_holdout", "pending_qc"}
+UNRESOLVED_STATES = {"unresolved_biological"}
 TRUE = {"1", "true", "yes", "pass", "passed"}
 
 
@@ -109,6 +110,7 @@ def main() -> int:
     ap.add_argument("--state-col", default="final_state")
     ap.add_argument("--broad-col", default="final_broad_label")
     ap.add_argument("--fine-col", default="final_fine_label")
+    ap.add_argument("--boundary-col", default="source_boundary")
     ap.add_argument("--cluster-col", default="source_cluster")
     ap.add_argument("--atlas-label-col", default="predicted_label")
     ap.add_argument("--atlas-tier-col", default="mapping_tier")
@@ -135,17 +137,31 @@ def main() -> int:
     if set(mapping) != set(analysis_ids) or len(mapping) != len(analysis_ids):
         raise SystemExit("Atlas mapping must cover the analysis_set exactly once")
 
-    cluster_sizes = Counter(ledger[cell].get(args.cluster_col, "") for cell in analysis_ids)
+    cluster_sizes = Counter(
+        (
+            ledger[cell].get(args.boundary_col, ""),
+            ledger[cell].get(args.cluster_col, ""),
+        )
+        for cell in analysis_ids
+    )
     primary_group_sizes = Counter(
-        (ledger[cell].get(args.cluster_col, ""), ledger[cell].get(args.broad_col, "").strip())
+        (
+            ledger[cell].get(args.boundary_col, ""),
+            ledger[cell].get(args.cluster_col, ""),
+            ledger[cell].get(args.broad_col, "").strip(),
+        )
         for cell in analysis_ids if ledger[cell].get(args.broad_col, "").strip()
     )
     rows: list[dict] = []
-    review_candidates: dict[tuple[str, str, str, str], list[str]] = defaultdict(list)
-    cell_review_key: dict[str, tuple[str, str, str, str]] = {}
+    review_candidates: dict[
+        tuple[str, str, str, str, str], list[str]
+    ] = defaultdict(list)
+    cell_review_key: dict[str, tuple[str, str, str, str, str]] = {}
     for cell in analysis_ids:
         current = ledger[cell]
         atlas = mapping[cell]
+        boundary = current.get(args.boundary_col, "")
+        cluster = current.get(args.cluster_col, "")
         state = current.get(args.state_col, "").strip()
         primary = current.get(args.broad_col, "").strip()
         source_label = atlas.get(args.atlas_label_col, "").strip()
@@ -157,12 +173,21 @@ def main() -> int:
         in_scope = mapped in allowed_returns and mapped not in excluded_returns
         accepted = tier in ACCEPTED_TIERS and class_calibrated and bool(mapped) and not ood and not ontology and in_scope
         is_qc = not primary and state in QC_STATES
+        is_unresolved = not primary and state in UNRESOLVED_STATES
         if is_qc and accepted:
             route = "direct_qc_broad_return"
             proposed_state, proposed_broad = "defined_broad_only", mapped
             review = False
+        elif is_unresolved and accepted:
+            route = "direct_unlabeled_broad_return"
+            proposed_state, proposed_broad = "defined_broad_only", mapped
+            review = False
         elif is_qc:
             route = "retain_qc"
+            proposed_state, proposed_broad = state, ""
+            review = False
+        elif is_unresolved:
+            route = "retain_unresolved_biological"
             proposed_state, proposed_broad = state, ""
             review = False
         elif primary:
@@ -171,13 +196,13 @@ def main() -> int:
                 route, review = "defined_label_atlas_agreement", False
             elif accepted and mapped != primary:
                 route, review = "defined_label_disagreement_candidate", False
-                key = ("broad_disagreement", current.get(args.cluster_col, ""), primary, mapped)
+                key = ("broad_disagreement", boundary, cluster, primary, mapped)
                 review_candidates[key].append(cell)
                 cell_review_key[cell] = key
             elif ood or ontology or (source_label and not mapped):
                 reason = "ontology_conflict" if ontology else "out_of_distribution" if ood else "unmapped_atlas_label"
                 route, review = "defined_label_ood_ontology_or_crosswalk_candidate", False
-                key = (reason, current.get(args.cluster_col, ""), primary, mapped or source_label)
+                key = (reason, boundary, cluster, primary, mapped or source_label)
                 review_candidates[key].append(cell)
                 cell_review_key[cell] = key
             else:
@@ -187,7 +212,8 @@ def main() -> int:
             proposed_state, proposed_broad, review = state, "", True
         rows.append({
             "cell_id": cell,
-            "source_cluster": current.get(args.cluster_col, ""),
+            "source_boundary": boundary,
+            "source_cluster": cluster,
             "primary_state": state,
             "primary_broad": primary,
             "primary_fine": current.get(args.fine_col, ""),
@@ -209,19 +235,20 @@ def main() -> int:
         })
 
     review_rows = []
-    triggered: dict[tuple[str, str, str, str], str] = {}
+    triggered: dict[tuple[str, str, str, str, str], str] = {}
     for key, cells in sorted(review_candidates.items()):
-        reason, cluster, primary, mapped = key
-        denominator = primary_group_sizes[(cluster, primary)]
+        reason, boundary, cluster, primary, mapped = key
+        denominator = primary_group_sizes[(boundary, cluster, primary)]
         fraction = len(cells) / denominator
         if len(cells) >= args.min_discordant_n and fraction >= args.min_discordant_fraction:
             review_id = f"atlas_discrepancy__{len(review_rows)+1:04d}"
             triggered[key] = review_id
             review_rows.append({
-                "review_id": review_id, "trigger_reason": reason, "source_cluster": cluster,
+                "review_id": review_id, "trigger_reason": reason,
+                "source_boundary": boundary, "source_cluster": cluster,
                 "primary_broad": primary, "atlas_broad": mapped,
                 "n_trigger": len(cells), "primary_group_n": denominator,
-                "cluster_n": cluster_sizes[cluster],
+                "cluster_n": cluster_sizes[(boundary, cluster)],
                 "trigger_fraction": f"{fraction:.8f}",
                 "review_scope": "complete_cluster_or_frozen_cohort",
                 "required_action": "one_pass_orthogonal_query_evidence_review",
@@ -236,7 +263,7 @@ def main() -> int:
     route_path = args.out / "atlas_state_routing.tsv.gz"
     review_path = args.out / "atlas_discrepancy_review_queue.tsv"
     write_tsv(route_path, rows, list(rows[0]))
-    write_tsv(review_path, review_rows, ["review_id", "trigger_reason", "source_cluster", "primary_broad", "atlas_broad", "n_trigger", "primary_group_n", "cluster_n", "trigger_fraction", "review_scope", "required_action"])
+    write_tsv(review_path, review_rows, ["review_id", "trigger_reason", "source_boundary", "source_cluster", "primary_broad", "atlas_broad", "n_trigger", "primary_group_n", "cluster_n", "trigger_fraction", "review_scope", "required_action"])
     census = Counter(row["atlas_state_route"] for row in rows)
     manifest = {
         "schema_version": "2.0",

@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.2.0 — development target (unreleased)
+
+- 将正式架构改为“第一轮只建 cohort、第二轮重聚类负责注释”。第一轮仅生成 provisional program/watch 和精确 cluster membership，不能产生 broad/fine/QC release membership，也不再运行全对象 candidate-local/remainder 闭环。
+- 每个初始 cluster 都与第一轮 membership 哈希精确绑定，并从项目自身非 SCT raw counts 执行 `SCT v2/glmGamPoi → PCA → query-only SNN → Leiden grid`；极小 cohort 显式记录 `underpowered_not_evaluable`，不继承 provisional broad。
+- 全组织分辨率选择优先空间结构与相邻稳定性；第二轮分辨率选择优先身份程序、DEG/anti-DEG、pseudobulk 和相邻稳定性。两者使用同一确定性选择器但不同、显式绑定的 selection purpose。
+- 每个二级 subcluster 扫描完整 broad/fine/state/exploratory 目录。高纯度 subcluster 整体返回；只有二级 mixed subcluster 才启动候选局部 observation 拆分与 exact remainder，未入选成员不自动变为 QC。
+- 第二轮判定把 generic Stromal 明确降为 specific-lineage 之后的 remainder，不再让共享 ECM 程序充当独立竞争谱系；高纯度 identity-dominant 亚簇可整体继承 broad，而 5% contradiction 上限继续只约束普通严格整簇路径和局部候选子集。
+- 二级 mixed-subcluster 的候选可见性不再受 aggregate contradiction 比例否决；两个 specific identity，或一个 specific identity 加 generic remainder，均可触发局部拆分，矛盾比例仅用于整簇纯度或已形成候选子集的复核。
+- 二级 mixed-subcluster 不再要求少数谱系先取得正的整亚簇 DEG；完整多家族信号触发一次有界局部可分离性检查，只有局部表达/空间组件通过才写回。第二轮优先 broad 稳定性：亚型证据不足保留 broad-only，跨谱系证据充分则回归相应 broad，大量 marker-poor unresolved 小簇触发较低相邻分辨率复核。
+- Oocyte 增加受限的 canonical-cluster challenger 与 identity-component 路径：仅在多模块、直接/core、DEG、空间组件和局部增益同时成立时绕过被体细胞稀释的普通 family-prevalence AND。Epithelial 的 Stromal/Granulosa 信号改为 soft anti，并继承 broad 的 component-only 策略，禁止 fine challenger 反向扩张整簇。
+- exact remainder 的最后一次候选提取只可重新验证已生成的 candidate-local 空间组件，不再从全部 remainder 逐 cellbin 重新发明分类器。
+- exact remainder 中已由正交证据确认的跨谱系 blocker 不再被混合 remainder 的 aggregate contradiction 二次过滤；state-only 程序不充当 broad parent blocker，避免把仍含 Smooth muscle 等独立程序的 remainder 整体误写回 Granulosa 或 Stromal。
+- broad 只能在全部 cohort 合并后冻结；fine/state 只可从已解析的高纯度二级 subcluster 提案，并在正确 frozen parent 内物化。Granulosa 的可选 fine 与 Hypoxia/Proliferation/Atresia/Luteinization state 已纳入可执行目录。
+- Atlas 仅在 broad freeze 后运行：可直接救回 calibrated、非 OOD 的 unlabeled broad，但不能静默覆盖已有 broad 或写 fine。最终才执行完整性、缺失谱系、unmodeled、fine census 和 `QC <10% 且 <50,000`。
+- 修复 post-merge contextual-parent 过度写回：空间邻域只能建立解剖背景；目标父类必须在同一 selected 二级亚簇具有独立多通道程序，才可把 lineage-of-origin component 写回该父类。缺少目标父类来源支持时保留 `unresolved_biological`。严格 component 自身的多家族/空间支持现在作为正式局部来源证据进入 completeness，避免少数真实程序因源亚簇 aggregate 稀释而被误判为无支持。
+- 新增无标签权威的 `derived_partition_cache`。当输入、精确 cohort membership、grid/contract、seed 与聚类脚本哈希均未变化时，语义/scorer/writeback/report 修订可复用 raw-count SCT/PCA/SNN/Leiden 分区，只重算完整目录评分、分辨率选择和下游 membership；任一聚类输入变化或 `failed_diagnostic` 来源都会使复用失败。
+- 新增 `apply_cell_id_membership_patch.py`，所有语义修复与 proposal overlay 必须按唯一 `cell_id` 连接、恢复 base 顺序并证明非 proposal 成员未改变；禁止把 marker 矩阵或候选表的行序直接赋给 membership。
+- 将 Theca 固定为“完整分子候选空间发现、解剖事后挑战”：多基因 steroidogenic/androgenic 程序决定候选，follicle ROI、距离或壁层位置不能缩小、扩张或替代分子证据。
+- 将正式黄体 broad 统一为 `Luteal`，同时要求 steroidogenic core 与独立 corpus-luteum identity family；generic steroidogenesis、PGR/APOD/SFRP4、来源谱系或实性空间组件均不能单独写回 Luteal。
+- Oocyte 在常规二级扫描零 census、但全 analysis set 多模块 starting gate 非零时，允许一次标签不可见的 query-only canonical targeted cohort；通过簇完整写回，仅排除客观输入 QC 或直接多家族体细胞硬矛盾，strict seed、ZP、空间焦点和 object ID 均不是逐 cellbin 入选门。
+- 允许可靠 broad-only 作为正式终点；没有独立、稳定、可重复的 child discriminator 时，fine census 可以为空，不为目录完整性制造亚型。
+- A08/A09 全对象逐 cellbin 路线登记为 `failed_diagnostic`，禁止进入运行时 membership、Atlas、fixture truth 或盲回归输入；A10 取消。
+- 当前版本仍需通过五类 raw-count integration fixture、两次独立盲回归、参数扰动和用户审阅；验收前不推送 `main`、不创建 tag。
+
 ## 2.1.0 — 2026-07-23
 
 - 将默认注释流程补齐为“所有 present broad parent 的完整亚型候选审计”：逐一记录 supported、refuted 或 not_evaluable；没有独立子类证据时保留 broad-only，不以亚型数量作为完成指标。

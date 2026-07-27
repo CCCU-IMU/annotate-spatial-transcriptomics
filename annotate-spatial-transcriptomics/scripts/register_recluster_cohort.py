@@ -14,6 +14,8 @@ from validate_cohort_outcome import validate as validate_outcome
 
 FIELDS = [
     "cohort_id", "sample_id", "cohort_type", "question_mode", "source_broad_label",
+    "source_initial_cluster", "provisional_status",
+    "provisional_broad_after_score_freeze",
     "source_run_ids", "source_cluster_ids", "membership_path", "membership_sha256",
     "n_observations", "purpose", "competing_hypotheses", "candidate_resolutions",
     "selected_resolution", "terminal_outcome", "homogeneous_parent_confirmed",
@@ -27,9 +29,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("project_root", type=Path)
     parser.add_argument("--cohort-id", required=True)
-    parser.add_argument("--cohort-type", required=True, choices=["broad_class_recluster", "targeted_recluster", "oocyte_targeted_recluster"])
-    parser.add_argument("--question-mode", required=True, choices=["broad_purity_audit", "targeted_mixture"])
+    parser.add_argument("--cohort-type", required=True, choices=["initial_cluster_recluster", "targeted_mixed_subcluster", "oocyte_targeted_recluster", "broad_class_recluster", "targeted_recluster"])
+    parser.add_argument("--question-mode", required=True, choices=["open_world_identity", "broad_purity_audit", "targeted_mixture"])
     parser.add_argument("--source-broad-label", default="")
+    parser.add_argument("--source-initial-cluster", default="")
+    parser.add_argument("--provisional-status", default="", choices=["", "provisional_broad", "mixed", "unknown"])
+    parser.add_argument("--provisional-broad-after-score-freeze", default="")
     parser.add_argument("--source-run-ids", required=True)
     parser.add_argument("--source-cluster-ids", required=True)
     parser.add_argument("--membership", type=Path)
@@ -37,19 +42,32 @@ def main() -> int:
     parser.add_argument("--competing-hypotheses", default="")
     parser.add_argument("--candidate-resolutions", default="")
     parser.add_argument("--selected-resolution", default="")
-    parser.add_argument("--terminal-outcome", choices=["homogeneous_parent_confirmed", "subclusters_adjudicated"], default="")
+    parser.add_argument(
+        "--terminal-outcome",
+        choices=[
+            "candidate_partition_complete", "local_split_required",
+            "underpowered_not_evaluable", "homogeneous_parent_confirmed",
+            "subclusters_adjudicated",
+        ],
+        default="",
+    )
     parser.add_argument("--applicability", choices=["applicable", "not_applicable"], required=True)
     parser.add_argument("--applicability-rationale", required=True)
     parser.add_argument("--underpowered-skip-artifact", type=Path)
     parser.add_argument("--outcome-artifact", type=Path)
-    parser.add_argument("--status", choices=["validated_done", "not_applicable_reviewed"], required=True)
+    parser.add_argument("--status", choices=["validated_done", "not_applicable_reviewed", "underpowered_not_evaluable"], required=True)
     parser.add_argument("--supersedes", default="", help="one prior cohort_id replaced by this immutable successor")
     args = parser.parse_args()
     root = args.project_root.resolve()
     project = json.loads((root / "config/project.json").read_text(encoding="utf-8"))
+    if args.cohort_type == "initial_cluster_recluster":
+        if args.question_mode != "open_world_identity" or not args.source_initial_cluster:
+            raise SystemExit("initial-cluster cohort requires open_world_identity and source_initial_cluster")
+        if args.source_broad_label:
+            raise SystemExit("initial-cluster cohort cannot be named by a biological broad class")
     if args.cohort_type == "broad_class_recluster" and args.question_mode != "broad_purity_audit":
         raise SystemExit("broad-class cohorts must use broad_purity_audit")
-    if args.cohort_type != "broad_class_recluster" and args.question_mode != "targeted_mixture":
+    if args.cohort_type in {"targeted_recluster", "targeted_mixed_subcluster", "oocyte_targeted_recluster"} and args.question_mode != "targeted_mixture":
         raise SystemExit("targeted cohorts must use targeted_mixture")
 
     membership_path = ""
@@ -90,7 +108,7 @@ def main() -> int:
             raise SystemExit("terminal outcome differs from the evidence artifact")
         outcome_hash = sha256(args.outcome_artifact)
     else:
-        if args.status != "not_applicable_reviewed" or len(args.applicability_rationale.strip()) < 20:
+        if args.status not in {"not_applicable_reviewed", "underpowered_not_evaluable"} or len(args.applicability_rationale.strip()) < 20:
             raise SystemExit("underpowered skip requires reviewed terminal status and substantive rationale")
         if not args.underpowered_skip_artifact or not args.underpowered_skip_artifact.is_file() or args.underpowered_skip_artifact.stat().st_size == 0:
             raise SystemExit("underpowered skip requires a nonempty formal artifact")
@@ -109,6 +127,9 @@ def main() -> int:
     row = {
         "cohort_id": args.cohort_id, "sample_id": project["sample_id"], "cohort_type": args.cohort_type,
         "question_mode": args.question_mode, "source_broad_label": args.source_broad_label,
+        "source_initial_cluster": args.source_initial_cluster,
+        "provisional_status": args.provisional_status,
+        "provisional_broad_after_score_freeze": args.provisional_broad_after_score_freeze,
         "source_run_ids": args.source_run_ids, "source_cluster_ids": args.source_cluster_ids,
         "membership_path": membership_path, "membership_sha256": membership_hash, "n_observations": n_observations,
         "purpose": args.purpose, "competing_hypotheses": args.competing_hypotheses,

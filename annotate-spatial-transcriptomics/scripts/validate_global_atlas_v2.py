@@ -47,9 +47,12 @@ def main() -> int:
         route = row.get("atlas_state_route", "")
         if row.get("writeback_status") != "proposal_only_requires_atomic_commit" or row.get("fine_anchor_eligible") != "false":
             errors.append(f"route row {line} violates proposal/fine-anchor semantics")
-        if route == "direct_qc_broad_return":
-            if row.get("primary_broad") or row.get("primary_state") not in {"qc_holdout", "low_information_qc_holdout", "pending_qc"}:
-                errors.append(f"route row {line} writes outside unlabeled frozen QC")
+        if route in {"direct_qc_broad_return", "direct_unlabeled_broad_return"}:
+            if row.get("primary_broad") or row.get("primary_state") not in {
+                "qc_holdout", "low_information_qc_holdout", "pending_qc",
+                "unresolved_biological",
+            }:
+                errors.append(f"route row {line} writes outside unlabeled post-merge membership")
             if row.get("atlas_tier") not in {"high", "moderate_only"} or row.get("atlas_class_calibrated") != "true" or row.get("atlas_scope_pass") != "true":
                 errors.append(f"route row {line} bypasses calibrated class/scope gates")
             if truth(row.get("out_of_distribution", "")) or truth(row.get("ontology_conflict", "")):

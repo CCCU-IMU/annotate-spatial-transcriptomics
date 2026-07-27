@@ -2,7 +2,7 @@
 
 [![Validate](https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/actions/workflows/validate.yml/badge.svg)](https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/actions/workflows/validate.yml)
 
-面向 Codex Agent 的空间转录组/单细胞转录组迭代式注释 Skill。它不会复制旧项目答案，而是自主完成：label-blind 全候选证据冻结、聚类选择、大类 cohort 纯度审查、直接回归、定向重聚类、一次全细胞 Atlas 大类一致性/OOD 审计、残余 QC 回填、状态追踪、失败恢复、用户确认和可审计报告。
+面向 Codex Agent 的空间转录组/单细胞转录组迭代式注释 Skill。v2.2 采用“第一轮只划分 cohort、第二轮重聚类负责正式注释”的哈希绑定控制器：每个初始 cluster 都从项目自身 raw counts 独立执行 SCT/PCA/SNN/Leiden，完整扫描开放候选目录；只有二级 mixed subcluster 才进行局部 observation 拆分。全部 cohort 合并后才冻结 broad，再执行全细胞 Atlas 复核、parent-locked fine/state 物化和最终 QC 闭环。项目自编 scorer 或 subset writer 只能产生 experimental 结果，不能写正式标签。
 
 适配 Seurat RDS、AnnData/H5AD、SingleCellExperiment、BANKSY、Scanpy/Leiden、Seurat 聚类和外部 cluster table。空间数据以可靠的大类为主要终点，亚群只在证据充分时定义。
 
@@ -47,7 +47,7 @@ rm -rf "${CODEX_HOME:-$HOME/.codex}/skills/annotate-spatial-transcriptomics"
 
 高质量来自“上下文完整 + 自主迭代 + 多证据闭环 + 状态不可变”，而不是给 Agent 一张 marker 表后让它一次性重命名 cluster。推荐按下面方式启动。
 
-Seurat 用户要特别注意双对象合同：SCT 对象只负责聚类；如果原始转换对象的 `Spatial@data` 与 `counts` 完全相同，Agent 必须在计算节点另建带 manifest 的全基因 LogNormalize 验证对象，供 DEG/marker 使用，不能改写 SCT 对象。候选分辨率比较同时保留全观测 ARI/AMI；`n<100` 只触发小簇复核，并且只从额外的宏观评分中暂时隔离，绝不能据此删除细胞或跳过 DEG、空间和稀有谱系审查。
+Seurat 用户要特别注意表达边界：SCT+BANKSY 对象可以提供第一轮空间分区，但每个第二轮 cohort 必须从同一项目的非 SCT raw-count assay 重新执行 `SCT v2/glmGamPoi → PCA → SNN → Leiden`。同一 raw-count assay 可在 cohort 内建立全基因 LogNormalize 数据层用于 DEG/marker 证据；禁止对 SCT corrected counts 再做 SCTransform，也禁止复用其他注释项目的表达对象。极小 cohort 记录为 `underpowered_not_evaluable` 并进入 Atlas/unresolved 路径，不能静默继承第一轮 provisional 标签。
 
 多样本并行时，每个调度作业必须使用 `样本__P阶段_任务[_队列或目标]__A尝试号`，例如 `SAMPLE1__P10_SCT__A01`、`SAMPLE1__P40_COHORT_stromal__A02`。Skill 内的生成器会限制阶段码和长度，并把名称写入 run registry/报告；禁止继续使用 `sct_preprocess_v0` 这类无法从调度页面判断阶段的名称。
 
@@ -188,13 +188,13 @@ runtime=可用的 R/Python 环境与调度资源
 | 成人卵巢方法学边界 | 成人卵巢单细胞专家综述（AJOG, 2025, DOI 10.1016/j.ajog.2024.05.046） | 强调取样/过滤造成的谱系缺失、表面上皮难捕获、单 marker 不可靠和“无限亚型”风险，支持以可靠浅层大类为终点。 |
 | 谱系专项证据 | [羊巨噬细胞–颗粒细胞互作（FASEB J, 2026）](https://pubmed.ncbi.nlm.nih.gov/41801067/)、[人卵泡 theca–stroma 连续轨迹](https://pubmed.ncbi.nlm.nih.gov/36599970/)、[人卵巢空间图谱](https://pubmed.ncbi.nlm.nih.gov/38578993/) | 用于解决 macrophage、theca/stroma、血管/壁细胞和空间界面等竞争假设；专项论文不能越过当前样本的 marker、anti-marker 与空间门。 |
 
-发布命名遵循“最浅且足够”的原则：`Stromal/mesenchymal` 是允许的诚实大类；只有形成完整 `STAR/CYP11A1/CYP17A1/HSD3B/NR5A1/LHCGR` 甾体生成或雄激素程序时才单列 `Theca`，仅有 `ALPL/PTCH1`、胶原或收缩信号的卵泡壁细胞直接回归其支持的基质/壁细胞大类；`Smooth muscle` 需要 `MYH11/MYL9/TAGLN/ACTA2/CNN1` 成熟收缩骨架。内皮和周细胞统一发布为 `Vascular-associated` 大类，`Blood endothelial`、`Lymphatic endothelial`、`Pericyte/mural` 作为可选高置信亚型；成熟平滑肌仍为独立大类。`Oocyte` 先以 strict seed/空间对象判定通过簇，再纳入该簇全部 canonical cohort 成员，不能用 seed 或 object ID 逐细胞缩小最终集合。颗粒细胞仅在完整、稳定且有文献支持的功能程序通过时使用浅层亚型，否则保留 `Granulosa` 大类。
+发布命名遵循“最浅且足够”的原则：`Stromal/mesenchymal` 是允许的诚实大类；只有形成完整 `STAR/CYP11A1/CYP17A1/HSD3B/NR5A1/LHCGR` 甾体生成或雄激素程序时才单列 `Theca`。Theca 必须先在完整分子候选空间中发现，卵泡 ROI 与距离只做事后解剖复核，不能用于缩小或扩张候选。`Luteal` 同时要求 `STAR/CYP11A1/HSD3B1` 类甾体生成核心、独立的 corpus-luteum identity（候选如 `OXT/PTGFR/PARM1/LDLR/PRLR`）、阶段兼容性和实性黄体样结构；一般 steroidogenic 只是功能程序，不作为 broad 名称。`Smooth muscle` 需要 `MYH11/MYL9/TAGLN/ACTA2/CNN1` 成熟收缩骨架。内皮和周细胞统一发布为 `Vascular-associated` 大类，`Blood endothelial`、`Lymphatic endothelial`、`Pericyte/mural` 作为可选高置信亚型；成熟平滑肌仍为独立大类。`Oocyte` 以完整 canonical cluster 判定；常规二级扫描为零但全对象多模块起始候选非零时，允许一次标签不可见的 query-only targeted cohort，并纳入通过簇全部成员，仅排除客观输入 QC 或直接多家族体细胞硬矛盾。颗粒细胞仅在完整、稳定且有文献支持的功能程序通过时使用浅层亚型，否则保留 `Granulosa` 大类。
 
-推荐把 `Granulosa`、`Stromal/mesenchymal`、`Vascular-associated`、`Immune`、`Epithelial/mesothelial` 和严格门控的 `Oocyte` 作为候选审查骨架，但审查不止这些类型。Skill 内置机器可读的羊卵巢候选谱系目录，逐样本覆盖卵泡/生殖系、甾体生成、基质–间充质–收缩/壁细胞、血管/淋巴、免疫、上皮/间皮及神经胶质/神经内分泌边界；`Theca`、`Smooth muscle`、`Mesenchymal progenitor-like`、`Luteal steroidogenic` 和 `Neural/Schwann/glia` 等只有在各自证据门通过后才作为大类发布，周细胞和内皮谱系则保留在共享血管大类下的可选亚型。目录不是答案表，也不穷尽当前样本：每个候选可以得到阴性结论，目录外的相干多基因程序则必须新增审查。不要使用 `Theca/follicular wall` 或 `Stromal/perivascular` 作为方便的最终兜底大类。
+推荐把 `Granulosa`、`Stromal/mesenchymal`、`Vascular-associated`、`Immune`、`Epithelial/mesothelial` 和严格门控的 `Oocyte` 作为候选审查骨架，但审查不止这些类型。Skill 内置机器可读的羊卵巢候选谱系目录，逐样本覆盖卵泡/生殖系、甾体生成、基质–间充质–收缩/壁细胞、血管/淋巴、免疫、上皮/间皮及神经胶质/神经内分泌边界；`Theca`、`Smooth muscle`、`Luteal` 和 `Glial/Schwann-like` 等只有在各自多通道身份程序通过后才作为大类发布，`Mesenchymal progenitor-like` 与 `Neuroendocrine-like` 默认保持 exploratory，周细胞和内皮谱系保留在共享血管大类下。目录不是答案表，也不穷尽当前样本：每个候选可以得到阴性结论，目录外的相干多基因程序则必须新增审查。不要使用 `Theca/follicular wall`、`Stromal/perivascular` 或 generic `steroidogenic` 作为方便的最终兜底大类。
 
 Agent 通过 `init_open_world_lineage_audit.py` 从当前 cluster ledger 和目录生成完整审查骨架，填入各边界的全基因 DEG、anti-marker、相邻分辨率稳定性与空间证据后，再由 `validate_open_world_lineage_audit.py` 校验。目录、审查源文件和 biological profile 均参与哈希绑定；只审查少数示例、漏掉阴性结论或在完成门后修改目录都会使发布失效。
 
-Skill 的默认架构只建立三类可追溯边界：每个可信初始大类一个 `broad_class_recluster` cohort；只有局部、可解释的混合/污染问题才建立一次性 `targeted_recluster` cohort；最终仍无足够身份信息的观测进入 terminal residual QC。羊卵巢 profile 在此架构上补充固定技术前处理、开放谱系候选、Oocyte 安全门和 GSE233801 参考策略，而不是替换控制器。若在 Oocyte 定向重聚类中识别出可信前颗粒细胞，直接跨谱系写回 `Granulosa`（必要时写入高置信亚群），保留来源和证据，不创建中转 cohort，也不自动进行二次重聚类。
+Skill 的默认架构是：第一轮全组织聚类只生成 provisional cohort 计划；每个初始 cluster 都从项目自身 raw counts 进入第二轮 SCT/PCA/SNN/Leiden，并在标签不可见状态下扫描完整候选目录；高纯度二级亚簇整体返回，真正 mixed 的亚簇才进行局部 observation 拆分；所有 cohort 合并后冻结 broad，再做 Atlas、缺失谱系和 residual QC 复核。若在 Oocyte 定向重聚类中识别出可信前颗粒细胞，直接跨谱系写回 `Granulosa`，不创建中转 cohort，也不自动再次聚类。
 
 Skill 内置一份[脱敏羊卵巢 R-first forward-test 参考](annotate-spatial-transcriptomics/references/profiles/sheep_ovary_rfirst_case_reference.md)，完整记录从原始转换 RDS、开放式谱系发现、大类/定向 cohort、跨谱系回归、Oocyte 抗污染门到残余 QC 救回和最终 DEG/报告的策略，但不包含样本 ID、私有路径、观测 ID、cluster 答案或历史映射。它是策略回归参考，不是 label map。
 
@@ -202,10 +202,11 @@ Skill 内置一份[脱敏羊卵巢 R-first forward-test 参考](annotate-spatial
 
 不要用“未注释比例低”作为完成标准，也不要把所有弱信号细胞直接过滤掉。
 
-- **初始大类。** 在自适应选出的全组织分辨率上，逐簇完成开放式谱系审查；可信簇直接获得初始大类，低信息/不可解释簇直接进入 `qc_holdout`，此时不建立中转 cohort。
-- **大类重聚类。** 每个可信初始大类建立一个不可变 `broad_class_recluster` cohort。羊卵巢同批次 StereoPy cellbin R-first 合同必须完整运行 `0.1,0.2,0.3,0.4,0.6`；其他平台读取自己的 active workflow profile。可定义真实亚群时写入高置信亚群；没有稳定亚群时以 `homogeneous_parent_confirmed` 成功结束并全部回归父大类。只有正式记录、哈希绑定的 underpowered skip 可跳过计算。
-- **跨谱系与局部混合。** 某个大类重聚类中出现另一谱系的完整程序时，直接写回目标大类/高置信亚群，不建立中转 cohort，也不自动随目标大类再次重聚类。只有界面/污染信号确实可解释且需要拆分时才建立一次性定向 cohort；RCTD 仅为低优先级辅助：canonical `high` 且有独立证据可支持亚群，`moderate` 只支持大类，`low` 进入 `qc_holdout`。
-- **全细胞 Atlas 审计与残余 QC 救回。** 冻结最终 `qc_holdout` 后，对完整 analysis set 做一次 Broad-only 映射。QC 只有在校准层级、当前 query marker/anti-marker、内部锚点/空间通道和 OOD 门均通过时直接回填大类。已定义标签仅参与一致性比较；默认至少 30 个观测且占 cluster 20% 的可信差异才复核完整 cluster/cohort。coherent OOD 小群体可作为 unknown 例外触发。
+- **第一轮只建 cohort。** 选择保留主要组织结构、不过度技术碎裂的全组织分辨率；仅记录 provisional broad/mixed/unknown 与 lineage watch，不产生正式 broad/fine/QC。
+- **第二轮负责注释。** 每个初始 cluster 独立运行完整 `0.1,0.2,0.3,0.4,0.6` 网格并扫描全部候选。能可靠定义亚型才写 fine；亚型证据不足时保留 supported broad，不能为了目录完整而强行命名。
+- **跨谱系与局部混合。** 二级亚簇出现另一个完整谱系时直接 cross-lineage return；只有两个可分离身份程序确实共存时才启动局部拆分。未进入局部子集的成员重新评估 parent/remainder，不自动进入 QC。
+- **语义修复不重跑稳定分区。** 输入、cohort membership、grid、seed 与聚类脚本哈希均未变化时，复用 controller 生成的 derived partition，只重算 scorer、边界和写回。任何修复 proposal 必须用 `apply_cell_id_membership_patch.py` 按唯一 `cell_id` 连接，禁止按行序赋值。
+- **全细胞 Atlas 与最终闭环。** broad 冻结后才运行全细胞 broad mapping；Atlas 只能直接救回 unlabeled、非 OOD 的中高置信成员，不能静默覆盖已有 broad 或生成 fine。最后才执行 residual QC、缺失谱系、空间合理性与未建模程序审计。
 
 同批次羊卵巢固定网格只在 active workflow profile、显式 strategy preset、对象/层/marker/坐标审计和 StereoPy conversion provenance 共同通过后生效。prelabel freeze、cohort outcome、direct return、Atlas concordance/review 和最终 broad/fine support 都必须通过内容与哈希合同。
 
@@ -376,11 +377,11 @@ bash -n install.sh
 
 GitHub Actions 的 PR 验证与 Release 打包均使用 Python 3.11 和仓库内的 `requirements-ci.txt` 建立干净验证环境。该依赖文件包含报告元数据与发布合同测试实际导入的包；发布测试不得因缺少可选依赖而静默跳过关键合同。
 
-对 Skill 的重要更新必须做 leakage-safe forward test：只给原始输入与 Skill，不给预期聚类或标签；评价它能否冻结无标签证据、完成 cohort/direct return、全细胞 Atlas 一致性与 OOD 复核、残余 QC 回填、失败恢复和完整报告，而不是是否复现旧标签。
+对 Skill 的重要更新必须做 leakage-safe forward test：只给原始输入与 Skill，不给预期标签；评价它能否建立稳定的第一轮 cohort、完成所有第二轮重聚类与 missing-broad 重建、局部拆解真正 mixed 的二级亚簇、执行全细胞 Atlas/OOD 复核、闭合残余 QC 并生成完整报告。历史结果只可在新 membership 冻结后作为外部生物学验收，不能作为运行时输入。
 
 ## 版本
 
-当前版本：`2.1.0`（稳定版）。项目 framework schema 仍为 `2.0.0`。本版将“默认带亚型”定义为对每个已出现大类执行完整、父类特异的候选亚型审计，而不是强迫每个大类产生亚型。只有全基因 discriminator program、稳定重聚类和空间形态共同支持的候选才写入；无独立子类证据时保留 broad-only。新增锁定大类的可靠亚型写回工具和终态一致性校验，阻断 fine label 已存在但状态仍为 `defined_broad_only`、亚型跨父类或共享 parent marker 直接决定子类的问题。
+当前版本：`2.1.0`（稳定版）；`2.2.0` 是尚未发布的开发候选，项目 framework schema 仍为 `2.0.0`。在五类 raw-count integration fixture、两次独立盲回归、参数扰动和用户审阅完成前，v2.2 不是稳定发布版。v2.2 以第二轮重聚类为正式注释主体：第一轮只生成精确 cohort；每个二级 subcluster 扫描完整 broad/fine/state/exploratory 目录；只有竞争谱系共存的二级 mixed subcluster 才局部拆分。全部 cohort 合并后冻结 broad，再执行 calibrated Atlas、fine/state parent lock 和最终 QC。最新开发候选同时固定了 cell-ID 语义修复、Theca 分子优先、Luteal 双身份家族和 Oocyte 零普查 canonical targeted cohort；这些改动不增加全局完成门，也不把任何成功样本的数量、簇号或空间 ROI 作为运行时先验。
 
 ## 许可
 

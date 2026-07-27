@@ -136,7 +136,6 @@ write_subtype_level <- function(column, broad_column) {
     message("No high-confidence final fine labels; subtype DEG is correctly omitted")
     return(invisible(NULL))
   }
-  if (length(labs) < 2L) stop("A released fine label requires at least one other high-confidence fine-label comparator for final subtype DEG")
   results <- list()
   for (lab in labs) {
     parents <- unique(broad[fine == lab & !is.na(fine)])
@@ -144,10 +143,13 @@ write_subtype_level <- function(column, broad_column) {
     if (length(parents) != 1L) stop("Fine label must have exactly one broad parent: ", lab)
     parent <- parents[[1]]
     target <- !is.na(fine) & fine == lab & !is.na(broad) & broad == parent
-    other_fine <- !is.na(fine) & nzchar(fine) & fine != lab
-    within_parent <- other_fine & !is.na(broad) & broad == parent
-    comparator <- if (any(within_parent)) within_parent else other_fine
-    comparison_name <- if (any(within_parent)) "within_parent_high_confidence_fine_rest" else "global_high_confidence_fine_rest"
+    # Fine identity refines a frozen broad parent. Compare the target with all
+    # other members of that parent, including broad-only members, so a lone
+    # released fine group cannot look artificially distinctive.
+    within_parent <- !is.na(broad) & broad == parent & !target
+    global_fine_rest <- !is.na(fine) & nzchar(fine) & fine != lab
+    comparator <- if (any(within_parent)) within_parent else global_fine_rest
+    comparison_name <- if (any(within_parent)) "within_parent_all_other_members" else "global_high_confidence_fine_rest"
     cohort <- target | comparator
     if (!any(target) || !any(comparator)) stop("No eligible high-confidence fine-label comparator for released fine label: ", lab)
     if (inherits(obj, "Seurat")) {

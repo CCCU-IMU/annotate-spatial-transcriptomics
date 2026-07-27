@@ -42,9 +42,9 @@ The matched reference is normally the strongest **external** channel, but it doe
 
 Build depth-matched held-out reference cells only to diagnose reference separability. Final rescue thresholds require disjoint held-out current-query anchors with frozen truth, target membership and an origin manifest. Derive score and margin thresholds per route and candidate broad class from those query-like anchors. Reference self-classification is never an acceptable final calibration target.
 
-For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel **only after every broad/targeted cohort is terminal and residual QC is frozen**. Run one broad-only mapping over the complete analysis set. Unlabeled frozen QC is eligible for calibrated broad-only rescue; defined broad/fine cells use the same mapping only for concordance challenge. A dotplot-only artifact remains marker evidence and cannot support all-cell mapping. Otherwise GSE233801 is the primary public adult-sheep somatic Atlas. It does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
+For sheep ovary, a count-level, stage-compatible matched reference is the preferred external channel only after every initial-cluster cohort/local split has merged and formal broad membership is frozen. Run one broad-only mapping over the complete analysis set. Unlabeled post-merge observations are eligible for calibrated broad-only rescue; defined broad/fine cells use the same mapping only for concordance challenge. A dotplot-only artifact remains marker evidence and cannot support all-cell mapping. Otherwise GSE233801 is the primary public adult-sheep somatic Atlas. It does not automatically rescue Oocyte, Theca or Epithelial/mesothelial.
 
-The default crosswalk ceiling is `broad_only_after_calibration`. A calibrated Atlas prediction may return a broad label to an unlabeled frozen-QC observation only when:
+The default crosswalk ceiling is `broad_only_after_calibration`. A calibrated Atlas prediction may return a broad label to an unlabeled post-merge observation only when:
 
 - its calibrated tier is moderate-or-higher;
 - it is not OOD or ontology-conflicted;

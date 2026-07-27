@@ -1,137 +1,166 @@
 ---
 name: annotate-spatial-transcriptomics
-description: Independently annotate spatial transcriptomics or single-cell RNA-seq with label-blind evidence-first broad decisions, adaptive clustering, broad/targeted reclustering, direct cross-lineage returns, calibrated all-cell Atlas concordance plus QC broad rescue, explicit unknown/OOD detection, immutable state, shallow high-confidence subtypes and audited reports. Seurat/R-first is preferred for full-feature RDS inputs; AnnData/H5AD, SingleCellExperiment, BANKSY, Scanpy/Leiden and external cluster tables are supported. Use for end-to-end or multi-sample annotation, evidence review, unknown-cell discovery, recovery of unresolved observations and release reporting. Never copy parameters or labels from example projects.
+description: Independently annotate spatial transcriptomics or single-cell RNA-seq with a provisional whole-tissue partition followed by label-blind second-round cohort reclustering, local mixed-subcluster splitting, post-merge broad freezing, calibrated Atlas review, open-lineage discovery, reliable fine labels and auditable reports. Seurat/R-first is preferred for full-feature RDS inputs; AnnData/H5AD, SingleCellExperiment, BANKSY, Scanpy/Leiden and external cluster tables are supported. Use for end-to-end annotation, evidence review, unknown-lineage discovery, repeatability testing and release reporting. Never copy labels or selected parameters from example projects.
 ---
 
 # Annotate Spatial Transcriptomics
 
-Use one evidence-first state machine for every new project. A first clustering proposes biological questions; it is never the final annotation. The active architecture uses only broad/targeted cohorts, direct returns and terminal residual QC. Retired registries are migration-only provenance.
+Use the contract-bound staged controller. The first whole-tissue clustering only partitions the query into second-round cohorts; it never writes a formal biological label. Formal annotation is driven by independent second-round reclustering of every initial cluster.
 
-Read `references/direct-lineage-controller.md`, `references/iterative-controller.md`, `references/quality-standard.md` and `references/state-schema.md` before analysis.
+Read `references/direct-lineage-controller.md`, `references/iterative-controller.md`, `references/quality-standard.md`, `references/state-schema.md` and the applicable biological profile before analysis.
 
-## Default annotation architecture
+For formal membership, always execute `scripts/run_lineage_controller.py`. Project-local scorers, subset writers and remainder closers are experimental and cannot receive release authority. Artifacts registered as `failed_diagnostic` may be summarized for failure analysis but may never contribute membership, labels, Atlas training, fixture truth or blind-regression input.
 
-Execute this order without skipping phases:
+## Standard staged workflow
 
-1. Discover, inspect and hash inputs; freeze `full_object`, `analysis_set` and `excluded_initial_qc` memberships.
-2. Select a whole-tissue broad clustering adaptively. Before showing paper labels or a favored marker interpretation, freeze label-blind positive DEG, anti-DEG, technical flags and simultaneous scores for every eligible broad lineage, including winner, runner-up, margin and contradictions. Validate with `validate_prelabel_broad_evidence.py`.
-   For BANKSY, choose the single initial whole-tissue resolution specifically for broad-class recall and purity, not cluster count. Review the complete fixed-resolution grid for full-catalog recall, zero-census default lineages, large-cluster embedded programs, DEG/marker coherence, spatial morphology, technical fragmentation and adjacent-resolution migration. Validate the frozen decision with `validate_banksy_broad_resolution_selection.py`; weak signals from rejected resolutions enter the lineage-signal ledger rather than labels.
-3. Review every cluster from that frozen open-world matrix. The initial pass establishes supported coarse resident compartments; it is not a quota requiring every final tissue lineage to form an initial cluster. Assign a moderate-or-higher initial broad label only from at least two coherent marker families, a machine-recomputed positive winner margin and no unresolved material contradiction. Return an informative mixed cluster to its numerically dominant supported parent while carrying coherent subthreshold alternatives as `watch`; reserve `qc_holdout` for low-information, technical or irreducible mixtures. Every default broad lineage in the active profile must expose at least two explicit positive families before this rule is applied. Absolute full-feature detection/prevalence and pseudobulk expression are primary broad-presence evidence; centered module scores and one-vs-rest DEG are comparative evidence and cannot declare an abundant tissue-wide lineage absent. A cluster with a coherent absolute parent backbone, supporting family, anti-program clearance and compatible morphology remains eligible for the parent even when its markers are shared across a continuum and therefore are not cluster-specific DEG. Paper markers may explain a frozen result but may not redefine the candidate set after the fact.
-   Start the continuous lineage-signal ledger at this boundary. Scan the selected resolution and next two higher available candidates; `below label threshold` means `watch and carry forward`, not absent.
-4. Freeze one immutable `broad_class_recluster` cohort for every supported initial broad class and run the complete active-workflow candidate grid. A one-cluster or unsplit result is not penalized: when no stable mixture or real subtype exists, close successfully as `homogeneous_parent_confirmed` and return all observations to the parent. A genuinely underpowered class may remain broad-only only after a hash-bound `not_applicable_reviewed` skip.
-   At the selected resolution and next two higher available candidates, rescan every subcluster against the complete catalog plus unexplained programs. The parent broad label is provenance, never a search-space restriction.
-5. Rescore every selected-resolution subcluster against the complete catalog, then write it directly as a high-confidence shallow fine label, its supported parent broad class, a supported cross-lineage broad/fine return, one decision-relevant targeted cohort, or QC/technical retention. Parent identity is provenance, not evidence. Except for the explicitly governed canonical Oocyte route, a whole-subcluster biological return requires a machine-derived positive-margin winner, at least two positive families, contradiction clearance and observation-level purity; a mixed subcluster cannot inherit or expand its parent label wholesale.
-   Every `watch`, `candidate` or `supported` signal must be resolved with multichannel evidence; it cannot disappear because it failed an earlier naming gate.
-6. Create `targeted_recluster` only for a local interpretable mixture, contamination boundary or context-gated identity. It answers one question and cannot become a long-lived catch-all.
-   Its subclusters still receive the same full-catalog, selected-plus-two-higher scan.
-7. Use RCTD/reference assistance only when applicable. Canonical high plus independent marker/anti-marker, resolution and spatial evidence may support fine; moderate supports broad-only; low enters QC.
-8. After every broad/targeted cohort is terminal, freeze the complete residual `qc_holdout` membership once. Do not recluster it. Run one calibrated broad-only Atlas mapping over the complete `analysis_set`, preferably by projecting into a reusable fixed reference representation/index rather than repeating joint integration.
-9. Route the one all-cell mapping only with `route_global_atlas_v2.py`. It binds the query mapping to classwise current-query held-out calibration, the active workflow profile, its canonical label crosswalk and the frozen primary state. A frozen-QC observation with no biological label returns broad-only only when its Atlas tier is moderate-or-higher, its predicted class has enough held-out support and precision, and it has no OOD, ontology conflict or profile-scope violation; set `fine_anchor_eligible=false`. Defined labels are comparison-only: material disagreement opens one cluster/cohort review and weak mapping is logged. The v1 `build_global_atlas_concordance.py` plus `route_calibrated_atlas_by_primary_state.py` pair is compatibility-only and must not be mixed with v2.
-10. Reopen a complete cluster or frozen cohort once when a calibrated alternative differs in a material fraction, a material ontology conflict remains after crosswalk inspection, or a coherent group is out-of-distribution. Use query full-feature positive/anti evidence, pseudobulk, stability, sample consistency, spatial morphology and technical alternatives to retain, supersede, downgrade or mark `Unknown candidate`. Close every trigger with `validate_global_atlas_v2.py`; do not chase the reference iteratively.
-11. Run a query-derived `broad_class_completeness_review` after Atlas and before biological-quality approval. For every present broad class audit complete membership marker/anti-marker, its strongest competing program, DEG, spatial morphology and observation-level purity using numerical evidence. For every zero-census default tissue lineage, audit all-cell localization, selected-plus-two-higher scans, embedded components in large labels, QC/OOD, spatial structure and technical missingness. Atlas is challenger-only and cannot establish absence. Validate with `validate_broad_class_completeness.py`. If residual QC reaches 10% of the analysis set or 50,000 observations, `validate_residual_qc_audit.py` must reopen the initial broad-resolution recall decision, selected-plus-two-higher catalog scans and embedded-program audit; a large residual cannot pass merely because Atlas rejected it.
-12. Validate evidence content, project-local expression ancestry and exact membership closure. Register every derived expression object with `register_derived_expression_artifact.py`; `validate_project_input_boundary.py` must reject cross-project expression outside an explicit external-reference channel. Prelabel freezes, cohort outcomes, direct returns, Atlas concordance/reviews and per-label supports must pass their schemas and hashes; empty/status-only evidence fails.
-13. After broad labels are locked, execute a complete parent-by-parent fine-candidate pass by default. Enumerate every machine-actionable child from the bound catalog for every present parent; use the selected parent-cohort resolution plus adjacent-resolution stability, full-feature positive/anti programs and spatial morphology. Record every candidate as `supported`, `refuted` or `not_evaluable`. A parent with no independent child or no passing child remains broad-only; never invent a subtype for completeness. Fine fitting cannot change a broad label, and historical fine labels remain blinded until the candidate partitions are frozen.
-14. Materialize one final annotation: moderate-or-higher broad labels, optional high-confidence fine labels, or explicit retained QC/technical/unknown state. Apply fine assignments with `build_reliable_fine_annotation.py` and run `validate_final_fine_annotation.py`. Every nonempty final fine label must have its catalog-bound parent, `defined_fine` active/final state, high fine confidence and fine eligibility; an empty fine label cannot carry a fine terminal state. This invariant is mandatory even when only state fields, rather than membership, changed.
-15. Run `validate_lineage_signal_coverage.py`; pass input-boundary, broad-completeness, direct-workflow, state, taxonomy, completion and main-Agent biological-quality gates; generate the lightweight confirmation HTML including label-independent all-cell canonical-marker spatial panels; wait for explicit user confirmation; then produce final DEG, figures and release HTML.
+Run these phases in order:
 
-A cohort is a frozen computational query boundary, not a cell type. Direct cross-lineage return preserves source cohort/subcluster/membership/evidence and does not create an intermediate cohort or automatically trigger another target-lineage reclustering.
+1. `whole_tissue_partition`
+2. `cluster_cohort_recluster`
+3. `local_mixed_subcluster_split`
+4. `merge_and_freeze_broad`
+5. `atlas_and_completeness_review`
+6. `materialize_final_release`
 
-## Context, inputs and framework
+The annotation contract binds the controller and dependency hashes, candidate catalog, workflow/biological profiles, input snapshot, `full_object`, `analysis_set`, `excluded_initial_qc`, project-local raw-count assay, seed and artifact roles. Historical labels remain invisible until all second-round candidate scores and broad membership are frozen.
 
-Read `references/context-and-biology.md`. Require and validate a context JSON containing species, tissue, stage/condition, platform, observation unit, biological questions and priority lineages. Run `scripts/resolve_workflow_profile.py`; profiles supply candidate boundaries, marker/anti-marker gates, references and technical constraints, never a label map.
+### 1. Freeze inputs
 
-Start every project with:
+- Inspect and hash the object, assays/layers, coordinates, observation IDs and upstream clustering grid.
+- Freeze exact, disjoint `analysis_set` and `excluded_initial_qc` memberships.
+- For SCT+BANKSY input, every second-round cohort must restart from the same project's non-SCT raw counts, preferring `RNA` then `Spatial`. Never SCTransform SCT corrected counts and never reuse a derived expression object from another annotation project.
+- Only objectively zero-count or damaged observations may enter `excluded_initial_qc`. Biological uncertainty remains `unresolved_biological` until final closure.
 
-1. `scripts/discover_inputs.py INPUT_ROOT --out PROJECT_ROOT/input_discovery`
-2. `scripts/inspect_r_object.R` for R objects plus `scripts/check_runtime.py` and `scripts/check_r_runtime.R`
-3. `scripts/init_annotation_project.py --sample SAMPLE --input-root INPUT_ROOT --project-root PROJECT_ROOT --modality spatial|single-cell`
-4. `scripts/register_input_snapshot.py` for every active object and reused clustering table
-5. freeze `config/annotation_contract.json` with `build_annotation_contract_v2.py` after choosing whether the whole-tissue partition is a fresh SCT+BANKSY project grid or a hash-bound upstream grid; the builder copies workflow/biological profiles and the candidate catalog into project-local `config/contract_profiles/`, so a shared Skill update cannot mutate an active project; every BANKSY partition must include a machine-readable grid JSON artifact whose resolutions exactly match the contract; validate it to `provenance/annotation_contract_validation.json`
-6. `scripts/audit_feature_scope.R`; if Seurat `Spatial@data` is absent or equals counts, build a separate validation-only LogNormalize object with `scripts/prepare_seurat_full_feature_validation.R`
-7. freeze exact full-object/analysis membership with `build_analysis_scope_policy.py`; do not hand-write `provenance/analysis_scope_policy.json`
-8. register every project-local normalized/SCT/full-feature validation object with raw-count and analysis-set ancestry; never read another annotation project's derived expression object as query evidence
-9. run `validate_broad_marker_family_contract.py` against the complete review catalog, then materialize the complete cluster × candidate × positive-family raw evidence matrix with `run_broad_family_evidence.R` and validate it with `validate_broad_family_evidence.py` before initial broad decisions
+### 2. Whole-tissue partition
 
-When a readable full-feature Seurat RDS exists or R is requested, read `references/r-first-workflow.md`. For a verified same-batch StereoPy `cellbin_PPed` raw-count carrier, use the fixed SCT+BANKSY whole-tissue graph; for other R inputs use a declared context-appropriate R graph. BANKSY controls only the whole-tissue partition, while the biological controller remains evidence-first and label-blind. Reuse computation only after object/cell hashes, feature scope, parameters and outputs pass; never reuse historical labels.
+Select a stable whole-tissue resolution that preserves the major spatial compartments without obvious technical fragmentation. For sheep ovary SCT+BANKSY, inspect the complete `0.2,0.4,0.6,0.8` grid. Do not optimize this phase to separate every lineage.
 
-When a Seurat RDS was converted from StereoPy `cellbin_PPed`, read `references/seurat-cellbin-preprocessing.md`. Treat it as a raw-count carrier, not an SCT object; never reuse imported StereoPy PCA/UMAP as the R graph.
+For every initial cluster record only:
 
-## Clustering and evidence
+- exact membership and one second-round cohort ID;
+- `provisional_broad`, `mixed` or `unknown`;
+- candidate programs, competitors and missing-lineage `watch` signals.
 
-Read `references/clustering-selection.md`, `references/evidence-routing.md` and `references/observation-subset-writeback.md`. Quantitative ranking only shortlists candidates. Select the complete-grid candidate with the best integrated evidence for the current biological question: preserve stable lineages/true subtypes first, avoid state/technical fragmentation second, and use lower complexity only as a tie-breaker. Generate every cluster/cohort DEG, UMAP, spatial overview and highlight; final positive/negative evidence uses the full-feature object. Treat graph clusters as query boundaries, not indivisible label units: whole-subcluster return is a high-purity fast path, while a mixed subcluster may yield multiple disjoint, independently validated observation subsets followed by full-catalog rescoring of the exact remainder.
+The parent broad label is provenance, never a search-space restriction; always watch and carry forward coherent lineage programs that do not separate during the first partition.
 
-Build anchors from coherent multi-gene backbone/support groups plus anti-programs, not marker-hit counts. `run_broad_family_evidence.R` is the authoritative v2 broad-presence surface; `profile_anchor_programs.R`, `build_program_anchor_membership.R` and `summarize_cluster_programs.R` may select anchors but cannot replace that complete matrix or declare a lineage absent. Missing genes in an HVG adapter are unassayed, not negative.
+Observation direct/local scores may describe programs and mixtures, but cannot write broad, fine or QC membership here. The only membership output is `whole_tissue_cohort_plan.tsv`. First-pass candidate-local splitting, exact remainder closure, fine labels, residual-QC gates and `release_membership` are forbidden.
 
-Use a shallow tree. A graph subcluster is not a subtype. ECM, contractility, stress, cell cycle, hypoxia, low RNA, ambient signal, anatomical adjacency or marker intensity remain tags unless an independent functional/lineage program passes the fine-label gate. The default is a complete fine-candidate audit, not a guarantee that every broad parent receives a subtype. Zero fine labels for a parent is valid only after every machine-actionable optional child under that parent was explicitly scored and recorded as supported, refuted or not evaluable; never inspect only one favored lineage family such as vascular children. Shared parent markers cannot choose among children: each child needs a discriminator program or a documented context/topology gate.
+### 3. Second-round annotation
 
-For every large broad label, compute observation-level core/support/anti evidence and spatially connected high-score components with `screen_embedded_lineage_components.py` or an equivalent registered artifact. A coherent 1–5% embedded program remains `watch/candidate` and triggers one bounded targeted recall even when the parent-cluster mean is weak. If a graph-sensitivity audit is used, `evaluate_graph_sensitivity.py` must show improved biological separation and anti-program clearance; more clusters alone never rescue a lineage.
+Every initial cluster enters its own query-only cohort, including apparently pure clusters. Run:
 
-## Sheep-ovary profile
+`project-local raw counts -> SCT v2/glmGamPoi -> PCA -> SNN -> Leiden grid`
 
-Sheep/Ovis/ovine/羊 plus ovary/ovarian/卵巢 activates the sheep evidence profile. Read:
+For sheep ovary use the complete `0.1,0.2,0.3,0.4,0.6` grid, with PCs and k adapted to current cohort size and complexity. Select the resolution that best separates stable identity programs and anatomy while avoiding depth, state or pure-ECM fragmentation. Compare the nearest lower and higher resolutions; at a grid edge use the two nearest candidates.
+
+Do not rerun SCT/PCA/SNN/Leiden for a scorer, taxonomy, writeback, report or other semantic-only repair when the frozen input SHA, exact cohort-membership SHA, grid, resolution contract, seed and clustering-script SHAs are unchanged. Reuse only the controller-generated `derived_partition_cache` through `--reuse-recluster-manifest`; the controller recomputes full-catalog scoring, resolution selection, adjudication and every downstream membership. Any input, membership, graph/preprocessing parameter, seed or clustering-code change invalidates the cache. A cache has no label authority, and a `failed_diagnostic` cache is forbidden.
+
+Before reading the first-pass provisional record, score every selected-resolution subcluster against the complete open candidate catalog and stable unexplained programs. Freeze those scores, then classify the outcome as:
+
+- `parent_return`;
+- `cross_lineage_return`;
+- `missing_broad_reconstruction`;
+- `fine_candidate`;
+- `state_annotation`;
+- `unmodeled_lineage_candidate`;
+- `unresolved_biological`.
+
+An underpowered cohort is `underpowered_not_evaluable`; it cannot silently inherit the provisional label.
+
+The main annotation unit is the second-round Leiden subcluster. A high-purity subcluster with coherent multi-family identity, DEG/pseudobulk support, reasonable spatial morphology, no independent competitor and neighboring-resolution stability returns wholesale. Sparse, low-RNA, noncontradictory members inherit that broad identity rather than becoming QC through dropout.
+
+Bind exogenous sample context such as reproductive stage in the annotation contract and propagate it automatically through cohort adjudication and every triggered local split. Context only permits evaluation of a context-gated candidate; it never supplies an identity score or membership. For luteal candidates, granulosa- and theca-lineage-of-origin programs are expected competitors/support and must not be treated as hard anti evidence. Stage compatibility still requires an independent luteal program and corpus-luteum-like morphology before release.
+
+Optimize the second round for stable broad identity, not subtype count. When a subcluster lacks an independent child discriminator, keep its supported parent broad and leave the fine label empty. If another broad lineage is coherent, return it cross-lineage at broad level even when no reliable fine subtype exists. A high burden of small marker-poor or unresolved subclusters triggers review of the nearest lower resolution; do not manufacture fine labels to close the cohort.
+
+A shared generic parent/remainder program remains visible in the audit but is not an independent competitor to a specific identity. Conversely, a weak specific signal cannot preempt a well-supported generic parent unless it has its own orthogonal identity evidence. A bounded identity-dominant whole-subcluster route may tolerate modest dropout-associated contradiction only when no independent competing lineage exists; it does not relax local subset validation.
+
+### 4. Evidence and local mixed-subcluster splitting
+
+Use full-feature expression. Scale each gene by its nonzero query 95th percentile; aggregate a family with the strongest two available genes; combine direct/local evidence at `0.35/0.65` by default. One anti-marker or local anti-signal is a penalty. Only a direct, multigene contradiction spanning independent anti-families is hard. Aggregate winners, shared parent markers, generic ECM and `ACTA2/TAGLN` alone cannot suppress or prove a specific lineage.
+
+Start one bounded observation-level separability check when a second-round subcluster contains either two competing specific identity cores, or one orthogonally supported specific identity embedded in a supported generic remainder. Do not require positive whole-subcluster DEG to start this check: a minority Granulosa, Smooth muscle or other lineage can be diluted by the majority background. Actual writeback still requires observation discriminators, candidate-local DEG/pseudobulk, spatial components or neighboring-resolution partitions to demonstrate a separable member set. If the signals remain coexpressed in the same observations and no component validates, do not split; retain the supported parent broad and keep the alternative as `watch`. A high contradiction fraction in the aggregate mixed subcluster must not erase split candidates; contradiction is evaluated again on each proposed local subset. Generate every candidate subset independently, resolve overlaps with normalized evidence and pairwise discriminators, and leave ambiguous members in a supported common parent or `unresolved_biological`. Specific lineages are resolved before a generic Stromal remainder.
+
+The `0.70 support / 0.30 competitor margin / <=0.05 contradiction` criteria validate an already formed group; they are never per-observation admission thresholds. Exact remainder closure is local, permits at most one additional extraction, and never equates failure to enter a subset with QC.
+
+After both bounded specific-lineage extractions, return an exact tail to its generic broad parent when the tail itself has at least 70% coherent multigene parent support, no residual separable specific component and a stable parent program. Do not reuse the generic parent's mixed-source anti fraction as a veto after candidate-specific blockers have been removed; only truly ambiguous residual component overlap remains `unresolved_biological`.
+
+When exact-remainder review has already certified an orthogonal cross-lineage identity as a blocker, keep that blocker visible even if the still-mixed remainder has more than 5% aggregate contradiction. The aggregate contradiction ceiling cannot be applied a second time to erase the competing identity and force a wholesale parent return. State programs are recorded separately and do not, by themselves, veto a supported broad parent.
+
+The one additional extraction can only re-evaluate candidate-local components already generated inside that mixed subcluster after accepted members are removed. It cannot scan the whole remainder as a new per-cellbin classifier. Candidate-specific exceptions, such as an Oocyte canonical identity component, must be declared in the catalog/controller and revalidated from raw component evidence; they cannot become general anti-marker bypasses.
+
+### 5. Merge, freeze and review
+
+After all cohorts finish, merge whole-subcluster returns and supported local subsets, require an exact mutually exclusive cover of `analysis_set`, resolve conflicts, then freeze formal broad membership. First-pass provisional labels are not a release source. Fine proposals are materialized only inside the correct frozen broad parent. State annotations occupy a separate column.
+
+A fine candidate may propose broad reconstruction only when its exact proposed members independently retain a parent-broad identity core in at least 25% of members, have no coherent hard contradiction and the fine candidate itself passes its two-family identity/discriminator test. A parent broad candidate that declares required positive families must satisfy every declared family on the exact subset; a parent without such a declaration must still contribute at least one supported broad family. Spatial enrichment is audited but is not required for a widespread true parent background. A synthetic `parent_identity` field, overlapping parent/fine genes or a strong fine discriminator cannot substitute for this exact parent-broad validation. If the parent test fails, reject the promotion and return the members to local remainder review; never expand the surrounding cluster.
+
+Run one calibrated all-cell broad Atlas mapping only after broad freeze. Atlas may directly rescue an unlabeled, non-OOD, profile-compatible observation at moderate-or-higher confidence; it cannot silently overwrite an existing broad label or create a fine label. A material conflict reopens the complete source subcluster/cohort once for query-derived biological review.
+
+After Atlas routing, run one bounded post-merge review only on observations still marked `unresolved_biological`. It is not a whole-object per-cellbin classifier. Each releasable catalog candidate forms strict direct multi-family seeds inside its original second-round subcluster, expands only through coherent same-candidate support on that subcluster's spatial graph, and requires at least three direct seeds in a five-member component. Resolve specific lineages before a catalog-declared generic remainder; when two specific component proposals remain inseparable, preserve unresolved rather than using candidate order. Catalog-declared anatomical parent overrides may return a component to a stage-defined broad parent—for example, a Theca lineage-of-origin program embedded in a coherent corpus-luteum compartment returns `Luteal`—only when that same selected second-round subcluster independently supports both a steroidogenic core and an independent corpus-luteum identity family. Neighborhood, morphology, PGR/APOD/SFRP4 or generic steroidogenesis alone cannot authorize the override; if the anatomical context passes but target-parent identity support is absent, keep the component `unresolved_biological`. The accepted parent candidate replaces the lineage-of-origin challenger in release provenance so completeness can verify the exact source support. This stage exists to close bounded low-RNA tails and residual mixed components, not to tune the final QC percentage.
+
+Map the complete `analysis_set`, retain explicit out-of-distribution handling, and never form a full query-by-reference distance matrix; use the contract-bound fixed representation and ANN index.
+
+Then audit present broad labels, zero-census candidate lineages, embedded programs in large labels, unmodeled stable programs and the complete broad-by-fine candidate matrix. A whole-subcluster return must trace to selected-resolution multichannel evidence; a local writeback to canonical `subset_validation.tsv`; an exact parent tail to canonical `exact_remainder_audit.tsv`; and a post-merge return to `post_merge_unresolved_review_manifest.json` plus its component and context audits. Never invalidate a supported local subset merely because its minority program was diluted in the source subcluster aggregate. Stable unmodeled programs require an exact biological review: route them to an existing catalog identity, a state/technical program, an insufficient-identity program, or a genuine novel-lineage candidate. Only the last outcome blocks release for catalog extension and cohort rerun; none may be auto-named from a marker list. Convert remaining unresolved observations to typed QC only during final materialization. `QC <10%` and `QC <50,000` are final completion requirements, never first-pass tuning targets.
+
+Canonical-cluster identities use one complete detector across second-round competition, zero-census review and release. A weak ordinary/rare program may remain a `watch`, but it cannot make a canonical zero census positive unless the full canonical-cluster rule passes. For Oocyte this means coherent multigene germline/ooplasm evidence, direct core, DEG contrast and object-level spatial review; low-level zona or ambient signal alone cannot block a justified absence call. If ordinary second-round scanning returns zero Oocyte while the label-blind full-analysis-set multi-module starting gate is nonzero, run exactly one query-only canonical targeted cohort containing every starting-gate observation across initial clusters. Freeze its cluster decision before exposing existing labels; return the complete passing cluster except objective input-QC failures or direct multigene somatic hard contradictions. Spatial foci, zona signal and strict seeds never define or shrink this membership.
+
+When a canonical-cluster challenger passes but the census remains zero, generic completeness may mark it `not_evaluable` only if the bound profile requires a downstream object-level biological-quality review. That review must then either justify absence, reconstruct a canonical object, or return the project for iteration. Deferral is not an absence call and is forbidden when no downstream canonical review is contractually required.
+
+For sheep ovary, run `validate_sheep_ovary_biological_quality.py` at the end of this phase. Require three compact biological endpoints: complete-label spatial localization, canonical Oocyte credibility and stage-appropriate follicle ROI histology. Read `references/profiles/sheep_ovary_biological_quality_review.md`. A coherent lineage program recurring across a follicle boundary but retained in generic Stromal/unresolved returns only that exact ROI or source subcluster to one bounded raw-count review. Geometry is a challenger and cannot write labels.
+When rerunning a triggered follicle ROI, bind its pre-iteration review with `--expected-roi-review`. Freeze layers that already passed; only typed failing layers may receive writeback authority. Reject any candidate that erases a previously confirmed antral cavity or converts it into `not_evaluable`.
+When fresh scores cover only the reopened ROI, supply the complete-section x/y ledger through `--coordinate-membership`; it is geometry-only and cannot provide labels or writeback evidence.
+Within a reopened follicle wall, distinguish layer detection from writeback: local/coherent signal may prove a layer exists, whereas directly discriminated identity cores or a validated expression subcluster authorize membership. Formal Theca interna is steroidogenic/androgenic; structural/perifollicular Theca remains exploratory. Resolve Theca, Vascular-associated and mature nonvascular Smooth muscle before the generic Stromal remainder, and never demand mutually exclusive labels for the same mixed cellbin.
+The canonical controller may execute exactly one automatic ROI iteration only when every remaining biological-quality problem is a typed follicle ROI problem. It rebuilds each bounded ROI from project-local non-SCT raw counts with SCT/PCA/SNN/Leiden, rescans the full catalog, and writes only directly coherent identity cores within the authorized wall layers. It then replaces ROI scores inside the complete-section score ledger and reruns all three biological endpoints on the full membership. A subset-only PASS has no completion authority.
+
+### 6. Final annotation and reporting
+
+Every analysis-set observation receives exactly one frozen broad label or typed retained state. Fine labels require high confidence, an independent discriminator and a matching frozen parent. Hypoxia, proliferation, atresia, luteinization, stress, cell cycle and similar programs remain state columns unless they form an independently stable identity.
+
+Write the frozen membership back with `write_frozen_annotations_to_seurat.R`; analysis membership plus the optional excluded-initial-QC ledger must exactly cover the Seurat object. Every semantic repair or proposal overlay must first pass through `apply_cell_id_membership_patch.py`: proposal IDs are unique and contained in the frozen base, updated values are joined by `cell_id`, base order is restored and non-proposal members remain byte-equivalent in the updated columns. Positional row assignment is forbidden. Build the sample-agnostic HTML with `build_frozen_review_report.py`. Before user confirmation, use `pending_user_review`; after confirmation, use `approved_final` without changing membership. The report contains broad/fine census, spatial overviews, high-contrast fixed-point-size highlights, switchable normalized/absolute marker dotplots, label-independent all-cell marker maps, evidence summaries and unresolved regions.
+
+## Open taxonomy and sheep-ovary rules
+
+Profiles provide candidate lineages, marker families, anti-programs, context requirements and literature provenance; they are not label maps. Every second-round subcluster scans the full catalog, and stable catalog-external programs become `Unmodeled lineage candidate` rather than being forcibly named.
+
+For sheep ovary, read:
 
 - `references/profiles/sheep_ovary_standard_workflow.md`
 - `references/profiles/sheep_ovary_candidate_lineage_catalog.json`
 - `references/profiles/sheep_ovary_literature_2025_2026.md`
-- `references/profiles/sheep_ovary_rfirst_case_reference.md` as a sanitized strategy regression trace only
-- `references/profiles/sheep_ovary_oocyte_rfirst_route.md` before any Oocyte decision
+- `references/profiles/sheep_ovary_rfirst_case_reference.md` only as a sanitized failure/regression guide
+- `references/profiles/sheep_ovary_oocyte_rfirst_route.md` before an Oocyte decision
+- `references/profiles/sheep_ovary_biological_quality_review.md` before biological-quality approval
 
-The legacy-named same-batch R-first preset now freezes the validated SCT+BANKSY whole-tissue preprocessing contract, not biological outcomes. Use `--strategy-preset sheep_ovary_same_batch_rfirst`, resolve `config/active_strategy_preset.json`, and independently select whole-tissue/cohort resolutions and labels.
+Use `Vascular-associated` as the broad parent of blood endothelial, lymphatic endothelial and pericyte/mural cells. Smooth muscle requires a mature nonvascular MYH11/CNN1/ACTG2-centered program after mural exclusion. Epithelial/mesothelial cannot expand from one keratin, one spatial component or a mixed-cluster aggregate winner. Oocyte uses a complete canonical-cluster rule; zona/ambient signal does not expand the census. Granulosa state programs do not substitute for identity subtypes. Discover Theca from its multigene steroidogenic/androgenic program across the complete candidate space; follicle ROI and distance are post hoc challengers, never admission or exclusion gates. Release `Luteal` only when stage, steroidogenic function, an independent corpus-luteum identity family and mass-like morphology agree; generic `steroidogenic` is a program, not a broad label. Mesenchymal progenitor-like and Neuroendocrine-like remain exploratory. No designated regression sample label or membership is a runtime prior or Atlas.
 
-For a StereoPy cellbin RDS, activate the same-batch contract only after the workflow profile, explicit preset, object/layer/marker/coordinate audits and conversion provenance are hash-verified. Path names and feature counts are nonbinding hints. Fresh whole-tissue preprocessing uses SCT v2 `glmGamPoi` Pearson residuals from 4,000 HVGs followed by BANKSY `M=0`, `k_geom=30`, `lambda=0.2`, 30 BANKSY PCs, Leiden `k_neighbors=50` and the complete `0.2,0.4,0.6,0.8` grid. An input that already contains BANKSY memberships uses its complete hash-bound upstream grid. Every query-derived broad/targeted reclustering cohort remains separate and uses `0.1,0.2,0.3,0.4,0.6` with adaptive PCs and k; final QC is not reclustered. Never substitute either grid for the other.
+## Execution and validation
 
-Run `init_open_world_lineage_audit.py` and `validate_open_world_lineage_audit.py`. Review all candidate boundaries even when absent. The catalog is non-exhaustive: coherent unexplained programs require added review. `Stromal/mesenchymal` is an honest initial parent for informative mixed mesenchymal-rich clusters; later cohort reclustering may reconstruct Epithelial/mesothelial, Vascular-associated, Smooth muscle or another supported broad class from a high-purity subcluster. Standalone Theca, Smooth muscle, Mesenchymal progenitor-like, luteal, Neural/Schwann/glia or other context-dependent broad classes require their own complete programs and morphology. Use `Vascular-associated` as the shared broad parent for blood endothelial, lymphatic endothelial and pericyte/mural identities. Mature Smooth muscle requires a MYH11/CNN1/ACTG2-centered program after excluding RGS5/PDGFRB/NOTCH3/MCAM/CSPG4-supported mural cells; vascular-wall/mural cells return to `Vascular-associated`. Do not use `Theca/follicular wall` or `Stromal/perivascular` as catch-all release labels.
+Use local execution for discovery and small audits. Submit heavy data work through the user's compute workflow. Match CPU requests to real parallelism; independent cohorts/resolutions are the primary parallel units. A 64-CPU job must still use `--scoring-workers 1` for any observation-scoring boundary with at least 100,000 observations, because scoring forks replicate large direct/local arrays.
 
-Oocyte uses one contamination-safe `canonical_oocyte_targeted_cohort` containing the complete multi-module recall set. Keep any `oocyte_spatial_context_window` as a separate evidence-only membership for finding adjacent pregranulosa/granulosa, epithelial-like or stromal observations; context-only observations cannot enter the Oocyte census. Strict seeds/spatial foci identify and adjudicate Oocyte-enriched recluster clusters but never define observation-level membership. After a cluster passes the non-ZP/maternal, somatic anti-program and cluster/object-ensemble morphology review, materialize **every canonical-cohort observation in that passing cluster** with `materialize_oocyte_cluster_membership.py`; only an explicit cell-level hard contradiction/QC exclusion may remove one. Lacking a strict-seed flag or spatial-object ID is not an exclusion. Validate both directions with `validate_oocyte_context_boundary.py`. Cortical/section-edge location is never negative evidence and location alone is never positive evidence. Return pregranulosa/granulosa or stromal clusters directly to those lineages with zona/adjacency tags. A pregranulosa call requires developmental identity plus follicular-somatic support, maturation comparison, stromal/mural/oocyte anti-program clearance and compatible topology; FOXL2 or adjacency alone is insufficient. Report cellbin count separately from putative object count.
+Tests must cover:
 
-Without a usable matched count-level reference, GSE233801 is the primary public adult-sheep somatic Atlas for the terminal all-cell broad concordance pass. It may directly rescue only the frozen residual QC membership; for already-defined cells it is a diagnostic challenger. It cannot rescue Oocyte, Theca or Epithelial/mesothelial automatically. A matched dotplot is marker evidence, not cell-level transfer.
+- first-pass inability to write formal broad/fine/QC membership;
+- exactly one second-round cohort per initial cluster;
+- non-SCT raw-count ancestry and provisional-label blindness;
+- full-catalog scanning and missing-broad reconstruction;
+- local-only observation splitting and non-QC remainder behavior;
+- post-freeze fine/Atlas/final authority;
+- follicle ROI repair only after a typed post-Atlas review, from non-SCT raw counts, with one bounded iteration and a full-membership re-review;
+- failed-diagnostic isolation;
+- deterministic repeat runs and parameter robustness;
+- Granulosa-rich, Stromal/Smooth/Vascular mixed, rare Oocyte, low-fraction Epithelial and unmodeled-program fixtures.
+- sheep-ovary three-endpoint review: diffuse restricted labels fail, Oocyte remains canonical and object-aware, and a multisector Theca/Vascular/Smooth program hidden in a follicle-wall Stromal remainder triggers local iteration without changing membership.
 
-## Atlas and reference calibration
+For technical determinism, identical input, contract and seed must yield identical partition, membership and semantic hash. For parameter robustness, preserve every >=1% broad class, broad-census Spearman >=0.95, major spatial Dice >=0.80 and the parent/core program of major fine labels across neighboring resolutions, PCs +/-5 and k +/-20%.
 
-Read `references/matched-single-cell-reference.md`. A count-level matched, stage-compatible reference may be the preferred external channel only after all broad/targeted cohorts and terminal QC membership are frozen. Map the analysis set once for broad concordance, but permit direct writeback only for frozen QC. Current-query full-feature marker/anti-marker and morphology remain authoritative.
+## Conversation output
 
-Calibration uses disjoint query-like held-out current-query anchors. External reference self-splitting is diagnostic only. Default target-precision tiers are moderate-or-higher 0.90 and high 0.95; these are calibration targets, not universal per-cell score cutoffs. Report mutually exclusive `high`, `moderate_only`, `low_reject` and require `moderate_or_higher_n = high_n + moderate_only_n`.
+Report biological decisions rather than gates, hashes, filenames or state-machine chatter. Each update has at most five short bullets:
 
-Use `route_global_atlas_v2.py` as the single authoritative Atlas router. Its calibration manifest must hash-bind the query mapping, classwise held-out validation and current-query calibration origin; use `bind_atlas_routing_mapping.py` to bind the exact disjoint union of calibrated target rows and held-out current-query rows before all-cell routing. Arbitrary command-line exclusion lists are not policy. `adjudicate_multichannel_broad_rescue.py` is only for a genuinely uncalibrated non-Atlas proposal and must never be layered on a calibrated Atlas tier. Every accepted return participates in final broad DEG/dotplots but cannot seed fine discovery. Precompute the Atlas transform, representation and ANN index once; never form a full query-by-reference distance matrix or repeat joint integration per sample. Treat low margin, mixed neighbors, failed classwise calibration and coherent OOD programs as QC/unknown review signals.
+- whole tissue: selected resolution, major structures, persistent lineage watches and cohort count;
+- cohort: selected resolution, major programs and parent/cross-lineage/missing-broad/unresolved outcomes;
+- Atlas/completeness: rescue count, material broad conflicts and whether absent lineages truly lack support;
+- final: broad/fine census, spatial structure, retained QC/Unknown and regions needing review.
 
-## State, autonomy and multiple samples
-
-Read `references/autonomous-operation.md` for end-to-end work. Run `autopilot_status.py PROJECT_ROOT` at startup and after every writeback. Run `plan_next_iteration.py` after every biological decision; it consumes structured gap codes rather than English error strings. In Agent mode, `CONTINUE`, `ITERATION_REQUIRED` and `EXPECTED_GATE_BLOCKED` are expected business states, while schema/parse/corruption exceptions are execution failures. Use strict nonzero gap exits only in CI/completion. Validate failed jobs under new run IDs and record every incident; do not overwrite failure evidence.
-
-New projects use `recluster_cohort_registry.tsv`, `direct_return_registry.tsv`, `route_attempt_registry.tsv`, `lineage_signal_boundary_registry.tsv` and `lineage_signal_registry.tsv`. The signal registries keep weak lineage evidence alive across whole-tissue, broad and targeted boundaries until explicitly supported or refuted. Retired registry formats remain readable only through migration tools; never create them in a new project.
-
-Use `scripts/migrate_project_v1_10_to_v2.py` for a v1.10 project. It invalidates the old completion gate and requires v2 contract, family-evidence, BANKSY-grid, Atlas-router, taxonomy and result-audit revalidation; it never grandfathers existing biological labels. Older projects must first follow their versioned migration chain.
-
-For multi-sample work, read `references/multi-sample-agent-orchestration.md`. The main conversation Agent owns progress, user decisions, cross-sample audit and final quality approval. Assign exactly one complete workflow child Agent per sample; parallel workers must meet identical gates and must not be reduced to cluster renaming or audit-only tasks.
-
-## Completion and report
-
-Before confirmation, treat `check_completion_gate.py` as the single public completion interface. Its internal checks are organized as input integrity, biological evidence, workflow closure and release audit; conditional checks run only when triggered and do not become additional public gates.
-
-Before confirmation:
-
-1. run `build_final_annotation.py`;
-2. run `validate_annotation_contract_v2.py`, `validate_prelabel_broad_evidence.py`, `validate_broad_marker_family_contract.py`, `validate_broad_family_evidence.py`, `validate_project_input_boundary.py`, `validate_lineage_signal_coverage.py`, the v2 Atlas routing/review validator, `validate_broad_class_completeness.py`, `validate_residual_qc_audit.py --require-v2`, `audit_release_taxonomy.py --require-v2`, `validate_direct_lineage_workflow.py`, `validate_annotation_support_registry.py` and `audit_annotation_membership_partition.py`;
-3. run the read-only `audit_project_results_v2.py PROJECT_ROOT --biological-profile BOUND_PROFILE --out provenance/project_results_audit.json` against the committed ledger; its profile hash must equal the annotation contract;
-4. run `validate_state.py`, `plan_next_iteration.py` and `check_completion_gate.py`;
-5. populate `annotation_support_registry.tsv` and build frozen lightweight broad spatial/canonical-marker assets plus all-cell canonical-marker spatial panels (no label filtering; fixed point size);
-6. request and record one main-Agent biological quality approval only after all annotation phases finish;
-7. build the lightweight confirmation HTML and request explicit user confirmation.
-
-Do not spend compute on final assets before confirmation. After confirmation, follow `references/report-contract.md` and produce:
-
-- broad DEG, UMAP/spatial maps and per-node highlights using every final broad member, including direct and Atlas returns;
-- high-confidence fine DEG/maps only when real fine labels exist;
-- separate canonical and current-data-specific broad tree dotplots, plus fine tree dotplots when applicable, in PNG/PDF/source TSV;
-- switchable dotplot views from one source table: absolute detection/expression and display size/color normalized within gene;
-- marker spatial maps grouped by supported cell type;
-- Chinese/requested-language interactive HTML with annotated overview, expandable tree, node jumps, evidence, workflow timeline and raw state;
-- cell/cluster/cohort/direct-return/route/run/incident registries, manifests, session information and checksums.
-
-Run `build_release_session_info.py`, `build_release_manifest.py` and `audit_release.py`. Completion requires `autopilot_status.py` = `COMPLETE` and release audit PASS.
-
-## Execution and testing
-
-Local execution is for discovery and small audits. Submit heavy data operations to compute nodes using `references/job-orchestration.md`. Match requested CPUs to real parallelism; parallelize independent resolutions/jobs rather than reserving many cores for single-thread Leiden or unwrapped `FindAllMarkers`.
-
-Before distribution, run repository validation, Python/R syntax checks, tests, install verification and a fresh-agent forward test. The fresh Agent receives raw inputs and the Skill, not the intended clustering, labels or historical answer.
+Only report a validator or execution detail when one concrete failure blocks progress, and include the next action in the same line.

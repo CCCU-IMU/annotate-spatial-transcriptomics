@@ -8,6 +8,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from lineage_controller_lib import catalog_candidates
+
 
 def resolve(payload: dict, dotted: str):
     value = payload
@@ -34,10 +36,33 @@ def main() -> int:
     catalog = json.loads(args.catalog.read_text(encoding="utf-8"))
     errors: list[str] = []
     rows: list[dict] = []
-    for candidate in catalog.get("candidate_boundaries", []):
+    candidates = list(catalog_candidates(catalog).values())
+    for candidate in candidates:
         if candidate.get("review_required") is not True:
             continue
         candidate_id = candidate.get("candidate_id", "")
+        required_fields = {
+            "candidate_role", "release_broad_label", "release_fine_label",
+            "parent_broad_label", "writeback_strategy", "specificity_priority",
+            "hard_anti_families", "soft_anti_families", "context_requirements",
+        }
+        missing_fields = sorted(required_fields - set(candidate))
+        if missing_fields:
+            errors.append(
+                f"{candidate_id}: v2.2 candidate taxonomy lacks {', '.join(missing_fields)}"
+            )
+        role = candidate.get("candidate_role")
+        if role not in {"broad", "fine", "state", "exploratory"}:
+            errors.append(f"{candidate_id}: invalid candidate_role {role!r}")
+        if role in {"state", "exploratory"} and (
+            candidate.get("release_broad_label") or candidate.get("release_fine_label")
+        ):
+            errors.append(f"{candidate_id}: non-release role carries a release label")
+        if candidate_id in {"pericyte_mural", "lymphatic_endothelial"} and (
+            candidate.get("release_broad_label") != "Vascular-associated"
+            or candidate.get("parent_broad_label") != "Vascular-associated"
+        ):
+            errors.append(f"{candidate_id}: vascular fine identity is outside Vascular-associated")
         path = candidate.get("profile_program", "")
         try:
             program = resolve(profile, path)
@@ -45,6 +70,37 @@ def main() -> int:
             errors.append(f"{candidate_id}: profile program cannot be resolved: {path}")
             continue
         families = program.get("positive_families", {}) if isinstance(program, dict) else {}
+        if not families and candidate.get("candidate_role") == "state":
+            families = candidate.get("state_positive_families", {})
+        if not families and candidate.get("candidate_role") == "fine":
+            parent = candidate.get("parent_broad_label")
+            parent_candidates = [
+                row for row in candidates
+                if row.get("candidate_role") == "broad"
+                and row.get("release_broad_label") == parent
+            ]
+            if not parent_candidates:
+                errors.append(f"{candidate_id}: fine candidate lacks a resolvable broad parent")
+                continue
+            try:
+                parent_program = resolve(profile, parent_candidates[0]["profile_program"])
+            except (KeyError, TypeError):
+                errors.append(f"{candidate_id}: parent profile program cannot be resolved")
+                continue
+            subtype_genes = {
+                str(gene).strip() for gene in (program if isinstance(program, list) else [])
+                if str(gene).strip()
+            }
+            parent_genes = {
+                str(gene).strip()
+                for genes in parent_program.get("positive_families", {}).values()
+                for gene in genes
+                if str(gene).strip()
+            } - subtype_genes
+            families = {
+                "parent_identity": sorted(parent_genes),
+                "fine_discriminator": sorted(subtype_genes),
+            }
         valid = {
             name: sorted({str(gene).strip() for gene in genes if str(gene).strip()})
             for name, genes in families.items()
@@ -83,7 +139,7 @@ def main() -> int:
         "review_required_candidates_checked": len(rows),
         "default_candidates_checked": sum(
             candidate.get("release_level") in {"default_broad_candidate", "context_specific_broad_candidate"}
-            for candidate in catalog.get("candidate_boundaries", [])
+            for candidate in candidates
             if candidate.get("review_required") is True
         ),
         "candidates": rows,
