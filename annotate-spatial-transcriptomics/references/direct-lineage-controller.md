@@ -2,6 +2,8 @@
 
 `run_lineage_controller.py` is the only formal entry and the only chain that may ultimately create release membership. The controller binds its scripts, candidate catalog, profiles, inputs, seed and artifact roles in the annotation contract.
 
+Release-critical scoring, writeback, resolution-selection and residual-QC defaults come from `references/controller_thresholds_v2_2.json`. The project contract freezes and hashes that registry; prose and project-local scripts cannot redefine hidden defaults.
+
 ## Authority by phase
 
 1. `whole_tissue_partition` creates only a stable initial-cluster partition and provisional cohort plan.

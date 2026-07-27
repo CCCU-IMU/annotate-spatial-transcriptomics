@@ -124,6 +124,7 @@ class V2ContractTests(unittest.TestCase):
             self.assertEqual(Path(contract["workflow_profile"]["path"]).parent, root / "config/contract_profiles")
             self.assertEqual(Path(contract["biological_profile"]["path"]).parent, root / "config/contract_profiles")
             self.assertEqual(Path(contract["candidate_catalog"]["path"]).parent, root / "config/contract_profiles")
+            self.assertEqual(Path(contract["threshold_registry"]["path"]).parent, root / "config/contract_profiles")
             self.assertEqual(contract["whole_tissue_partition"]["candidate_resolutions"], [0.2, 0.4, 0.8])
             self.assertEqual(contract["whole_tissue_partition"]["grid_artifact"]["sha256"], sha(grid))
             self.assertEqual(
@@ -153,6 +154,21 @@ class V2ContractTests(unittest.TestCase):
             self.assertEqual(
                 controller["dependencies"]["lineage_controller_lib.py"]["sha256"],
                 sha(SCRIPTS / "lineage_controller_lib.py"),
+            )
+            self.assertEqual(
+                controller["dependencies"]["controller_thresholds.py"]["sha256"],
+                sha(SCRIPTS / "controller_thresholds.py"),
+            )
+            frozen_thresholds = json.loads(
+                Path(contract["threshold_registry"]["path"]).read_text()
+            )
+            self.assertEqual(
+                controller["scoring_policy"]["direct_weight"],
+                frozen_thresholds["scoring_policy"]["direct_weight"],
+            )
+            self.assertEqual(
+                contract["observation_writeback"]["policy"],
+                frozen_thresholds["observation_writeback_policy"],
             )
             validated = run(SCRIPTS / "validate_annotation_contract_v2.py", root / "config/annotation_contract.json")
             self.assertEqual(validated.returncode, 0, validated.stdout + validated.stderr)

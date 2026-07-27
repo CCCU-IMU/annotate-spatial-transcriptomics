@@ -8,6 +8,7 @@ import json
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from controller_thresholds import load_controller_thresholds
 from evidence_schema_lib import sha256
 from lineage_controller_lib import deterministic_membership_hash, read_tsv, write_tsv
 
@@ -23,6 +24,7 @@ def main() -> int:
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
+    contract = json.loads(args.contract.read_text(encoding="utf-8"))
     authority = json.loads(args.stage_authority.read_text(encoding="utf-8"))
     if (
         authority.get("mode") != "stage_authority"
@@ -30,6 +32,25 @@ def main() -> int:
         or authority.get("annotation_contract_sha256") != sha256(args.contract)
     ):
         raise SystemExit("stage authority does not permit final materialization")
+    threshold_record = contract.get("threshold_registry", {})
+    threshold_path = Path(str(threshold_record.get("path", "")))
+    if not threshold_path.is_absolute():
+        threshold_path = (args.contract.parent / threshold_path).resolve()
+    authority_threshold = authority.get("threshold_registry", {})
+    if (
+        not threshold_path.is_file()
+        or threshold_record.get("sha256") != sha256(threshold_path)
+        or Path(str(authority_threshold.get("path", ""))).resolve()
+        != threshold_path.resolve()
+        or authority_threshold.get("sha256") != sha256(threshold_path)
+    ):
+        raise SystemExit("final release threshold registry is missing or stale")
+    thresholds = load_controller_thresholds(threshold_path)
+    completion_policy = thresholds["completion_policy"]
+    state_policy = thresholds["state_release_policy"]
+    contradiction_ceiling = thresholds[
+        "observation_writeback_policy"
+    ]["maximum_contradiction_fraction"]
     authority_membership = authority.get("post_atlas_membership", {})
     if (
         Path(str(authority_membership.get("path", ""))).resolve()
@@ -124,8 +145,10 @@ def main() -> int:
             if value and (
                 row.get("assignment_scope")
                 != "whole_high_purity_second_round_subcluster"
-                or float(row.get("lineage_supported_fraction", 0) or 0) < 0.40
-                or float(row.get("contradiction_fraction", 1) or 1) > 0.05
+                or float(row.get("lineage_supported_fraction", 0) or 0)
+                < state_policy["minimum_parent_lineage_supported_fraction"]
+                or float(row.get("contradiction_fraction", 1) or 1)
+                > contradiction_ceiling
             ):
                 raise SystemExit(
                     "state proposal is not a high-purity parent-resolved subcluster state"
@@ -176,9 +199,14 @@ def main() -> int:
 
     qc_n = sum(row["final_state"] == "qc_holdout" for row in final)
     qc_fraction = qc_n / len(final)
-    if qc_n >= 50000 or qc_fraction >= 0.10:
+    if (
+        qc_n >= int(completion_policy["residual_qc_count_trigger"])
+        or qc_fraction >= float(
+            completion_policy["residual_qc_fraction_trigger"]
+        )
+    ):
         raise SystemExit(
-            "residual QC reaches 10% or 50,000; return to the implicated "
+            "residual QC reaches the bound completion threshold; return to the implicated "
             "second-round cohort or post-merge unresolved review"
         )
 
@@ -197,6 +225,10 @@ def main() -> int:
         "schema_version": "2.2",
         "phase": "materialize_final_release",
         "controller_version": "2.2.0",
+        "threshold_registry": {
+            "path": str(threshold_path.resolve()),
+            "sha256": sha256(threshold_path),
+        },
         "n_analysis_set": len(final),
         "residual_qc_n": qc_n,
         "residual_qc_fraction": qc_fraction,

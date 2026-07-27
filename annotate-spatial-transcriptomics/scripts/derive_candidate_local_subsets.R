@@ -29,6 +29,45 @@ if (length(missing)) stop("missing required arguments: ", paste(missing, collaps
 score_path <- normalizePath(args$scores, mustWork = TRUE)
 cluster_evidence_path <- normalizePath(args[["cluster-evidence"]], mustWork = TRUE)
 catalog_path <- normalizePath(args$catalog, mustWork = TRUE)
+script_argument <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+if (length(script_argument) != 1L) stop("cannot resolve local-subset script path")
+script_path <- normalizePath(
+  sub("^--file=", "", script_argument[[1L]]), mustWork = TRUE
+)
+sha256 <- function(path) {
+  output <- system2("sha256sum", shQuote(path), stdout = TRUE)
+  strsplit(output[[1L]], "\\s+")[[1L]][[1L]]
+}
+threshold_registry_path <- normalizePath(
+  if ("threshold-registry" %in% names(args)) {
+    args[["threshold-registry"]]
+  } else {
+    file.path(dirname(script_path), "..", "references", "controller_thresholds_v2_2.json")
+  },
+  mustWork = TRUE
+)
+threshold_registry <- fromJSON(
+  threshold_registry_path, simplifyVector = FALSE
+)
+if (!identical(as.character(threshold_registry$schema_version), "2.2")) {
+  stop("controller threshold registry is not schema 2.2")
+}
+writeback_policy <- threshold_registry$observation_writeback_policy
+subset_support_threshold <- as.numeric(
+  writeback_policy$supported_subset_min_lineage_supported_fraction
+)
+subset_margin_threshold <- as.numeric(
+  writeback_policy$supported_subset_min_purity_margin
+)
+maximum_contradiction_threshold <- as.numeric(
+  writeback_policy$maximum_contradiction_fraction
+)
+parent_support_threshold <- as.numeric(
+  writeback_policy$whole_subcluster_min_lineage_supported_fraction
+)
+minimum_component_n <- as.integer(
+  threshold_registry$local_subset_policy$minimum_component_members
+)
 out_dir <- args$out
 release_level <- if ("release-level" %in% names(args)) args[["release-level"]] else "broad"
 if (!release_level %in% c("broad", "fine", "all")) stop("invalid --release-level")
@@ -477,7 +516,8 @@ watch_i <- 1L
 
 validate_group <- function(
   members, target_id, group_scores, aggregate_row = NULL,
-  minimum_support = 0.70, require_component_enrichment = TRUE
+  minimum_support = subset_support_threshold,
+  require_component_enrichment = TRUE
 ) {
   target <- group_scores[candidate_id == target_id & cell_id %chin% members]
   target_broad <- candidate_broad[[target_id]]
@@ -533,8 +573,8 @@ validate_group <- function(
         nzchar(parent_supported_families)
       }
       parent_identity_status <- if (
-        parent_family_floor_pass && parent_support >= 0.25 &&
-          parent_contradiction <= 0.05
+        parent_family_floor_pass && parent_support >= parent_support_threshold &&
+          parent_contradiction <= maximum_contradiction_threshold
       ) "PASS" else "FAIL"
     }
   }
@@ -615,8 +655,8 @@ validate_group <- function(
     program_score_delta = enrichment$program_delta,
     direct_signal_delta = enrichment$direct_delta,
     pass = support >= minimum_support &&
-      support - competitor_fraction >= 0.30 &&
-      contradiction <= 0.05 && target_family$pass &&
+      support - competitor_fraction >= subset_margin_threshold &&
+      contradiction <= maximum_contradiction_threshold && target_family$pass &&
       parent_identity_status != "FAIL" &&
       (!require_component_enrichment || enrichment$pass)
   )
@@ -720,7 +760,7 @@ for (boundary in unique(scores$source_boundary)) {
       evidence <- validate_group(
         members, whole_candidate, group_scores,
         aggregate_row = aggregate_row,
-        minimum_support = 0.70,
+        minimum_support = subset_support_threshold,
         require_component_enrichment = FALSE
       )
       subset_id <- paste(
@@ -905,12 +945,12 @@ for (boundary in unique(scores$source_boundary)) {
           evidence <- validate_group(
             members, candidate_id, group_scores,
             aggregate_row = target_aggregate,
-            minimum_support = 0.70,
+            minimum_support = subset_support_threshold,
             require_component_enrichment = FALSE
           )
           aggregate_pass <- evidence$family_support_status == "PASS" &&
-            evidence$support >= 0.70 &&
-            evidence$contradiction <= 0.05 &&
+            evidence$support >= subset_support_threshold &&
+            evidence$contradiction <= maximum_contradiction_threshold &&
             aggregate_margin >= 0.25
           subset_id <- paste(
             safe(boundary), safe(cluster), candidate_id,
@@ -1000,7 +1040,6 @@ for (boundary in unique(scores$source_boundary)) {
         graph <- add_edges(graph, as.vector(rbind(edge_from, edge_to)))
       }
       components <- igraph::components(graph)$membership
-      minimum_component_n <- 5L
       for (component in sort(unique(components))) {
         members <- seeds[components == component]
         if (length(members) < minimum_component_n) next
@@ -1166,6 +1205,10 @@ manifest <- list(
   scores = score_path,
   cluster_evidence = cluster_evidence_path,
   catalog = catalog_path,
+  threshold_registry = list(
+    path = threshold_registry_path,
+    sha256 = sha256(threshold_registry_path)
+  ),
   release_level = release_level,
   requested_workers = workers,
   effective_candidate_workers = min(workers, length(candidate_ids)),
@@ -1182,7 +1225,11 @@ manifest <- list(
     generic_support_cells_can_bridge_identity_cores = FALSE,
     spatial_component_membership =
       "declared identity-core observations only",
-    group_validation = "support>=0.70;margin>=0.30;contradiction<=0.05",
+    group_validation = paste0(
+      "support>=", subset_support_threshold,
+      ";margin>=", subset_margin_threshold,
+      ";contradiction<=", maximum_contradiction_threshold
+    ),
     validation_threshold_used_as_cell_admission = FALSE,
     high_purity_sparse_tail_inherits_broad = TRUE
   )

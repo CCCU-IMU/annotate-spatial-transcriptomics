@@ -335,6 +335,7 @@
   },
   "broad_family_evidence_contract": {
     "schema_version": "2.0",
+    "controller_threshold_registry": "../controller_thresholds_v2_2.json",
     "source_layer": "project-local full-feature raw counts plus a separately verified project-local normalized validation layer",
     "required_metrics_per_cluster_candidate_family": [
       "available_marker_count", "detected_marker_count", "any_detection_fraction",
@@ -356,18 +357,7 @@
     "parent_label_inheritance_is_not_evidence": true,
     "observation_subset_writeback": {
       "principle": "a graph subcluster is a computational boundary, not an indivisible biological unit; a mixed subcluster may yield multiple disjoint lineage-supported observation subsets",
-      "whole_subcluster_min_effective_supported_fraction_fallback": 0.25,
-      "whole_subcluster_min_effective_purity_margin_fallback": 0.10,
-      "whole_subcluster_min_raw_two_family_supported_fraction": 0.40,
-      "whole_subcluster_min_raw_two_family_margin": 0.20,
-      "whole_subcluster_embedded_competitor_raw_trigger": 0.35,
-      "whole_subcluster_dominant_seed_fraction": 0.70,
-      "whole_subcluster_dominant_direct_core_fraction": 0.80,
-      "whole_subcluster_dominant_identity_core_fraction": 0.80,
-      "whole_subcluster_dominant_max_contradiction_fraction": 0.20,
-      "supported_subset_min_lineage_supported_fraction": 0.70,
-      "supported_subset_min_purity_margin": 0.30,
-      "maximum_contradiction_fraction": 0.05,
+      "release_threshold_source": "../controller_thresholds_v2_2.json#observation_writeback_policy",
       "remainder_policy": "after every supported subset is frozen, rescore the exact local remainder against the complete broad catalog. After Atlas, one bounded post-merge review may act only on unresolved biological members by using strict direct multi-family seeds, coherent same-candidate spatial expansion, specific-before-generic overlap resolution and catalog-declared anatomical parent overrides; it cannot become a whole-object per-cellbin classifier or alter frozen broad members",
       "single_marker_split_forbidden": true,
       "spatial_coherence_required": true,

@@ -165,14 +165,20 @@ def validate_contract(contract_path: Path) -> tuple[dict, dict[str, Path]]:
         ):
             raise RuntimeError(f"contract does not bind installed canonical {name}")
         paths[name] = path
-    dependency = script_dir / "lineage_controller_lib.py"
-    record = controller.get("dependencies", {}).get("lineage_controller_lib.py", {})
-    if (
-        Path(str(record.get("path", ""))).resolve() != dependency.resolve()
-        or not dependency.is_file()
-        or record.get("sha256") != sha256(dependency)
+    for dependency_name in (
+        "controller_thresholds.py", "lineage_controller_lib.py"
     ):
-        raise RuntimeError("contract does not bind lineage_controller_lib.py")
+        dependency = script_dir / dependency_name
+        record = controller.get("dependencies", {}).get(dependency_name, {})
+        if (
+            Path(str(record.get("path", ""))).resolve() != dependency.resolve()
+            or not dependency.is_file()
+            or record.get("sha256") != sha256(dependency)
+        ):
+            raise RuntimeError(
+                f"contract does not bind {dependency_name}"
+            )
+        paths[dependency_name] = dependency
     policy = contract.get("artifact_role_policy", {})
     if (
         policy.get("runtime_allowed_roles") != ["runtime_input", "external_reference"]
@@ -198,7 +204,10 @@ def validate_contract(contract_path: Path) -> tuple[dict, dict[str, Path]]:
         ]
         if any(selected_path == root or root in selected_path.parents for root in failed):
             raise RuntimeError("selected input is inside a failed diagnostic artifact")
-    paths["lineage_controller_lib.py"] = dependency
+    paths["threshold_registry"] = resolve_bound(
+        contract_path, contract.get("threshold_registry", {}),
+        "controller threshold registry",
+    )
     paths["profile"] = resolve_bound(
         contract_path, contract.get("biological_profile", {}), "biological profile"
     )
@@ -594,8 +603,12 @@ def stage_authority(
             name: artifact(paths[name]) for name in CANONICAL_SCRIPTS
         },
         "dependencies": {
-            "lineage_controller_lib.py": artifact(paths["lineage_controller_lib.py"])
+            name: artifact(paths[name])
+            for name in (
+                "controller_thresholds.py", "lineage_controller_lib.py"
+            )
         },
+        "threshold_registry": artifact(paths["threshold_registry"]),
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     for key, path in artifacts.items():
@@ -626,6 +639,7 @@ def run_scorer(
         "--catalog", str(paths["catalog"]), "--partitions", str(partitions.resolve()),
         "--out", str(output), "--seed", str(args.seed),
         "--workers", str(scoring_workers),
+        "--threshold-registry", str(paths["threshold_registry"]),
     ]
     if grid_only:
         command.extend(["--grid-evidence-only", "true"])
@@ -677,6 +691,7 @@ def phase_whole(args, contract: dict, paths: dict[str, Path]) -> dict:
         sys.executable, str(paths["select_lineage_resolution.py"]),
         "--grid-evidence", str(evidence_out / "resolution_grid_evidence.tsv"),
         "--selection-purpose", "whole_tissue_cohort_partition",
+        "--threshold-registry", str(paths["threshold_registry"]),
         "--out", str(selector_out),
     ], output / "logs/02_resolution_selection.log")
     selection = json.loads((selector_out / "resolution_selection.json").read_text(encoding="utf-8"))
@@ -1058,6 +1073,7 @@ def phase_cohort(args, contract: dict, paths: dict[str, Path]) -> dict:
         sys.executable, str(paths["select_lineage_resolution.py"]),
         "--grid-evidence", str(evidence_out / "resolution_grid_evidence.tsv"),
         "--selection-purpose", "cohort_identity_resolution",
+        "--threshold-registry", str(paths["threshold_registry"]),
         "--out", str(selection_out),
     ], output / "logs/03_resolution_selection.log")
     selection = json.loads(
@@ -1286,6 +1302,7 @@ def phase_local(args, contract: dict, paths: dict[str, Path]) -> dict:
         "--catalog", str(paths["catalog"]), "--release-level", "broad",
         "--source-boundary", args.source_boundary,
         "--source-cluster", args.source_cluster,
+        "--threshold-registry", str(paths["threshold_registry"]),
         "--workers", str(args.subset_workers), "--out", str(subset_out),
     ]
     if context_path:
@@ -1680,6 +1697,7 @@ def run_targeted_follicle_roi_iteration(
             sys.executable, str(paths["select_lineage_resolution.py"]),
             "--grid-evidence", str(evidence_out / "resolution_grid_evidence.tsv"),
             "--selection-purpose", "cohort_identity_resolution",
+            "--threshold-registry", str(paths["threshold_registry"]),
             "--out", str(selection_out),
         ], roi_output / "logs/03_resolution_selection.log")
         selection = json.loads(
@@ -2032,7 +2050,9 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
     fine_command = [
         sys.executable, str(paths["materialize_parent_locked_fine_proposals.py"]),
         "--membership", str(args.post_atlas_membership.resolve()),
-        "--catalog", str(paths["catalog"]), "--out", str(fine_out),
+        "--catalog", str(paths["catalog"]),
+        "--threshold-registry", str(paths["threshold_registry"]),
+        "--out", str(fine_out),
     ]
     for path in fine_proposal_paths:
         fine_command.extend(["--fine-audit", str(path.resolve())])

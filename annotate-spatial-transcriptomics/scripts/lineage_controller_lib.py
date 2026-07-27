@@ -18,10 +18,13 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Iterable
 
+from controller_thresholds import observation_writeback_defaults
+
 
 RELEASE_ROLES = {"broad", "fine"}
 GENERIC_REMAINDER_IDS = {"stromal_mesenchymal"}
 QC_STATES = {"qc_holdout", "unknown_candidate", "technical_state"}
+_WRITEBACK_DEFAULTS = observation_writeback_defaults()
 
 
 def clamp(value: float) -> float:
@@ -341,7 +344,9 @@ def independent_group_program(
     row: dict[str, str],
     candidate: dict | None = None,
     *,
-    maximum_contradiction_fraction: float = 0.05,
+    maximum_contradiction_fraction: float = _WRITEBACK_DEFAULTS[
+        "maximum_contradiction_fraction"
+    ],
 ) -> bool:
     """Distinguish an independent identity from a visible shared/remainder program."""
     candidate = candidate or {}
@@ -707,9 +712,15 @@ def validate_subset(
     catalog: dict[str, dict] | None = None,
     release_level: str = "all",
     aggregate_evidence: dict[str, str] | None = None,
-    minimum_supported_fraction: float = 0.70,
-    minimum_margin: float = 0.30,
-    maximum_contradiction_fraction: float = 0.05,
+    minimum_supported_fraction: float = _WRITEBACK_DEFAULTS[
+        "supported_subset_min_lineage_supported_fraction"
+    ],
+    minimum_margin: float = _WRITEBACK_DEFAULTS[
+        "supported_subset_min_purity_margin"
+    ],
+    maximum_contradiction_fraction: float = _WRITEBACK_DEFAULTS[
+        "maximum_contradiction_fraction"
+    ],
 ) -> dict[str, object]:
     if not members:
         return {"status": "FAIL", "reason": "empty_subset"}
@@ -1029,9 +1040,15 @@ def choose_group_parent(
     blocker_candidate_ids: set[str] | None = None,
     parent_candidate_ids: set[str] | None = None,
     certified_generic_parent_ids: set[str] | None = None,
-    minimum_supported_fraction: float = 0.70,
-    minimum_margin: float = 0.30,
-    maximum_contradiction_fraction: float = 0.05,
+    minimum_supported_fraction: float = _WRITEBACK_DEFAULTS[
+        "supported_subset_min_lineage_supported_fraction"
+    ],
+    minimum_margin: float = _WRITEBACK_DEFAULTS[
+        "supported_subset_min_purity_margin"
+    ],
+    maximum_contradiction_fraction: float = _WRITEBACK_DEFAULTS[
+        "maximum_contradiction_fraction"
+    ],
 ) -> tuple[str, dict[str, object]]:
     """Choose a coarse parent for an exact remainder from immutable scores."""
     certified_generic_parent_ids = set(certified_generic_parent_ids or set())

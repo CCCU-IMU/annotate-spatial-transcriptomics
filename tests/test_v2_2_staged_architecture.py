@@ -370,7 +370,10 @@ class V22StagedArchitectureTests(unittest.TestCase):
         )
         self.assertIn("context_evidence_candidate_id", source)
         self.assertIn("parent_identity_status", source)
-        self.assertIn("parent_family_floor_pass && parent_support >= 0.25", source)
+        self.assertIn(
+            "parent_family_floor_pass && parent_support >= parent_support_threshold",
+            source,
+        )
         self.assertIn('parent_identity_status != "FAIL"', source)
 
     def test_canonical_zero_census_is_deferred_only_to_required_biological_review(self) -> None:
@@ -520,12 +523,20 @@ class V22StagedArchitectureTests(unittest.TestCase):
             evidence_path = tables / "cluster_candidate_multichannel_evidence.tsv.gz"
             write_tsv(evidence_path, rows)
             scorer = SCRIPTS / "run_observation_lineage_scoring.R"
+            thresholds = (
+                ROOT / "annotate-spatial-transcriptomics/references/"
+                "controller_thresholds_v2_2.json"
+            )
             (scoring / "observation_scoring_manifest.json").write_text(
                 json.dumps({
                     "status": "PASS",
                     "scorer": {
                         "path": str(scorer),
                         "sha256": hashlib.sha256(scorer.read_bytes()).hexdigest(),
+                    },
+                    "threshold_registry": {
+                        "path": str(thresholds),
+                        "sha256": hashlib.sha256(thresholds.read_bytes()).hexdigest(),
                     },
                     "candidate_universe": candidates,
                 })
@@ -833,12 +844,14 @@ class V22StagedArchitectureTests(unittest.TestCase):
         catalog = root / "catalog.json"
         catalog.write_text(json.dumps(CATALOG))
         contract = root / "contract.json"
+        threshold_registry = json.loads(
+            (ROOT / "annotate-spatial-transcriptomics/references/"
+             "controller_thresholds_v2_2.json").read_text(encoding="utf-8")
+        )
         contract.write_text(json.dumps({
-            "observation_writeback": {"policy": {
-                "whole_subcluster_min_raw_two_family_supported_fraction": 0.40,
-                "whole_subcluster_min_raw_two_family_margin": 0.20,
-                "maximum_contradiction_fraction": 0.05,
-            }}
+            "observation_writeback": {
+                "policy": threshold_registry["observation_writeback_policy"]
+            }
         }))
         cells = [f"c{i:02d}" for i in range(20)]
         partitions = root / "partitions.tsv"
@@ -1038,7 +1051,17 @@ class V22StagedArchitectureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             contract = root / "contract.json"
-            contract.write_text("{}")
+            thresholds = (
+                ROOT / "annotate-spatial-transcriptomics/references/"
+                "controller_thresholds_v2_2.json"
+            )
+            threshold_record = {
+                "path": str(thresholds),
+                "sha256": hashlib.sha256(thresholds.read_bytes()).hexdigest(),
+            }
+            contract.write_text(json.dumps({
+                "threshold_registry": threshold_record,
+            }))
             membership = root / "post_atlas.tsv"
             rows = []
             for index in range(20):
@@ -1090,6 +1113,7 @@ class V22StagedArchitectureTests(unittest.TestCase):
                     "path": str(review),
                     "sha256": hashlib.sha256(review.read_bytes()).hexdigest(),
                 },
+                "threshold_registry": threshold_record,
                 "state_annotation_proposals": [],
             }))
             out = root / "out"

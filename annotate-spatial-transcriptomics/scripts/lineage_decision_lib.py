@@ -13,6 +13,8 @@ import re
 from collections import Counter
 from typing import Iterable
 
+from controller_thresholds import observation_writeback_defaults
+
 
 REQUIRED_COLUMNS = {
     "cluster",
@@ -33,22 +35,7 @@ PURITY_COLUMNS = {
 }
 
 
-DEFAULT_OBSERVATION_WRITEBACK_POLICY = {
-    "whole_subcluster_min_lineage_supported_fraction": 0.25,
-    "whole_subcluster_min_purity_margin": 0.10,
-    "whole_subcluster_min_raw_two_family_supported_fraction": 0.40,
-    "whole_subcluster_min_raw_two_family_margin": 0.20,
-    "whole_subcluster_embedded_competitor_raw_trigger": 0.35,
-    "whole_subcluster_dominant_seed_fraction": 0.70,
-    "whole_subcluster_dominant_direct_core_fraction": 0.80,
-    "whole_subcluster_dominant_identity_core_fraction": 0.80,
-    "whole_subcluster_dominant_max_contradiction_fraction": 0.20,
-    "supported_subset_min_lineage_supported_fraction": 0.70,
-    "supported_subset_min_purity_margin": 0.30,
-    "present_label_min_lineage_supported_fraction": 0.50,
-    "present_label_min_purity_margin": 0.20,
-    "maximum_contradiction_fraction": 0.05,
-}
+DEFAULT_OBSERVATION_WRITEBACK_POLICY = observation_writeback_defaults()
 
 
 def truth(value: object) -> bool:

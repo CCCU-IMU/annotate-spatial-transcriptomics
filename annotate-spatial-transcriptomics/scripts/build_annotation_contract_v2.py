@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 
 from evidence_schema_lib import sha256
+from controller_thresholds import REGISTRY_PATH, load_controller_thresholds
 from lineage_decision_lib import observation_writeback_policy
 
 
@@ -188,6 +189,10 @@ def main() -> int:
     if any(selected_path == failed or failed in selected_path.parents for failed in failed_roots):
         raise SystemExit("selected input snapshot is inside failed_diagnostic artifacts")
     biological = json.loads(args.biological_profile.read_text(encoding="utf-8"))
+    controller_thresholds = load_controller_thresholds()
+    scoring_policy = controller_thresholds["scoring_policy"]
+    local_subset_policy = controller_thresholds["local_subset_policy"]
+    writeback_policy = observation_writeback_policy(project)
     analysis_ids = membership_ids(args.analysis_membership)
     excluded_ids = membership_ids(args.excluded_initial_qc, allow_empty=True)
     if analysis_ids & excluded_ids:
@@ -219,6 +224,9 @@ def main() -> int:
         ),
         "candidate_catalog": freeze_artifact(
             args.candidate_catalog, root, "candidate_catalog", args.contract_id
+        ),
+        "threshold_registry": freeze_artifact(
+            REGISTRY_PATH, root, "controller_threshold_registry", args.contract_id
         ),
         "candidate_context_evidence": (
             freeze_artifact(
@@ -352,15 +360,23 @@ def main() -> int:
                 )
             },
             "dependencies": {
-                "lineage_controller_lib.py": artifact(
-                    Path(__file__).resolve().parent / "lineage_controller_lib.py"
+                name: artifact(Path(__file__).resolve().parent / name)
+                for name in (
+                    "controller_thresholds.py", "lineage_controller_lib.py"
                 )
             },
             "scoring_policy": {
                 "gene_scale": "query_nonzero_q95_capped",
                 "family_aggregation": "mean_top_two_available_genes",
-                "direct_weight": 0.35,
-                "local_weight": 0.65,
+                "direct_weight": scoring_policy["direct_weight"],
+                "local_weight": scoring_policy["local_weight"],
+                "anti_weight": scoring_policy["anti_weight"],
+                "family_active_threshold": scoring_policy[
+                    "family_active_threshold"
+                ],
+                "local_gene_detection_fraction": scoring_policy[
+                    "local_gene_detection_fraction"
+                ],
                 "hard_contradiction": (
                     "coherent_multigene_multifamily_direct_anti_only"
                 ),
@@ -375,10 +391,18 @@ def main() -> int:
                 "sparse_tail_inheritance_scope": (
                     "validated_high_purity_expression_subcluster_only"
                 ),
-                "subset_validation_supported_fraction": 0.70,
-                "subset_validation_competitor_margin": 0.30,
-                "maximum_contradiction_fraction": 0.05,
-                "maximum_second_subset_rounds": 1,
+                "subset_validation_supported_fraction": writeback_policy[
+                    "supported_subset_min_lineage_supported_fraction"
+                ],
+                "subset_validation_competitor_margin": writeback_policy[
+                    "supported_subset_min_purity_margin"
+                ],
+                "maximum_contradiction_fraction": writeback_policy[
+                    "maximum_contradiction_fraction"
+                ],
+                "maximum_second_subset_rounds": local_subset_policy[
+                    "maximum_second_subset_rounds"
+                ],
                 "activation_scope": "second_round_mixed_subcluster_only",
             },
             "remainder_policy": {
@@ -399,7 +423,7 @@ def main() -> int:
             "complete_fine_candidate_audit_required": project.get("complete_fine_candidate_audit_required") is True,
             "fine_writeback_broad_lock_required": project.get("fine_writeback_broad_lock_required") is True,
             "final_fine_state_validation_required": project.get("final_fine_state_validation_required") is True,
-            "policy": observation_writeback_policy(project),
+            "policy": writeback_policy,
         },
         "atlas_routing": {
             "authoritative_router": "route_global_atlas_v2.py",

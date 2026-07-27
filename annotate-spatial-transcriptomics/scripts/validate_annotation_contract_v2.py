@@ -9,6 +9,7 @@ import gzip
 import json
 from pathlib import Path
 
+from controller_thresholds import load_controller_thresholds
 from evidence_schema_lib import sha256, validate_artifact_ref, validate_json_against_schema
 
 
@@ -21,7 +22,10 @@ def main() -> int:
     contract, errors = validate_json_against_schema(args.contract, schema)
     root = args.contract.parent
     resolved = {}
-    for key in ("project_config", "workflow_profile", "biological_profile", "candidate_catalog"):
+    for key in (
+        "project_config", "workflow_profile", "biological_profile",
+        "candidate_catalog", "threshold_registry",
+    ):
         path, artifact_errors = validate_artifact_ref(root, contract.get(key, {}), key)
         errors.extend(artifact_errors)
         if path:
@@ -166,17 +170,72 @@ def main() -> int:
             errors.append(f"canonical lineage controller path differs for {name}")
         elif not expected.is_file() or record.get("sha256") != sha256(expected):
             errors.append(f"canonical lineage controller hash differs for {name}")
-    dependency = script_dir / "lineage_controller_lib.py"
-    dependency_record = controller.get("dependencies", {}).get(
-        "lineage_controller_lib.py", {}
-    )
-    if (
-        Path(str(dependency_record.get("path", ""))).resolve()
-        != dependency.resolve()
-        or not dependency.is_file()
-        or dependency_record.get("sha256") != sha256(dependency)
+    for dependency_name in (
+        "controller_thresholds.py", "lineage_controller_lib.py"
     ):
-        errors.append("annotation contract does not bind lineage_controller_lib.py")
+        dependency = script_dir / dependency_name
+        dependency_record = controller.get("dependencies", {}).get(
+            dependency_name, {}
+        )
+        if (
+            Path(str(dependency_record.get("path", ""))).resolve()
+            != dependency.resolve()
+            or not dependency.is_file()
+            or dependency_record.get("sha256") != sha256(dependency)
+        ):
+            errors.append(
+                f"annotation contract does not bind {dependency_name}"
+            )
+    if "threshold_registry" in resolved:
+        try:
+            thresholds = load_controller_thresholds(resolved["threshold_registry"])
+            expected_writeback = thresholds["observation_writeback_policy"]
+            expected_scoring = thresholds["scoring_policy"]
+            expected_local = thresholds["local_subset_policy"]
+            contract_writeback = contract.get(
+                "observation_writeback", {}
+            ).get("policy", {})
+            scoring = controller.get("scoring_policy", {})
+            for key in (
+                "direct_weight", "local_weight", "anti_weight",
+                "family_active_threshold", "local_gene_detection_fraction",
+            ):
+                if scoring.get(key) != expected_scoring.get(key):
+                    errors.append(
+                        f"controller scoring policy differs from threshold registry: {key}"
+                    )
+            subset = controller.get("subset_policy", {})
+            expected_subset = {
+                "subset_validation_supported_fraction": contract_writeback[
+                    "supported_subset_min_lineage_supported_fraction"
+                ],
+                "subset_validation_competitor_margin": contract_writeback[
+                    "supported_subset_min_purity_margin"
+                ],
+                "maximum_contradiction_fraction": contract_writeback[
+                    "maximum_contradiction_fraction"
+                ],
+                "maximum_second_subset_rounds": expected_local[
+                    "maximum_second_subset_rounds"
+                ],
+            }
+            for key, value in expected_subset.items():
+                if subset.get(key) != value:
+                    errors.append(
+                        f"controller subset policy differs from threshold registry: {key}"
+                    )
+            if contract_writeback != expected_writeback:
+                project_policy = {}
+                if "project_config" in resolved:
+                    project_policy = json.loads(
+                        resolved["project_config"].read_text(encoding="utf-8")
+                    ).get("observation_writeback_policy", {})
+                if contract_writeback != project_policy:
+                    errors.append(
+                        "observation-writeback policy is neither the canonical registry nor an explicit project override"
+                    )
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            errors.append(f"invalid controller threshold registry: {exc}")
     if "project_config" in resolved:
         project = json.loads(resolved["project_config"].read_text(encoding="utf-8"))
         for key in ("project_id", "sample_id", "framework_version"):

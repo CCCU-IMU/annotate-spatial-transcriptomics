@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from controller_thresholds import REGISTRY_PATH, load_controller_thresholds
 from evidence_schema_lib import validate_evidence_artifact, validate_json_against_schema
 
 
@@ -44,10 +45,24 @@ def main() -> int:
     ap.add_argument("--qc-reason-column", default="auto")
     ap.add_argument("--require-v2", action="store_true")
     ap.add_argument("--require-v2-2", action="store_true")
-    ap.add_argument("--fraction-trigger", type=float, default=0.10)
-    ap.add_argument("--count-trigger", type=int, default=50000)
+    ap.add_argument("--threshold-registry", type=Path, default=REGISTRY_PATH)
+    ap.add_argument("--fraction-trigger", type=float)
+    ap.add_argument("--count-trigger", type=int)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
+    completion = load_controller_thresholds(
+        args.threshold_registry
+    )["completion_policy"]
+    fraction_trigger = (
+        args.fraction_trigger
+        if args.fraction_trigger is not None
+        else float(completion["residual_qc_fraction_trigger"])
+    )
+    count_trigger = (
+        args.count_trigger
+        if args.count_trigger is not None
+        else int(completion["residual_qc_count_trigger"])
+    )
 
     with open_text(args.ledger) as handle:
         reader = csv.DictReader(handle, delimiter="\t")
@@ -71,13 +86,14 @@ def main() -> int:
         raise SystemExit(f"ledger lacks requested state column {state_column}")
     qc_n = sum(str(row.get(state_column, "")).strip().lower() in QC_STATES for row in rows)
     fraction = qc_n / len(rows)
-    triggered = qc_n >= args.count_trigger or fraction >= args.fraction_trigger
+    triggered = qc_n >= count_trigger or fraction >= fraction_trigger
     errors: list[str] = []
     audit_payload: dict = {}
     if triggered:
         if args.require_v2_2:
             errors.append(
-                "v2.2 residual QC reaches 10% or 50,000 and must return to upstream iteration"
+                "v2.2 residual QC reaches the registry completion threshold "
+                "and must return to upstream iteration"
             )
         if not args.audit or not args.audit.is_file():
             errors.append("large residual QC requires a hash-bound upstream broad-recall audit")

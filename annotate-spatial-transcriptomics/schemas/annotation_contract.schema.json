@@ -6,6 +6,7 @@
   "required": [
     "schema_version", "framework_version", "skill_release_version", "project_id", "sample_id",
     "project_config", "workflow_profile", "biological_profile", "candidate_catalog",
+    "threshold_registry",
     "selected_input_snapshot", "input_scope", "artifact_role_policy", "expression_ancestry_policy",
     "whole_tissue_partition", "query_reclustering", "broad_family_evidence",
     "canonical_lineage_controller",
@@ -21,6 +22,7 @@
     "workflow_profile": {"$ref": "#/$defs/artifact"},
     "biological_profile": {"$ref": "#/$defs/artifact"},
     "candidate_catalog": {"$ref": "#/$defs/artifact"},
+    "threshold_registry": {"$ref": "#/$defs/artifact"},
     "selected_input_snapshot": {
       "type": "object",
       "required": ["registry_path", "snapshot_id", "sha256", "path", "artifact_role"],
@@ -194,8 +196,9 @@
         },
         "dependencies": {
           "type": "object",
-          "required": ["lineage_controller_lib.py"],
+          "required": ["controller_thresholds.py", "lineage_controller_lib.py"],
           "properties": {
+            "controller_thresholds.py": {"$ref": "#/$defs/artifact"},
             "lineage_controller_lib.py": {"$ref": "#/$defs/artifact"}
           },
           "additionalProperties": false
@@ -215,13 +218,17 @@
           "type": "object",
           "required": [
             "gene_scale", "family_aggregation", "direct_weight",
-            "local_weight", "hard_contradiction"
+            "local_weight", "anti_weight", "family_active_threshold",
+            "local_gene_detection_fraction", "hard_contradiction"
           ],
           "properties": {
             "gene_scale": {"const": "query_nonzero_q95_capped"},
             "family_aggregation": {"const": "mean_top_two_available_genes"},
-            "direct_weight": {"const": 0.35},
-            "local_weight": {"const": 0.65},
+            "direct_weight": {"type": "number", "minimum": 0, "maximum": 1},
+            "local_weight": {"type": "number", "minimum": 0, "maximum": 1},
+            "anti_weight": {"type": "number", "minimum": 0, "maximum": 1},
+            "family_active_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+            "local_gene_detection_fraction": {"type": "number", "minimum": 0, "maximum": 1},
             "hard_contradiction": {"const": "coherent_multigene_multifamily_direct_anti_only"}
           }
         },
@@ -247,10 +254,10 @@
             "fine_candidate_parent_lock": {"const": true},
             "fine_candidate_discriminator_seed_required": {"const": true},
             "sparse_tail_inheritance_scope": {"const": "validated_high_purity_expression_subcluster_only"},
-            "subset_validation_supported_fraction": {"const": 0.70},
-            "subset_validation_competitor_margin": {"const": 0.30},
-            "maximum_contradiction_fraction": {"const": 0.05},
-            "maximum_second_subset_rounds": {"const": 1},
+            "subset_validation_supported_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+            "subset_validation_competitor_margin": {"type": "number", "minimum": 0, "maximum": 1},
+            "maximum_contradiction_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+            "maximum_second_subset_rounds": {"type": "integer", "minimum": 0, "maximum": 2},
             "activation_scope": {"const": "second_round_mixed_subcluster_only"}
           }
         },

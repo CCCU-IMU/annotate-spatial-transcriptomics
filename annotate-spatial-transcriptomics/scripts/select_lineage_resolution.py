@@ -7,49 +7,43 @@ import argparse
 import json
 from pathlib import Path
 
+from controller_thresholds import load_controller_thresholds
 from lineage_controller_lib import number, read_tsv, sha256, truth, write_manifest, write_tsv
-
-
-METRIC_WEIGHTS = {
-    "whole_tissue_cohort_partition": {
-        "catalog_recall": 0.10,
-        "embedded_program_separation": 0.05,
-        "deg_antideg_coherence": 0.10,
-        "pseudobulk_coherence": 0.05,
-        "spatial_morphology_coherence": 0.20,
-        "adjacent_resolution_stability": 0.30,
-        "observation_support_coherence": 0.10,
-    },
-    "cohort_identity_resolution": {
-        "catalog_recall": 0.05,
-        "embedded_program_separation": 0.05,
-        "deg_antideg_coherence": 0.05,
-        "pseudobulk_coherence": 0.05,
-        "spatial_morphology_coherence": 0.05,
-        "adjacent_resolution_stability": 0.10,
-        "observation_support_coherence": 0.05,
-        "directly_resolved_observation_fraction": 0.40,
-        "mean_identity_margin": 0.20,
-    },
-}
-COMPOSITE_EQUIVALENCE_TOLERANCE = 0.01
-PER_METRIC_EQUIVALENCE_TOLERANCE = 0.02
-
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--grid-evidence", required=True, type=Path)
     parser.add_argument(
         "--selection-purpose", required=True,
-        choices=sorted(METRIC_WEIGHTS),
+        choices=["cohort_identity_resolution", "whole_tissue_cohort_partition"],
     )
+    parser.add_argument("--threshold-registry", type=Path)
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
+    threshold_document = load_controller_thresholds(args.threshold_registry)
+    selection_policy = threshold_document["resolution_selection"]
+    metric_weights = {
+        purpose: dict(selection_policy[purpose]["metric_weights"])
+        for purpose in (
+            "whole_tissue_cohort_partition", "cohort_identity_resolution"
+        )
+    }
+    penalty_weights = {
+        purpose: dict(selection_policy[purpose]["penalty_weights"])
+        for purpose in metric_weights
+    }
+    composite_tolerance = float(
+        selection_policy["composite_equivalence_tolerance"]
+    )
+    per_metric_tolerance = float(
+        selection_policy["per_metric_equivalence_tolerance"]
+    )
     rows = read_tsv(args.grid_evidence)
     required = {
         "resolution", "complete_catalog_scanned", "zero_census_audited",
         "technical_fragmentation", "state_overfragmentation", "complexity",
-        "selection_purpose", *METRIC_WEIGHTS[args.selection_purpose],
+        "selection_purpose", *metric_weights[args.selection_purpose],
+        *penalty_weights[args.selection_purpose],
     }
     if args.selection_purpose == "cohort_identity_resolution":
         required.update({
@@ -61,23 +55,17 @@ def main() -> int:
             + ", ".join(sorted(required - set(rows[0] if rows else {})))
         )
     evaluated = []
-    metrics = METRIC_WEIGHTS[args.selection_purpose]
+    metrics = metric_weights[args.selection_purpose]
+    penalties = penalty_weights[args.selection_purpose]
     for row in rows:
         if row.get("selection_purpose") != args.selection_purpose:
             raise SystemExit("resolution evidence purpose differs from selector purpose")
         eligible = truth(row["complete_catalog_scanned"]) and truth(row["zero_census_audited"])
         biological = sum(number(row[key]) * weight for key, weight in metrics.items())
-        penalty = (
-            (0.20 if args.selection_purpose == "whole_tissue_cohort_partition" else 0.10)
-            * number(row["technical_fragmentation"])
-            + (0.10 if args.selection_purpose == "whole_tissue_cohort_partition" else 0.15)
-            * number(row["state_overfragmentation"])
+        penalty = sum(
+            float(weight) * number(row[key])
+            for key, weight in penalties.items()
         )
-        if args.selection_purpose == "cohort_identity_resolution":
-            penalty += (
-                0.20 * number(row["mixed_observation_fraction"])
-                + 0.30 * number(row["unresolved_observation_fraction"])
-            )
         evaluated.append({
             **row,
             "resolution": number(row["resolution"]),
@@ -102,10 +90,10 @@ def main() -> int:
         row for row in eligible_rows
         if (
             best_score - row["selection_score"]
-            <= COMPOSITE_EQUIVALENCE_TOLERANCE
+            <= composite_tolerance
             and all(
                 number(best[metric]) - number(row[metric])
-                <= PER_METRIC_EQUIVALENCE_TOLERANCE
+                <= per_metric_tolerance
                 for metric in metrics
             )
         )
@@ -140,8 +128,8 @@ def main() -> int:
         "selection_score": selected["selection_score"],
         "lower_complexity_used_only_as_tiebreaker": len(equivalent) > 1,
         "equivalence_policy": {
-            "composite_tolerance": COMPOSITE_EQUIVALENCE_TOLERANCE,
-            "per_metric_tolerance": PER_METRIC_EQUIVALENCE_TOLERANCE,
+            "composite_tolerance": composite_tolerance,
+            "per_metric_tolerance": per_metric_tolerance,
         },
         "grid_evidence": {
             "path": str(args.grid_evidence.resolve()),

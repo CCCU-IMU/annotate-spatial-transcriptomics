@@ -38,6 +38,21 @@ sha256 <- function(path) {
 input_rds <- normalizePath(args$rds, mustWork = TRUE)
 profile_path <- normalizePath(args$profile, mustWork = TRUE)
 catalog_path <- normalizePath(args$catalog, mustWork = TRUE)
+threshold_registry_path <- normalizePath(
+  if ("threshold-registry" %in% names(args)) {
+    args[["threshold-registry"]]
+  } else {
+    file.path(dirname(script_path), "..", "references", "controller_thresholds_v2_2.json")
+  },
+  mustWork = TRUE
+)
+threshold_registry <- fromJSON(
+  threshold_registry_path, simplifyVector = FALSE
+)
+if (!identical(as.character(threshold_registry$schema_version), "2.2")) {
+  stop("controller threshold registry is not schema 2.2")
+}
+scoring_policy <- threshold_registry$scoring_policy
 partition_path <- normalizePath(args$partitions, mustWork = TRUE)
 out_dir <- args$out
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
@@ -48,10 +63,19 @@ knn_k <- if ("knn-k" %in% names(args)) as.integer(args[["knn-k"]]) else 31L
 workers <- if ("workers" %in% names(args)) as.integer(args$workers) else 1L
 if (!is.finite(workers) || workers < 1L) stop("--workers must be >= 1")
 if (.Platform$OS.type != "unix") workers <- 1L
-direct_weight <- 0.35
-local_weight <- 0.65
-anti_weight <- 0.35
-family_active_threshold <- 0.12
+direct_weight <- as.numeric(scoring_policy$direct_weight)
+local_weight <- as.numeric(scoring_policy$local_weight)
+anti_weight <- as.numeric(scoring_policy$anti_weight)
+family_active_threshold <- as.numeric(scoring_policy$family_active_threshold)
+local_gene_detection_fraction <- as.numeric(
+  scoring_policy$local_gene_detection_fraction
+)
+if (
+  any(!is.finite(c(
+    direct_weight, local_weight, anti_weight,
+    family_active_threshold, local_gene_detection_fraction
+  ))) || abs(direct_weight + local_weight - 1) > 1e-12
+) stop("invalid scoring policy in controller threshold registry")
 grid_evidence_only <- "grid-evidence-only" %in% names(args) &&
   tolower(args[["grid-evidence-only"]]) %in% c("1", "true", "yes")
 set.seed(seed)
@@ -433,7 +457,7 @@ for (family_index in seq_along(family_ids)) {
     local_detected[, gene_index] <- rowMeans(matrix(
       as.numeric(values$detected)[neighbors],
       nrow = nrow(neighbors), ncol = ncol(neighbors)
-    )) >= 0.10
+    )) >= local_gene_detection_fraction
   }
   family_direct[, family_index] <- top_two_mean(direct_values)
   family_local[, family_index] <- top_two_mean(local_values)
@@ -1035,6 +1059,10 @@ manifest <- list(
   input_rds = input_rds,
   profile = profile_path,
   catalog = catalog_path,
+  threshold_registry = list(
+    path = threshold_registry_path,
+    sha256 = sha256(threshold_registry_path)
+  ),
   partitions = partition_path,
   analysis_membership = analysis_membership_path,
   n_observations = n_obs,
@@ -1050,6 +1078,9 @@ manifest <- list(
     family_aggregation = "mean_top_two_available_genes",
     direct_weight = direct_weight,
     local_weight = local_weight,
+    anti_weight = anti_weight,
+    family_active_threshold = family_active_threshold,
+    local_gene_detection_fraction = local_gene_detection_fraction,
     family_coherence = "direct>=2 OR direct>=1+local>=2 OR local>=3",
     anti_policy = paste(
       "single_or_local_anti_soft_penalty;",

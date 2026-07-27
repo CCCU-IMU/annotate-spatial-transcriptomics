@@ -120,7 +120,7 @@ runtime=可用的 R/Python 环境与调度资源
 最多并行 N 个样本，资源不足时分 wave 执行；每个样本必须独立通过完成门和发布审计。
 ```
 
-主 Agent 是唯一用户入口；子 Agent 每个负责一个样本的输入发现、broad/targeted cohort、direct return、terminal residual QC、状态和报告全流程。并行只缩短等待时间，不降低证据门或交付内容。
+主 Agent 是唯一用户入口；子 Agent 每个负责一个样本的输入发现、初始 cluster cohort/定向 cohort、二级 return、terminal residual QC、状态和报告全流程。并行只缩短等待时间，不降低证据门或交付内容。
 
 ### 2. 允许 Agent 运行完整迭代，不要把任务简化成 cluster 重命名
 
@@ -128,26 +128,23 @@ runtime=可用的 R/Python 环境与调度资源
 
 ```text
 输入与表达层审计
-  -> 自适应选择大类聚类
-  -> 在看到论文标签前冻结全候选大类证据矩阵
-     -> 正 DEG、anti-DEG、程序分数、winner/runner-up、margin、矛盾与技术状态
-  -> 对选定分辨率的每个簇执行开放式谱系审查并初步注释大类
-     -> 中高置信：直接写入初步大类
-     -> 低信息、无特征或无法解释的严重混合：QC holdout
-  -> 每个初步大类独立投递一次 broad_class_recluster cohort
-     -> 按 active workflow contract 完整运行候选网格
-     -> 在完整网格中选择当前生物学问题综合证据最优的分辨率
-     -> 若没有稳定亚群或混杂，合法结束为 homogeneous_parent_confirmed 并全部回归父大类
-  -> 亚簇判断
-     -> 高置信亚群：写入大类 + 亚群
-     -> 只能确定父类：直接回归父大类 Broad-only
-     -> 明确属于其他谱系：跨谱系直接回归目标大类/亚群并保留来源
-     -> 可解释竞争混合：临时定向重聚类；必要时低优先级 RCTD
-     -> 无法解释：QC holdout
-  -> 冻结最终残余 QC，使用固定 Atlas 表示/索引对 analysis set 做一次 Broad-only 映射
-     -> 原标签为 QC：多通道中高置信且非 OOD，直接回填大类；否则保留 QC
+  -> 第一轮全组织分区
+     -> 只选择稳定结构并建立 one-initial-cluster : one-cohort 精确 membership
+     -> 只记录 provisional broad / mixed / unknown 和 lineage watch，不写正式标签或 QC
+  -> 每个 initial cluster 从项目自身非 SCT raw counts 独立执行第二轮
+     -> SCT v2/glmGamPoi -> PCA -> query-only SNN -> Leiden 完整网格
+     -> provisional 与历史标签不可见时，逐二级 subcluster 扫描完整 broad/fine/state/exploratory 目录
+     -> 高纯度亚簇整体 parent/cross-lineage/missing-broad return
+     -> 只能定义大类时保留 Broad-only；亚型证据不足时 fine 留空
+     -> 真正 mixed 的二级亚簇才启动局部 observation 拆分和 exact local remainder
+     -> 未进入局部 subset 的成员重新评估 parent/unresolved，不能自动变为 QC
+  -> 合并全部 cohort 为 analysis set 的互斥精确覆盖，并首次冻结正式 broad
+  -> 在已冻结 broad parent 内物化高置信 fine；state 使用独立列
+  -> 对完整 analysis set 做一次固定 Atlas Broad-only 映射
+     -> 未标注成员：校准后中高置信、非 OOD、scope/ontology 兼容才直接回填 broad
      -> 已有大类且一致：关闭；低置信差异：记录
-     -> 已有大类存在群体性可信差异或 coherent OOD：完整 cluster/cohort 复核一次
+     -> 已有大类存在群体性可信差异或 coherent OOD：完整 source subcluster/cohort 复核一次
+  -> 缺失谱系、未建模程序、空间合理性与 residual QC 最终闭环
   -> 构建单一最终注释（中等及以上大类；仅高置信亚群）
   -> 完成门审计
   -> 主 Agent 注释质量审批（仅此时；对照已验证且脱敏的羊卵巢 R-first 流程质量，不要求标签一致）
@@ -159,7 +156,7 @@ runtime=可用的 R/Python 环境与调度资源
 核心原则：
 
 - 大类先于亚群；空间数据不为了“树更深”而强制细分。
-- 聚类分辨率在每个大类或临时定向 cohort 中从完整合同网格重新选择，不能照搬全局参数或示例参数。先保护稳定谱系/真实亚群，再避免状态性或技术性碎片；复杂度只在证据基本等价时作为 tie-breaker。
+- 聚类分辨率在每个 initial-cluster cohort 或触发的临时定向 cohort 中从完整合同网格重新选择，不能照搬全局参数或示例参数。先保护稳定谱系/真实亚群，再避免状态性或技术性碎片；复杂度只在证据基本等价时作为 tie-breaker。
 - HVG/BANKSY 特征可以用于聚类，但最终 marker、anti-marker、开放式谱系发现和 Oocyte 抗污染判定应回到全基因表达对象。
 - 一个基因、一个参考标签或空间邻近都不能单独决定身份。
 - ECM-rich、contractile、cortical、ambient、low-RNA 等是状态标签，不应替代生物学大类。
@@ -207,6 +204,8 @@ Skill 内置一份[脱敏羊卵巢 R-first forward-test 参考](annotate-spatial
 - **跨谱系与局部混合。** 二级亚簇出现另一个完整谱系时直接 cross-lineage return；只有两个可分离身份程序确实共存时才启动局部拆分。未进入局部子集的成员重新评估 parent/remainder，不自动进入 QC。
 - **语义修复不重跑稳定分区。** 输入、cohort membership、grid、seed 与聚类脚本哈希均未变化时，复用 controller 生成的 derived partition，只重算 scorer、边界和写回。任何修复 proposal 必须用 `apply_cell_id_membership_patch.py` 按唯一 `cell_id` 连接，禁止按行序赋值。
 - **全细胞 Atlas 与最终闭环。** broad 冻结后才运行全细胞 broad mapping；Atlas 只能直接救回 unlabeled、非 OOD 的中高置信成员，不能静默覆盖已有 broad 或生成 fine。最后才执行 residual QC、缺失谱系、空间合理性与未建模程序审计。
+
+Release-critical 的控制器默认阈值统一来自 `annotate-spatial-transcriptomics/references/controller_thresholds_v2_2.json`，包括 direct/local scoring 权重、whole-subcluster 与 local-subset 写回、resolution selector 权重及最终 residual-QC 阈值。初始化项目、构建 annotation contract、Python adjudicator 和 R scorer 均读取或绑定该注册表；项目覆盖必须显式写入 contract。Atlas classwise 校准目标和 StereoPy 技术前处理参数仍分别属于 workflow profile，不能与控制器写回阈值混为一张表。
 
 同批次羊卵巢固定网格只在 active workflow profile、显式 strategy preset、对象/层/marker/坐标审计和 StereoPy conversion provenance 共同通过后生效。prelabel freeze、cohort outcome、direct return、Atlas concordance/review 和最终 broad/fine support 都必须通过内容与哈希合同。
 
@@ -258,7 +257,7 @@ Agent 应自主完成常规分辨率比较、大类/定向 cohort 重聚类、�
 
 证据不是“有文件即可”。每个 cohort outcome 必须通过 `schemas/cohort_outcome.schema.json`，记录 query membership/hash、完整候选网格、逐 resolution cluster membership 与证据索引、相邻 ARI/迁移、full-feature marker/anti-marker、空间形态、来源/QC 组成、选择理由、被拒候选及每个亚簇的互斥结局。每个 direct return 和最终 broad/fine support 也必须通过各自 schema。空 JSON、只有 status 的 JSON、空 TSV 或过期哈希都不能通过。
 
-`audit_annotation_membership_partition.py` 强制逐 cell 闭合：initial broad 与 broad cohort query 相等；cohort 结局互斥完备；direct return 不重叠；v1.7 Atlas query 精确等于 analysis set，QC 子 membership 精确等于 terminal residual QC，accepted/rejected 划分 QC 并与 ledger 写回一致；最终注释唯一覆盖 analysis set。
+`audit_annotation_membership_partition.py` 强制逐 cell 闭合：每个 initial cluster 必须且只能进入一个二级 cohort，全部 cohort query 互斥并精确覆盖 analysis set；二级 whole-subcluster return、局部 supported subset 与 local remainder 结局互斥完备；Atlas query 精确等于 broad freeze 后的 analysis set，terminal residual QC 与 ledger 写回一致；最终注释唯一覆盖 analysis set。
 
 ## 运行环境说明
 
@@ -268,7 +267,9 @@ Agent 应自主完成常规分辨率比较、大类/定向 cohort 重聚类、�
 
 由 StereoPy `cellbin_PPed` 批量转换得到的 Seurat RDS 只是原始计数输入载体，并不等同于已经完成 SCT 前处理。转换步骤通常只把 `exp_matrix@raw` 写入 Seurat `Spatial` counts，保留坐标，并可能复制 StereoPy PCA/UMAP 用于溯源；这些 reduction 不能作为新的 R 聚类图。
 
-详细规则见 [Seurat cellbin 前处理合同](annotate-spatial-transcriptomics/references/seurat-cellbin-preprocessing.md)。同一生产批次如需和已验证 R 流程保持可比，固定以下计算参数：
+详细规则见 [Seurat cellbin 前处理合同](annotate-spatial-transcriptomics/references/seurat-cellbin-preprocessing.md)。全组织 SCT+BANKSY 与第二轮 cohort SNN 是两套不同图构建过程，参数不得混用。
+
+同一生产批次的**全组织 SCT+BANKSY** 固定参数：
 
 | 阶段 | 固定参数 |
 |---|---|
@@ -276,13 +277,22 @@ Agent 应自主完成常规分辨率比较、大类/定向 cohort 重聚类、�
 | 高计数处理 | 高于样本 99.9% 分位数只加 review flag，不在入口硬删除 |
 | 线粒体/双细胞 | 羊基因符号无法可靠识别时不做线粒体硬过滤；入口不做 doublet 硬删除 |
 | SCTransform | `Spatial -> SCT`，`vst.flavor="v2"`，`method="glmGamPoi"` |
-| SCT规模 | 3,000 variable features，`ncells=min(50000, n)` |
+| SCT规模 | 4,000 variable features，`ncells=min(50000, n)` |
 | SCT内存策略 | `conserve.memory=TRUE`，`return.only.var.genes=TRUE` |
-| PCA | 计算50个PC，邻接图使用前30个PC |
-| 邻接图 | k=30，Annoy，50 trees，cosine |
+| BANKSY输入 | `SCT/scale.data` 的 4,000 个 Pearson-residual HVG |
+| BANKSY图 | `M=0`，`k_geom=30`，`lambda=0.2`，30 PCs，Leiden `k=50` |
+| 全组织候选网格 | `0.2,0.4,0.6,0.8` |
+| UMAP | 30 neighbors，`min.dist=0.3`，`spread=1`，300 epochs |
+
+每个 initial-cluster **第二轮 cohort** 固定边界：
+
+| 阶段 | 合同 |
+|---|---|
+| 表达入口 | 项目自身非 SCT raw counts；禁止 SCT corrected counts 再做 SCTransform |
+| 图构建 | `SCT v2/glmGamPoi -> PCA -> query-only SNN -> Leiden` |
+| PCs / k | 依据当前 cohort 规模、谱复杂度和相邻分辨率稳定性自适应；不复用 BANKSY 参数 |
 | Leiden候选网格 | `0.1,0.2,0.3,0.4,0.6`，`algorithm=4` |
-| Leiden并行 | 单个 Leiden 优化不支持多线程；用 5 个 `future` worker 并行计算 5 个候选 resolution |
-| UMAP | 30 neighbors，`min.dist=0.3`，cosine |
+| Leiden并行 | 5 个候选 resolution 可由 5 个 `future` worker 并行；单个 Leiden 优化本身不多线程 |
 
 全组织统一前处理可直接运行：
 
@@ -292,9 +302,7 @@ Rscript annotate-spatial-transcriptomics/scripts/run_seurat_sct_preprocess.R \
   --out /path/to/project/reclustering/seurat_sct \
   --sample SAMPLE_ID \
   --assay Spatial \
-  --resolutions 0.1,0.2,0.3,0.4,0.6 \
-  --resolution-workers 5 \
-  --resolution-future-plan auto \
+  --resolutions 0.2,0.4,0.6,0.8 \
   --future-globals-max-gb 100
 ```
 
@@ -306,7 +314,7 @@ Rscript annotate-spatial-transcriptomics/scripts/run_seurat_sct_preprocess.R \
 - UMAP、空间坐标、输入 SHA256、分析集 SHA256、全部前处理参数和 `sessionInfo`；
 - `RUN_COMPLETE.tsv`。脚本不会替 Agent 自动选择最终分辨率或写入生物学标签。
 
-大类或定向 cohort（底层可复用兼容 runner）重聚类使用：
+每个 initial-cluster cohort 或触发的定向 cohort（底层复用同一标准 runner）重聚类使用：
 
 ```bash
 Rscript annotate-spatial-transcriptomics/scripts/run_seurat_cohort_recluster.R \
@@ -325,7 +333,7 @@ membership 至少需要唯一 `cell_id`。锚点模式还需要 `query_or_anchor
 需要固定的是**同批次技术前处理**，不能固定的是**生物学决策**：
 
 - 最终大类分辨率必须结合 DEG、marker/anti-marker、相邻分辨率稳定性、UMAP 和空间形态选择；
-- 每个大类或定向 cohort 重新决定 PCs、k 和最终分辨率；羊卵巢正式候选分辨率始终为 `0.1,0.2,0.3,0.4,0.6`，小型卵母细胞/免疫 cohort 可降低 PC 和 k，但不能改用低于 0.1 的网格；
+- 每个 initial-cluster cohort 或触发的定向 cohort 重新决定 PCs、k 和最终分辨率；羊卵巢正式候选分辨率始终为 `0.1,0.2,0.3,0.4,0.6`，小型卵母细胞/免疫 cohort 可降低 PC 和 k，但不能改用低于 0.1 的网格；
 - `<100` observations 只触发小簇审查，不能自动并入最近 PCA 簇；
 - 大类、亚群、合并关系和置信度不能从示例样本复制。
 

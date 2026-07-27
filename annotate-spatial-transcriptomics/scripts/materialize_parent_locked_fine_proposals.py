@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
+from controller_thresholds import load_controller_thresholds
 from evidence_schema_lib import sha256
 from lineage_controller_lib import catalog_candidates, number, read_tsv, write_tsv
 
@@ -15,9 +16,15 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--membership", required=True, type=Path)
     ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--threshold-registry", required=True, type=Path)
     ap.add_argument("--fine-audit", action="append", type=Path, default=[])
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
+    thresholds = load_controller_thresholds(args.threshold_registry)
+    fine_policy = thresholds["fine_release_policy"]
+    contradiction_ceiling = thresholds[
+        "observation_writeback_policy"
+    ]["maximum_contradiction_fraction"]
 
     membership = read_tsv(args.membership)
     by_group: dict[tuple[str, str], list[dict[str, str]]] = {}
@@ -41,10 +48,13 @@ def main() -> int:
             if (
                 candidate.get("candidate_role") != "fine" or not parent or not fine
                 or parent != row.get("parent_broad_label")
-                or number(row.get("lineage_supported_fraction")) < 0.40
                 or number(row.get("lineage_supported_fraction"))
-                - number(row.get("strongest_competing_fraction")) < 0.20
-                or number(row.get("contradiction_fraction")) > 0.05
+                < fine_policy["minimum_lineage_supported_fraction"]
+                or number(row.get("lineage_supported_fraction"))
+                - number(row.get("strongest_competing_fraction"))
+                < fine_policy["minimum_purity_margin"]
+                or number(row.get("contradiction_fraction"))
+                > contradiction_ceiling
             ):
                 raise SystemExit("supported fine proposal violates parent/purity contract")
             key = (str(row.get("cohort_id", "")), str(row.get("subcluster_id", "")))
@@ -84,6 +94,10 @@ def main() -> int:
         "status": "PASS",
         "schema_version": "2.2",
         "stage": "post_broad_freeze_fine_materialization",
+        "threshold_registry": {
+            "path": str(args.threshold_registry.resolve()),
+            "sha256": sha256(args.threshold_registry),
+        },
         "broad_labels_modified": False,
         "n_fine_assignments": len(rows),
         "n_supported_sources": len(source_records),

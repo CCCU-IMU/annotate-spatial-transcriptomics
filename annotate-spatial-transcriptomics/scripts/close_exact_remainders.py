@@ -8,6 +8,9 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from controller_thresholds import (
+    load_controller_thresholds, observation_writeback_defaults,
+)
 from lineage_controller_lib import (
     GENERIC_REMAINDER_IDS,
     aggregate_program_supported,
@@ -77,17 +80,27 @@ def validate_stage_authority(
             errors.append(f"formal chain does not bind the installed canonical {name}")
         if not artifact_ok(authority.get("scripts", {}).get(name, {}), path):
             errors.append(f"stage authority does not bind the installed canonical {name}")
-    dependency = script_dir / "lineage_controller_lib.py"
-    if not artifact_ok(
-        controller.get("dependencies", {}).get("lineage_controller_lib.py", {}),
-        dependency,
+    for dependency_name in (
+        "controller_thresholds.py", "lineage_controller_lib.py"
     ):
-        errors.append("formal chain does not bind lineage_controller_lib.py")
-    if not artifact_ok(
-        authority.get("dependencies", {}).get("lineage_controller_lib.py", {}),
-        dependency,
-    ):
-        errors.append("stage authority does not bind lineage_controller_lib.py")
+        dependency = script_dir / dependency_name
+        if not artifact_ok(
+            controller.get("dependencies", {}).get(dependency_name, {}),
+            dependency,
+        ):
+            errors.append(f"formal chain does not bind {dependency_name}")
+        if not artifact_ok(
+            authority.get("dependencies", {}).get(dependency_name, {}),
+            dependency,
+        ):
+            errors.append(f"stage authority does not bind {dependency_name}")
+    threshold_path = Path(str(contract.get("threshold_registry", {}).get("path", "")))
+    if not threshold_path.is_absolute():
+        threshold_path = (contract_path.parent / threshold_path).resolve()
+    if not artifact_ok(contract.get("threshold_registry", {}), threshold_path):
+        errors.append("formal chain does not bind the controller threshold registry")
+    if not artifact_ok(authority.get("threshold_registry", {}), threshold_path):
+        errors.append("stage authority does not bind the controller threshold registry")
     if errors:
         raise RuntimeError("; ".join(errors))
     return authority, contract
@@ -132,6 +145,7 @@ def validated_residual_component_candidates(
     catalog: dict[str, dict],
     *,
     release_level: str = "broad",
+    minimum_component_members: int = 5,
 ) -> tuple[set[str], set[str], list[dict[str, object]]]:
     """Audit whether a component's post-overlap tail remains separable.
 
@@ -144,7 +158,7 @@ def validated_residual_component_candidates(
     audit: list[dict[str, object]] = []
     for candidate, component_members in sorted(validated_component_members.items()):
         residual_members = sorted(exact_remainder_set.intersection(component_members))
-        if len(residual_members) < 5:
+        if len(residual_members) < minimum_component_members:
             continue
         validation = validate_subset(
             residual_members,
@@ -181,6 +195,8 @@ def remainder_candidate_programs(
     cluster_evidence: dict[tuple[str, str, str, str], dict[str, str]],
     catalog: dict[str, dict],
     residual_separable_candidate_ids: set[str] | None = None,
+    *,
+    writeback_policy: dict[str, float] | None = None,
 ) -> tuple[set[str], set[str], str, list[dict[str, object]]]:
     """Recompute the immutable-score evidence of one exact remainder.
 
@@ -191,6 +207,7 @@ def remainder_candidate_programs(
     replace or veto broad identity. Only a formal broad candidate with strong
     remainder-level support can itself become parent.
     """
+    writeback_policy = writeback_policy or observation_writeback_defaults()
     residual_separable_candidate_ids = set(
         residual_separable_candidate_ids or set()
     ).intersection(candidate_ids)
@@ -224,9 +241,13 @@ def remainder_candidate_programs(
         )
         exact_program_supported = (
             family["status"] == "PASS"
-            and supported_fraction >= 0.25
+            and supported_fraction >= writeback_policy[
+                "whole_subcluster_min_lineage_supported_fraction"
+            ]
             and mean_supported_program >= 0.02
-            and contradiction_fraction <= 0.05
+            and contradiction_fraction <= writeback_policy[
+                "maximum_contradiction_fraction"
+            ]
         )
         aggregate_generic_supported = bool(
             candidate_id in GENERIC_REMAINDER_IDS
@@ -242,7 +263,9 @@ def remainder_candidate_programs(
             # The dominant aggregate backbone, not a whole-object per-cell
             # classifier, certifies inheritance.  A still-separable specific
             # component blocks this route below.
-            and supported_fraction >= 0.25
+            and supported_fraction >= writeback_policy[
+                "whole_subcluster_min_lineage_supported_fraction"
+            ]
             and mean_supported_program >= 0.02
             and not residual_specific_candidates
         )
@@ -256,7 +279,9 @@ def remainder_candidate_programs(
         remainder_dominant_generic_supported = bool(
             candidate_id in GENERIC_REMAINDER_IDS
             and family["status"] == "PASS"
-            and supported_fraction >= 0.70
+            and supported_fraction >= writeback_policy[
+                "supported_subset_min_lineage_supported_fraction"
+            ]
             and mean_supported_program >= 0.15
             and not residual_specific_candidates
         )
@@ -293,12 +318,18 @@ def remainder_candidate_programs(
                     and max(
                         supported_fraction,
                         group_identity_core_fraction(aggregate),
-                    ) >= 0.70
+                    ) >= writeback_policy[
+                        "supported_subset_min_lineage_supported_fraction"
+                    ]
                 )
                 or (
                     not generic_supported
-                    and supported_fraction >= 0.70
-                    and contradiction_fraction <= 0.05
+                    and supported_fraction >= writeback_policy[
+                        "supported_subset_min_lineage_supported_fraction"
+                    ]
+                    and contradiction_fraction <= writeback_policy[
+                        "maximum_contradiction_fraction"
+                    ]
                 )
             )
             and (
@@ -368,9 +399,14 @@ def remainder_candidate_programs(
             default=0.0,
         )
         if (
-            number(winner["effective_parent_supported_fraction"]) >= 0.70
+            number(winner["effective_parent_supported_fraction"])
+            >= writeback_policy[
+                "supported_subset_min_lineage_supported_fraction"
+            ]
             and number(winner["effective_parent_supported_fraction"])
-            - runner_fraction >= 0.30
+            - runner_fraction >= writeback_policy[
+                "supported_subset_min_purity_margin"
+            ]
         ):
             preferred = str(winner["candidate_id"])
     return credible_ids, parent_ids, preferred, records
@@ -408,6 +444,25 @@ def main() -> int:
         raise RuntimeError("local remainder closure requires one source subcluster")
     authority, contract = validate_stage_authority(
         args.stage_authority.resolve(), args.contract.resolve(), expected_phase
+    )
+    threshold_registry_path = Path(str(contract["threshold_registry"]["path"]))
+    if not threshold_registry_path.is_absolute():
+        threshold_registry_path = (
+            args.contract.parent / threshold_registry_path
+        ).resolve()
+    threshold_registry = load_controller_thresholds(threshold_registry_path)
+    writeback_policy = contract.get("observation_writeback", {}).get("policy", {})
+    required_writeback = set(
+        threshold_registry["observation_writeback_policy"]
+    )
+    if not required_writeback.issubset(writeback_policy):
+        raise RuntimeError("contract lacks the complete observation-writeback policy")
+    local_subset_policy = threshold_registry["local_subset_policy"]
+    minimum_component_members = int(
+        local_subset_policy["minimum_component_members"]
+    )
+    maximum_second_subset_rounds = int(
+        local_subset_policy["maximum_second_subset_rounds"]
     )
     catalog_document = json.loads(args.catalog.read_text(encoding="utf-8"))
     catalog = catalog_candidates(catalog_document)
@@ -604,7 +659,7 @@ def main() -> int:
         remainder = sorted(set(source_members) - assigned)
         round_two_assigned: dict[str, str] = {}
         round_two_by_cell: dict[str, list[str]] = defaultdict(list)
-        if remainder:
+        if remainder and maximum_second_subset_rounds > 0:
             # The final local extraction may only reconsider precomputed
             # candidate-local spatial components after accepted memberships
             # have been removed. It cannot invent a whole-object per-cell
@@ -621,7 +676,7 @@ def main() -> int:
                 }:
                     continue
                 residual_members = sorted(set(proposed_members) & remainder_set)
-                if len(residual_members) < 5:
+                if len(residual_members) < minimum_component_members:
                     continue
                 residual_components.append(
                     (subset_id, str(evidence.get("candidate_id", "")), residual_members)
@@ -694,6 +749,7 @@ def main() -> int:
                 score_index,
                 catalog,
                 release_level=args.release_level,
+                minimum_component_members=minimum_component_members,
             )
             subset_audit.extend(post_overlap_audit)
             if ambiguous_component_members:
@@ -745,6 +801,8 @@ def main() -> int:
                     score_index,
                     cluster_evidence,
                     catalog,
+                    residual_separable_candidates,
+                    writeback_policy=writeback_policy,
                 )
                 parent, parent_evidence = choose_group_parent(
                     parent_remainder,
@@ -912,7 +970,7 @@ def main() -> int:
         "unresolved_biological_fraction": (
             unresolved_n / len(proposal_rows) if proposal_rows else 0.0
         ),
-        "second_subset_round_limit": 1,
+        "second_subset_round_limit": maximum_second_subset_rounds,
         "unmodeled_lineage_candidate_n": len(unmodeled_rows),
         "context_evidence": (
             {

@@ -108,21 +108,35 @@ def main() -> int:
 
     contract = json.loads(args.contract.read_text(encoding="utf-8"))
     policy = contract.get("observation_writeback", {}).get("policy", {})
-    support_floor = number(policy.get("whole_subcluster_min_raw_two_family_supported_fraction"), 0.40)
-    margin_floor = number(policy.get("whole_subcluster_min_raw_two_family_margin"), 0.20)
-    contradiction_ceiling = number(policy.get("maximum_contradiction_fraction"), 0.05)
+    required_policy = {
+        "whole_subcluster_min_raw_two_family_supported_fraction",
+        "whole_subcluster_min_raw_two_family_margin",
+        "maximum_contradiction_fraction",
+        "whole_subcluster_dominant_seed_fraction",
+        "whole_subcluster_dominant_direct_core_fraction",
+        "whole_subcluster_dominant_identity_core_fraction",
+        "whole_subcluster_dominant_max_contradiction_fraction",
+    }
+    if not required_policy.issubset(policy):
+        raise SystemExit(
+            "annotation contract lacks canonical observation-writeback thresholds"
+        )
+    support_floor = number(
+        policy["whole_subcluster_min_raw_two_family_supported_fraction"]
+    )
+    margin_floor = number(policy["whole_subcluster_min_raw_two_family_margin"])
+    contradiction_ceiling = number(policy["maximum_contradiction_fraction"])
     dominant_seed_floor = number(
-        policy.get("whole_subcluster_dominant_seed_fraction"), 0.70
+        policy["whole_subcluster_dominant_seed_fraction"]
     )
     dominant_direct_floor = number(
-        policy.get("whole_subcluster_dominant_direct_core_fraction"), 0.80
+        policy["whole_subcluster_dominant_direct_core_fraction"]
     )
     dominant_core_floor = number(
-        policy.get("whole_subcluster_dominant_identity_core_fraction"), 0.80
+        policy["whole_subcluster_dominant_identity_core_fraction"]
     )
     dominant_contradiction_ceiling = number(
-        policy.get("whole_subcluster_dominant_max_contradiction_fraction"),
-        0.20,
+        policy["whole_subcluster_dominant_max_contradiction_fraction"]
     )
 
     outcome_rows: list[dict[str, object]] = []

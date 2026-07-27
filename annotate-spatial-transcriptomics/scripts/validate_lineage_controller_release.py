@@ -7,6 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
+from controller_thresholds import load_controller_thresholds
 from lineage_controller_lib import (
     deterministic_membership_hash, read_tsv, sha256, write_manifest,
 )
@@ -65,6 +66,18 @@ def main() -> int:
     errors: list[str] = []
 
     contract = load(args.contract)
+    threshold_path = artifact_path(
+        contract.get("threshold_registry", {}),
+        "contract threshold registry", errors,
+    )
+    completion_policy = None
+    if threshold_path:
+        try:
+            completion_policy = load_controller_thresholds(
+                threshold_path
+            )["completion_policy"]
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            errors.append(f"invalid controller threshold registry: {exc}")
     if contract.get("canonical_lineage_controller", {}).get("phase_order") != [
         "whole_tissue_partition", "cluster_cohort_recluster",
         "local_mixed_subcluster_split", "merge_and_freeze_broad",
@@ -387,6 +400,8 @@ def main() -> int:
         != atlas.get("membership", {}).get("sha256")
         or final_authority.get("prerequisite_manifest", {}).get("sha256")
         != sha256(args.atlas_manifest)
+        or final_authority.get("threshold_registry", {}).get("sha256")
+        != contract.get("threshold_registry", {}).get("sha256")
     ):
         errors.append("final stage authority does not bind the post-Atlas prerequisite")
     if artifact_index(
@@ -416,7 +431,12 @@ def main() -> int:
         errors.append("final membership does not exactly cover analysis_set")
     qc_n = sum(row.get("final_state") == "qc_holdout" for row in final_rows)
     qc_fraction = qc_n / len(final_rows) if final_rows else 1.0
-    if qc_n >= 50000 or qc_fraction >= 0.10:
+    if completion_policy is None or (
+        qc_n >= int(completion_policy["residual_qc_count_trigger"])
+        or qc_fraction >= float(
+            completion_policy["residual_qc_fraction_trigger"]
+        )
+    ):
         errors.append("final residual QC violates the v2.2 completion threshold")
     if any(row.get("final_state") == "unresolved_biological" for row in final_rows):
         errors.append("unresolved biological members were not typed at final materialization")

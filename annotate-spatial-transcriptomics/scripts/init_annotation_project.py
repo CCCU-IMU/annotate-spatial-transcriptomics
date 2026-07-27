@@ -9,6 +9,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from controller_thresholds import load_controller_thresholds
+
 
 REGISTRIES = {
     "input_snapshot_registry.tsv": ["snapshot_id", "sample_id", "path", "kind", "size_bytes", "sha256", "status", "created_at"],
@@ -38,6 +40,11 @@ def main() -> int:
     ap.add_argument("--strategy-preset", choices=["none", "sheep_ovary_same_batch_rfirst"], default="none")
     ap.add_argument("--project-id", help="stable provenance ID; defaults to project-root basename")
     args = ap.parse_args()
+    controller_thresholds = load_controller_thresholds()
+    writeback_policy = dict(
+        controller_thresholds["observation_writeback_policy"]
+    )
+    completion_policy = controller_thresholds["completion_policy"]
     root = args.project_root.resolve()
     for d in ["config", "state", "inputs", "runs", "tables", "figures", "spatial_nodes", "spatial_genes", "review", "report", "provenance", "provenance/incidents", "logs"]:
         (root / d).mkdir(parents=True, exist_ok=True)
@@ -77,8 +84,12 @@ def main() -> int:
         "oocyte_context_membership_separation_required": True,
         "broad_marker_family_contract_required": True,
         "residual_qc_upstream_recall_audit_required": True,
-        "residual_qc_fraction_trigger": 0.10,
-        "residual_qc_count_trigger": 50000,
+        "residual_qc_fraction_trigger": completion_policy[
+            "residual_qc_fraction_trigger"
+        ],
+        "residual_qc_count_trigger": completion_policy[
+            "residual_qc_count_trigger"
+        ],
         "atlas_qc_state_router": "calibrated_moderate_or_higher_unlabeled_qc_direct_broad",
         "annotation_contract_required": True,
         "canonical_lineage_controller_required": True,
@@ -98,22 +109,13 @@ def main() -> int:
         "complete_fine_candidate_audit_required": True,
         "fine_writeback_broad_lock_required": True,
         "final_fine_state_validation_required": True,
-        "observation_writeback_policy": {
-            "whole_subcluster_min_lineage_supported_fraction": 0.25,
-            "whole_subcluster_min_purity_margin": 0.10,
-            "whole_subcluster_min_raw_two_family_supported_fraction": 0.40,
-            "whole_subcluster_min_raw_two_family_margin": 0.20,
-            "whole_subcluster_embedded_competitor_raw_trigger": 0.35,
-            "whole_subcluster_dominant_seed_fraction": 0.70,
-            "whole_subcluster_dominant_direct_core_fraction": 0.80,
-            "whole_subcluster_dominant_identity_core_fraction": 0.80,
-            "whole_subcluster_dominant_max_contradiction_fraction": 0.20,
-            "supported_subset_min_lineage_supported_fraction": 0.70,
-            "supported_subset_min_purity_margin": 0.30,
-            "present_label_min_lineage_supported_fraction": 0.50,
-            "present_label_min_purity_margin": 0.20,
-            "maximum_contradiction_fraction": 0.05,
-        },
+        "controller_threshold_registry": str(
+            (
+                Path(__file__).resolve().parents[1]
+                / "references/controller_thresholds_v2_2.json"
+            ).resolve()
+        ),
+        "observation_writeback_policy": writeback_policy,
         "public_completion_gate": "check_completion_gate.py",
         "completion_gate_phases": ["INPUT_INTEGRITY", "BIOLOGICAL_EVIDENCE", "WORKFLOW_CLOSURE", "RELEASE_AUDIT"],
     }

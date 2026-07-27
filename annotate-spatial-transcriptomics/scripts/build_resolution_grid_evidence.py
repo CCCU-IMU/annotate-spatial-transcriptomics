@@ -9,6 +9,7 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
+from controller_thresholds import load_controller_thresholds
 from lineage_controller_lib import (
     canonical_cluster_challenger,
     candidate_can_release,
@@ -90,6 +91,15 @@ def main() -> int:
         or scorer.get("sha256") != sha256(scorer_path)
     ):
         raise SystemExit("full-grid scorer path/hash is absent or stale")
+    threshold_record = manifest.get("threshold_registry", {})
+    threshold_path = Path(str(threshold_record.get("path", "")))
+    if (
+        not threshold_path.is_file()
+        or threshold_record.get("sha256") != sha256(threshold_path)
+    ):
+        raise SystemExit("full-grid threshold registry path/hash is absent or stale")
+    thresholds = load_controller_thresholds(threshold_path)
+    writeback = thresholds["observation_writeback_policy"]
     catalog_doc = json.loads(args.catalog.read_text(encoding="utf-8"))
     candidate_map = catalog_candidates(catalog_doc)
     candidate_ids = set(candidate_map)
@@ -249,9 +259,14 @@ def main() -> int:
             )
             strict_whole_pass = (
                 whole_strategy_ok
-                and winner_core >= 0.40
-                and winner_margin >= 0.20
-                and number(winner[1].get("hard_contradiction_fraction")) <= 0.05
+                and winner_core >= writeback[
+                    "whole_subcluster_min_raw_two_family_supported_fraction"
+                ]
+                and winner_margin >= writeback[
+                    "whole_subcluster_min_raw_two_family_margin"
+                ]
+                and number(winner[1].get("hard_contradiction_fraction"))
+                <= writeback["maximum_contradiction_fraction"]
                 and group_orthogonal_support_count(winner[1], winner[2]) >= 3
                 and not split_worthy_competitors
             )
@@ -260,10 +275,20 @@ def main() -> int:
                 and str(winner[2].get("candidate_id", ""))
                 != "stromal_mesenchymal"
                 and not canonical_cluster_challenger(winner[1], winner[2])
-                and number(winner[1].get("observation_seed_fraction")) >= 0.70
-                and group_identity_core_direct_fraction(winner[1]) >= 0.80
-                and group_identity_core_fraction(winner[1]) >= 0.80
-                and number(winner[1].get("hard_contradiction_fraction")) <= 0.20
+                and number(winner[1].get("observation_seed_fraction"))
+                >= writeback["whole_subcluster_dominant_seed_fraction"]
+                and group_identity_core_direct_fraction(winner[1])
+                >= writeback[
+                    "whole_subcluster_dominant_direct_core_fraction"
+                ]
+                and group_identity_core_fraction(winner[1])
+                >= writeback[
+                    "whole_subcluster_dominant_identity_core_fraction"
+                ]
+                and number(winner[1].get("hard_contradiction_fraction"))
+                <= writeback[
+                    "whole_subcluster_dominant_max_contradiction_fraction"
+                ]
                 and group_orthogonal_support_count(winner[1], winner[2]) >= 3
                 and not split_worthy_competitors
             )
