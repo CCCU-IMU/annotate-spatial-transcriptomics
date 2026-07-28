@@ -69,7 +69,10 @@ FOLLICLE_LAYERS = {
     },
 }
 RESTRICTED_BROADS = {
-    "Granulosa", "Oocyte", "Theca", "Smooth muscle",
+    # Molecularly supported Theca can recur as many small follicular foci.
+    # Compactness is therefore reviewed in follicle ROIs and must not act as
+    # a whole-section admission/exclusion rule for the lineage.
+    "Granulosa", "Oocyte", "Smooth muscle",
     "Epithelial/mesothelial",
 }
 BOOLEAN_COLUMNS = {
@@ -118,6 +121,58 @@ def read_membership(path: Path) -> tuple[pd.DataFrame, str]:
         raise ValueError("membership lacks final_broad_label/broad_label")
     frame[label] = frame[label].fillna("").astype(str)
     return frame, label
+
+
+def validate_canonical_oocyte_review(
+    path: Path, membership: pd.DataFrame, label_col: str,
+) -> dict[str, object]:
+    """Validate an exact, label-blind canonical Oocyte adjudication.
+
+    A canonical targeted cohort can supersede stale ordinary second-round
+    Oocyte scores only for the exact released Oocyte member set.  It cannot
+    add observations, use spatial location for admission or rely on zona-only
+    evidence.
+    """
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if document.get("status") != "FROZEN_OOCYTE_MEMBERSHIP":
+        raise ValueError("canonical Oocyte review is not frozen")
+    reviewed_membership = Path(str(document.get("membership_path", "")))
+    if (
+        not reviewed_membership.is_file()
+        or document.get("membership_sha256") != sha256(reviewed_membership)
+    ):
+        raise ValueError("canonical Oocyte membership is missing or stale")
+    reviewed, reviewed_label_col = read_membership(reviewed_membership)
+    reviewed_ids = set(
+        reviewed.loc[
+            reviewed[reviewed_label_col].eq("Oocyte"), "cell_id"
+        ].astype(str)
+    )
+    current_ids = set(
+        membership.loc[membership[label_col].eq("Oocyte"), "cell_id"].astype(str)
+    )
+    if not current_ids or reviewed_ids != current_ids:
+        raise ValueError(
+            "canonical Oocyte review does not bind the exact released member set"
+        )
+    final_n = int(document.get("n_final_oocyte_cellbins", -1))
+    cluster_n = int(document.get("n_canonical_cluster_cellbins", -1))
+    excluded_n = int(
+        document.get(
+            "n_direct_hard_somatic_contradiction_retained_in_resident_broad", -1,
+        )
+    )
+    if (
+        final_n != len(current_ids)
+        or cluster_n < final_n
+        or excluded_n != cluster_n - final_n
+        or document.get("spatial_location_used_for_admission") is not False
+        or document.get("zona_only_admission_forbidden") is not True
+        or int(document.get("independent_non_zona_deg_gene_n", 0)) < 2
+        or float(document.get("cross_resolution_jaccard", 0) or 0) < 0.80
+    ):
+        raise ValueError("canonical Oocyte review lacks release-grade evidence")
+    return document
 
 
 def score_path_from_manifest(path: Path) -> Path:
@@ -1064,6 +1119,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--canonical-oocyte-review", type=Path,
+        help=(
+            "Optional frozen label-blind canonical Oocyte adjudication. It can "
+            "supersede stale ordinary second-round Oocyte scores only when its "
+            "exact released Oocyte member set matches the reviewed membership."
+        ),
+    )
+    parser.add_argument(
         "--diagnostic-legacy-scores", action="store_true",
         help=(
             "Read the pre-controller recovery score schema for a diagnostic-only "
@@ -1101,6 +1164,64 @@ def main() -> int:
         membership, label_col, scores, coords, eps,
         diagnostic_legacy=args.diagnostic_legacy_scores,
     )
+    canonical_oocyte = None
+    if args.canonical_oocyte_review:
+        try:
+            canonical_oocyte = validate_canonical_oocyte_review(
+                args.canonical_oocyte_review, membership, label_col,
+            )
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+        final_n = int(canonical_oocyte["n_final_oocyte_cellbins"])
+        cluster_n = int(canonical_oocyte["n_canonical_cluster_cellbins"])
+        excluded_n = int(
+            canonical_oocyte[
+                "n_direct_hard_somatic_contradiction_retained_in_resident_broad"
+            ]
+        )
+        retention_fraction = final_n / max(cluster_n, 1)
+        broad_issues = [
+            issue for issue in broad_issues if issue.get("scope_id") != "Oocyte"
+        ]
+        for row in broad_rows:
+            if row.get("broad_label") == "Oocyte":
+                row.update({
+                    "identity_supported_fraction": retention_fraction,
+                    "hard_contradiction_fraction": 0.0,
+                    "spatial_component_n": int(
+                        canonical_oocyte.get("n_putative_oocyte_objects", 0)
+                    ),
+                    "component_supported_fraction": 1.0,
+                    "status": "PASS",
+                    "rationale": (
+                        "exact_label_blind_canonical_oocyte_review_supersedes_"
+                        "stale_ordinary_second_round_scores"
+                    ),
+                })
+        oocyte_issues = []
+        oocyte_rows = [{
+            "source_boundary": "canonical_targeted_cohort",
+            "source_cluster": str(
+                canonical_oocyte.get("selected_resolution", "canonical_cluster")
+            ),
+            "n_observations": cluster_n,
+            "identity_supported_fraction": retention_fraction,
+            "hard_contradiction_fraction": excluded_n / max(cluster_n, 1),
+            "final_oocyte_n": final_n,
+            "canonical_group_supported": True,
+        }]
+        oocyte_summary = {
+            "status": "PASS",
+            "rationale": "exact_label_blind_canonical_group_supported",
+            "final_oocyte_n": final_n,
+            "canonical_supported_group_n": 1,
+            "spatial_object_n": int(
+                canonical_oocyte.get("n_putative_oocyte_objects", 0)
+            ),
+            "identity_supported_fraction": retention_fraction,
+            "hard_contradiction_fraction": 0.0,
+            "edge_location_used_as_negative_evidence": False,
+        }
     (
         roi_rows, recall_rows, layer_rows, follicle_issues,
         follicle_summary, roi_membership,
@@ -1210,6 +1331,10 @@ def main() -> int:
         "observation_score_files": [artifact(path) for path in score_paths],
         "expected_roi_review": (
             artifact(args.expected_roi_review) if args.expected_roi_review else None
+        ),
+        "canonical_oocyte_review": (
+            artifact(args.canonical_oocyte_review)
+            if args.canonical_oocyte_review else None
         ),
         "spatial_scale": eps,
         "quality_endpoints": {

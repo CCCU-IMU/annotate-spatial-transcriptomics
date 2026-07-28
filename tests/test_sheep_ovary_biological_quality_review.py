@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -287,6 +288,81 @@ class SheepOvaryBiologicalQualityReviewTest(unittest.TestCase):
                 manifest["quality_endpoints"]["follicle_roi_histology"]["status"],
                 "NOT_EVALUABLE",
             )
+
+    def test_exact_canonical_oocyte_review_supersedes_stale_ordinary_scores(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            membership, scores, catalog = self.build_fixture(root)
+            frame = pd.read_csv(scores, sep="\t")
+            stale = frame.candidate_id.eq("oocyte")
+            for column in (
+                "family_coherent", "identity_core_coherent",
+                "identity_core_direct", "release_family_coherent",
+                "candidate_seed",
+            ):
+                frame.loc[stale, column] = False
+            frame.loc[stale, "hard_contradiction"] = True
+            frame.loc[stale, ["normalized_evidence", "program_score"]] = 0.01
+            frame.to_csv(scores, sep="\t", index=False, compression="gzip")
+            digest = hashlib.sha256(membership.read_bytes()).hexdigest()
+            canonical = root / "canonical_oocyte_review.json"
+            canonical.write_text(json.dumps({
+                "status": "FROZEN_OOCYTE_MEMBERSHIP",
+                "membership_path": str(membership),
+                "membership_sha256": digest,
+                "n_canonical_cluster_cellbins": 14,
+                "n_final_oocyte_cellbins": 12,
+                "n_direct_hard_somatic_contradiction_retained_in_resident_broad": 2,
+                "n_putative_oocyte_objects": 4,
+                "selected_resolution": "oocyte_res0p1",
+                "cross_resolution_jaccard": 0.95,
+                "spatial_location_used_for_admission": False,
+                "zona_only_admission_forbidden": True,
+                "independent_non_zona_deg_gene_n": 6,
+            }), encoding="utf-8")
+            out = root / "review"
+            result = subprocess.run([
+                sys.executable, str(SCRIPT), "--membership", str(membership),
+                "--scores", str(scores), "--catalog", str(catalog),
+                "--canonical-oocyte-review", str(canonical),
+                "--out", str(out),
+            ], capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads(
+                (out / "sheep_ovary_biological_quality_review.json").read_text()
+            )
+            oocyte = manifest["quality_endpoints"]["oocyte_annotation_quality"]
+            self.assertEqual(oocyte["status"], "PASS")
+            self.assertEqual(oocyte["canonical_supported_group_n"], 1)
+
+    def test_molecularly_supported_theca_is_not_failed_for_global_fragmentation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            membership, scores, catalog = self.build_fixture(root)
+            frame = pd.read_csv(scores, sep="\t")
+            theca_cells = sorted(
+                frame.loc[
+                    frame.source_cluster.eq("theca_steroidogenic"), "cell_id"
+                ].unique()
+            )
+            coordinates = {
+                cell: (1000.0 * index, 1000.0 * (index % 7))
+                for index, cell in enumerate(theca_cells)
+            }
+            for cell, (x, y) in coordinates.items():
+                mask = frame.cell_id.eq(cell)
+                frame.loc[mask, ["x", "y"]] = [x, y]
+            frame.to_csv(scores, sep="\t", index=False, compression="gzip")
+            out = root / "review"
+            subprocess.run([
+                sys.executable, str(SCRIPT), "--membership", str(membership),
+                "--scores", str(scores), "--catalog", str(catalog),
+                "--out", str(out),
+            ], capture_output=True, text=True, check=False)
+            broad = pd.read_csv(out / "broad_spatial_localization_review.tsv", sep="\t")
+            theca = broad.loc[broad.broad_label.eq("Theca")].iloc[0]
+            self.assertEqual(theca.status, "PASS")
+            self.assertEqual(theca.identity_supported_fraction, 1.0)
 
     def test_targeted_repair_cannot_erase_previously_confirmed_antral_roi(self):
         with tempfile.TemporaryDirectory() as tmp:

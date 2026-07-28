@@ -1792,6 +1792,10 @@ def run_targeted_follicle_roi_iteration(
         "--catalog", str(paths["catalog"]),
         "--scores", str(combined_scores),
         "--expected-roi-review", str(expected_roi_path),
+        *(
+            ["--canonical-oocyte-review", str(args.canonical_oocyte_review)]
+            if getattr(args, "canonical_oocyte_review", None) else []
+        ),
         "--out", str(post_review),
     ], output_root / "logs/06_post_repair_biological_quality.log", allowed_codes=(0, 2))
     post_quality_path = post_review / "sheep_ovary_biological_quality_review.json"
@@ -2125,6 +2129,11 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         ]
         for path in observation_score_paths:
             quality_command.extend(["--scores", str(path.resolve())])
+        if args.canonical_oocyte_review:
+            quality_command.extend([
+                "--canonical-oocyte-review",
+                str(args.canonical_oocyte_review.resolve()),
+            ])
         run(
             quality_command,
             output / "logs/05_sheep_ovary_biological_quality.log",
@@ -2256,6 +2265,11 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             ]
             for path in observation_score_paths:
                 quality_command.extend(["--scores", str(path.resolve())])
+            if args.canonical_oocyte_review:
+                quality_command.extend([
+                    "--canonical-oocyte-review",
+                    str(args.canonical_oocyte_review.resolve()),
+                ])
             run(
                 quality_command,
                 output / "logs/09_post_catalog_biological_quality.log",
@@ -2290,6 +2304,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         "completeness": artifact(completeness_manifest),
         "biological_quality_status": quality_status,
         "biological_quality_review": quality_manifest,
+        "canonical_oocyte_review": (
+            artifact(args.canonical_oocyte_review)
+            if args.canonical_oocyte_review else None
+        ),
         "targeted_follicle_roi_repair": follicle_repair_manifest,
         "catalog_wide_lineage_review_status": catalog_review_status,
         "catalog_wide_lineage_review": artifact(
@@ -2455,6 +2473,13 @@ def parse_args() -> argparse.Namespace:
     atlas.add_argument("--calibration-manifest", required=True, type=Path)
     atlas.add_argument("--atlas-decisions", type=Path)
     atlas.add_argument("--unmodeled-decisions", type=Path)
+    atlas.add_argument(
+        "--canonical-oocyte-review", type=Path,
+        help=(
+            "optional frozen label-blind canonical Oocyte adjudication whose "
+            "exact released member set is revalidated after catalog review"
+        ),
+    )
     atlas.add_argument(
         "--lineage-review-decisions", type=Path, action="append", default=[],
         help=(
