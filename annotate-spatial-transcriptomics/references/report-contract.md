@@ -48,7 +48,7 @@ A cohort identifier is provenance, not a cell type. Show it in ancestry/route ta
 
 All scientific figures require PNG and PDF. Every report link must resolve. Per-node and per-gene assets require an index TSV. The report must state whether observations are cells, nuclei, spots or cellbins.
 
-Use `scripts/build_annotation_maps.R` to generate broad/subtype UMAPs and, when coordinates exist, broad/subtype spatial maps plus per-node highlights. Single-cell projects omit spatial sections explicitly rather than fabricating coordinates.
+Use `scripts/build_annotation_maps.R` to generate broad/subtype UMAPs and, when coordinates exist, broad/subtype spatial maps plus per-node highlights. Spatial maps use a fixed point diameter with a black background and high-saturation colours; per-node highlights use red members over a neutral grey tissue context. Never enlarge rare groups automatically. Single-cell projects omit spatial sections explicitly rather than fabricating coordinates.
 
 For a Seurat release, use `scripts/write_frozen_annotations_to_seurat.R`. The final biological membership and optional excluded-initial-QC ledger must exactly cover the input object; the writer never fills missing biological identities from historical metadata. Use `scripts/build_frozen_review_report.py --sample-id ... --release-status pending_user_review|approved_final` for the single sample-agnostic HTML. Report titles, sample context and approval state are arguments, never hard-coded case names.
 
