@@ -2,7 +2,7 @@
 
 [![Validate](https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/actions/workflows/validate.yml/badge.svg)](https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/actions/workflows/validate.yml)
 
-面向 Codex Agent 的空间转录组/单细胞转录组迭代式注释 Skill。v2.2 采用“第一轮只划分 cohort、第二轮重聚类负责正式注释”的哈希绑定控制器：每个初始 cluster 都从项目自身 raw counts 独立执行 SCT/PCA/SNN/Leiden，完整扫描开放候选目录；只有二级 mixed subcluster 才进行局部 observation 拆分。全部 cohort 合并后才冻结 broad，再执行全细胞 Atlas 复核、parent-locked fine/state 物化和最终 QC 闭环。项目自编 scorer 或 subset writer 只能产生 experimental 结果，不能写正式标签。
+面向 Codex Agent 的空间转录组/单细胞转录组迭代式注释 Skill。v2.2 采用“第一轮只划分 cohort、第二轮重聚类负责正式注释”的哈希绑定控制器：每个初始 cluster 都从项目自身 raw counts 独立执行 SCT/PCA/SNN/Leiden，完整扫描开放候选目录；只有二级 mixed subcluster 才进行局部 observation 拆分。全部 cohort 合并后才冻结 broad，再执行全细胞 Atlas、羊卵巢三终点组织学复核以及对每个可评估 broad 的双侧精度/召回复核。稳定分区默认复用，只有原 source subcluster 确实不可评估时才重聚类。项目自编 scorer 或 subset writer 只能产生 experimental 结果，不能写正式标签。
 
 适配 Seurat RDS、AnnData/H5AD、SingleCellExperiment、BANKSY、Scanpy/Leiden、Seurat 聚类和外部 cluster table。空间数据以可靠的大类为主要终点，亚群只在证据充分时定义。
 
@@ -144,6 +144,13 @@ runtime=可用的 R/Python 环境与调度资源
      -> 未标注成员：校准后中高置信、非 OOD、scope/ontology 兼容才直接回填 broad
      -> 已有大类且一致：关闭；低置信差异：记录
      -> 已有大类存在群体性可信差异或 coherent OOD：完整 source subcluster/cohort 复核一次
+  -> 在暂定 broad 上完成逐谱系双侧复核
+     -> 每个已注释 broad 形成一个复核任务
+        -> precision：检查该类型现有成员是否过召回
+        -> recall：在全组织其余细胞中检查是否欠召回
+        -> source subcluster / 空间组件 / group watch 仅作内部证据与 patch 边界
+     -> 最多两轮精确证据决策；任何改动后必须完整重审所有可评估 broad
+     -> 默认复用稳定分区，不把复核变成全组织逐 cellbin 分类器
   -> 缺失谱系、未建模程序、空间合理性与 residual QC 最终闭环
   -> 构建单一最终注释（中等及以上大类；仅高置信亚群）
   -> 完成门审计
@@ -203,7 +210,8 @@ Skill 内置一份[脱敏羊卵巢 R-first forward-test 参考](annotate-spatial
 - **第二轮负责注释。** 每个初始 cluster 独立运行完整 `0.1,0.2,0.3,0.4,0.6` 网格并扫描全部候选。能可靠定义亚型才写 fine；亚型证据不足时保留 supported broad，不能为了目录完整而强行命名。
 - **跨谱系与局部混合。** 二级亚簇出现另一个完整谱系时直接 cross-lineage return；只有两个可分离身份程序确实共存时才启动局部拆分。未进入局部子集的成员重新评估 parent/remainder，不自动进入 QC。
 - **语义修复不重跑稳定分区。** 输入、cohort membership、grid、seed 与聚类脚本哈希均未变化时，复用 controller 生成的 derived partition，只重算 scorer、边界和写回。任何修复 proposal 必须用 `apply_cell_id_membership_patch.py` 按唯一 `cell_id` 连接，禁止按行序赋值。
-- **全细胞 Atlas 与最终闭环。** broad 冻结后才运行全细胞 broad mapping；Atlas 只能直接救回 unlabeled、非 OOD 的中高置信成员，不能静默覆盖已有 broad 或生成 fine。最后才执行 residual QC、缺失谱系、空间合理性与未建模程序审计。
+- **全细胞 Atlas 与逐细胞类型复核。** broad 冻结后才运行全细胞 broad mapping；Atlas 只能直接救回 unlabeled、非 OOD 的中高置信成员，不能静默覆盖已有 broad 或生成 fine。随后以“一个 broad 细胞类型”为一级单位逐个复核：在同一次复核中检查现有成员的过召回、全组织其余细胞中的欠召回，以及整个切片上的空间分布。每个已注释 broad 必须分别给出成员纯度、全组织召回、分子身份和空间合理性结论，缺一项不能关闭。source subcluster、严格逐细胞空间组件和亚簇级信号缺口 watch 只作为内部证据与 patch 边界，不拆成大量用户任务；group watch 只能触发原始 counts 定位，不能整簇写回。
+- **上下文只控制能否评估。** 阶段、处理或解剖背景不能充当身份分数。`not_evaluable` 候选不得形成完整性阳性、Atlas 救回、fine 或最终标签，也不能因为其阳性程序计数而阻断一个合理的零 census；若最终 membership 已含该标签则必须失败并回到来源复核。
 
 Release-critical 的控制器默认阈值统一来自 `annotate-spatial-transcriptomics/references/controller_thresholds_v2_2.json`，包括 direct/local scoring 权重、whole-subcluster 与 local-subset 写回、resolution selector 权重及最终 residual-QC 阈值。初始化项目、构建 annotation contract、Python adjudicator 和 R scorer 均读取或绑定该注册表；项目覆盖必须显式写入 contract。Atlas classwise 校准目标和 StereoPy 技术前处理参数仍分别属于 workflow profile，不能与控制器写回阈值混为一张表。
 
@@ -389,7 +397,7 @@ GitHub Actions 的 PR 验证与 Release 打包均使用 Python 3.11 和仓库内
 
 ## 版本
 
-当前版本：`2.1.0`（稳定版）；`2.2.0` 是尚未发布的开发候选，项目 framework schema 仍为 `2.0.0`。在五类 raw-count integration fixture、两次独立盲回归、参数扰动和用户审阅完成前，v2.2 不是稳定发布版。v2.2 以第二轮重聚类为正式注释主体：第一轮只生成精确 cohort；每个二级 subcluster 扫描完整 broad/fine/state/exploratory 目录；只有竞争谱系共存的二级 mixed subcluster 才局部拆分。全部 cohort 合并后冻结 broad，再执行 calibrated Atlas、fine/state parent lock 和最终 QC。最新开发候选同时固定了 cell-ID 语义修复、Theca 分子优先、Luteal 双身份家族和 Oocyte 零普查 canonical targeted cohort；这些改动不增加全局完成门，也不把任何成功样本的数量、簇号或空间 ROI 作为运行时先验。
+当前版本：`2.1.0`（稳定版）；`2.2.0` 是尚未发布的开发候选，项目 framework schema 仍为 `2.0.0`。在五类 raw-count integration fixture、两次独立盲回归、参数扰动和用户审阅完成前，v2.2 不是稳定发布版。v2.2 以第二轮重聚类为正式注释主体：第一轮只生成精确 cohort；每个二级 subcluster 扫描完整 broad/fine/state/exploratory 目录；只有竞争谱系共存的二级 mixed subcluster 才局部拆分。全部 cohort 合并后冻结 broad，再执行 calibrated Atlas、羊卵巢组织学三终点、逐谱系双侧 precision/recall、fine/state parent lock 和最终 QC。最新开发候选同时固定了上下文门控的全出口 fail-closed、cell-ID 语义修复、Theca 分子优先、Luteal 双身份家族和 Oocyte 零普查 canonical targeted cohort；这些改动不把任何成功样本的数量、簇号或空间 ROI 作为运行时先验。
 
 ## 许可
 

@@ -31,6 +31,22 @@ class FollicleRoiRepairTest(unittest.TestCase):
     def build_fixture(self, root: Path, tie: bool = False, raw_assay: str = "RNA") -> list[str]:
         contract = root / "contract.json"
         contract.write_text("{}\n")
+        catalog = root / "catalog.json"
+        release = {
+            "theca_steroidogenic": "Theca",
+            "vascular_endothelial": "Vascular-associated",
+            "pericyte_mural": "Vascular-associated",
+            "lymphatic_endothelial": "Vascular-associated",
+            "smooth_muscle": "Smooth muscle",
+            "stromal_mesenchymal": "Stromal/mesenchymal",
+        }
+        catalog.write_text(json.dumps({"candidate_boundaries": [
+            {
+                "candidate_id": candidate, "candidate_role": "broad",
+                "release_broad_label": broad,
+            }
+            for candidate, broad in release.items()
+        ]}))
         membership = root / "membership.tsv"
         rows = []
         labels = {
@@ -131,12 +147,14 @@ class FollicleRoiRepairTest(unittest.TestCase):
             "base_scores": [{"path": str(base_scores), "sha256": sha(base_scores)}],
             "repair_scores": [{"path": str(repair_scores), "sha256": sha(repair_scores)}],
             "repair_ancestry": [{"path": str(ancestry), "sha256": sha(ancestry)}],
+            "candidate_catalog": {"path": str(catalog), "sha256": sha(catalog)},
         }))
         out = root / "out"
         return [
             sys.executable, str(SCRIPT), "--contract", str(contract),
             "--stage-authority", str(authority), "--membership", str(membership),
-            "--quality-review", str(quality), "--base-scores", str(base_scores),
+            "--quality-review", str(quality), "--catalog", str(catalog),
+            "--base-scores", str(base_scores),
             "--repair-score", f"F001={repair_scores}",
             "--repair-ancestry", f"F001={ancestry}", "--out", str(out),
         ]

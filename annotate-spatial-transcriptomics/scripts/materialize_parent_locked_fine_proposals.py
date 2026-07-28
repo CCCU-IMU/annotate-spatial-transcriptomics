@@ -9,13 +9,17 @@ from pathlib import Path
 
 from controller_thresholds import load_controller_thresholds
 from evidence_schema_lib import sha256
-from lineage_controller_lib import catalog_candidates, number, read_tsv, write_tsv
+from lineage_controller_lib import (
+    apply_candidate_context, candidate_can_release, catalog_candidates, number,
+    read_tsv, write_tsv,
+)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--membership", required=True, type=Path)
     ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--threshold-registry", required=True, type=Path)
     ap.add_argument("--fine-audit", action="append", type=Path, default=[])
     ap.add_argument("--out", required=True, type=Path)
@@ -35,14 +39,22 @@ def main() -> int:
     candidates = catalog_candidates(
         json.loads(args.catalog.read_text(encoding="utf-8"))
     )
+    context_summary = apply_candidate_context(
+        candidates,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
     assignments: dict[str, dict[str, object]] = {}
     source_records: list[dict[str, str]] = []
+    context_skipped_records: list[dict[str, str]] = []
     for path in args.fine_audit:
         for row in read_tsv(path):
             if row.get("status") != "supported" or row.get("release_candidate") != "true":
                 continue
             candidate_id = str(row.get("candidate_id", ""))
             candidate = candidates.get(candidate_id, {})
+            if not candidate_can_release(candidate):
+                context_skipped_records.append(row)
+                continue
             parent = str(candidate.get("release_broad_label", ""))
             fine = str(candidate.get("release_fine_label", ""))
             if (
@@ -101,6 +113,17 @@ def main() -> int:
         "broad_labels_modified": False,
         "n_fine_assignments": len(rows),
         "n_supported_sources": len(source_records),
+        "n_context_ineligible_supported_sources_skipped": len(
+            context_skipped_records
+        ),
+        "context_release_eligibility": context_summary,
+        "context_evidence": (
+            {
+                "path": str(args.context_evidence.resolve()),
+                "sha256": sha256(args.context_evidence),
+            }
+            if args.context_evidence else None
+        ),
         "membership": {
             "path": str(args.membership.resolve()),
             "sha256": sha256(args.membership),

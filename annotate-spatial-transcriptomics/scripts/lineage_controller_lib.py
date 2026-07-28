@@ -24,6 +24,10 @@ from controller_thresholds import observation_writeback_defaults
 RELEASE_ROLES = {"broad", "fine"}
 GENERIC_REMAINDER_IDS = {"stromal_mesenchymal"}
 QC_STATES = {"qc_holdout", "unknown_candidate", "technical_state"}
+CONTEXT_SUPPORTED_STATUSES = {"supported", "pass"}
+CONTEXT_ALLOWED_STATUSES = CONTEXT_SUPPORTED_STATUSES | {
+    "not_evaluable", "refuted",
+}
 _WRITEBACK_DEFAULTS = observation_writeback_defaults()
 
 
@@ -191,6 +195,88 @@ def candidate_can_release(candidate: dict, context_ok: bool = True) -> bool:
         and bool(str(candidate.get("release_broad_label", "")).strip())
         and context_ok
     )
+
+
+def candidate_can_support_broad_review(candidate: dict) -> bool:
+    """Return whether a candidate may reconstruct a broad identity.
+
+    Ordinary fine/state programs are parent-locked and cannot become broad
+    recall evidence.  A fine identity participates only when the catalog
+    explicitly declares a valid route to the broad parent, such as
+    Pericyte/mural to Vascular-associated.
+    """
+    return (
+        str(candidate.get("candidate_role", "")).lower() == "broad"
+        or candidate.get("parent_broad_reconstruction_allowed") is True
+    )
+
+
+def apply_candidate_context(
+    candidates: dict[str, dict],
+    context_rows: Iterable[dict[str, object]] = (),
+) -> dict[str, dict[str, str]]:
+    """Attach one authoritative evaluation-permission state to every candidate.
+
+    Exogenous context can only make a context-gated candidate evaluable.  It
+    never contributes identity evidence.  Missing, conflicting or explicitly
+    non-supported context therefore keeps the candidate visible to descriptive
+    scans while removing every formal release path.
+    """
+    by_id: dict[str, dict[str, str]] = {}
+    for row in context_rows:
+        candidate_id = str(row.get("candidate_id", "")).strip()
+        if not candidate_id:
+            raise ValueError("context evidence contains an empty candidate_id")
+        normalized = {
+            "status": str(row.get("status", "")).strip().lower(),
+            "reason": str(row.get("reason", "")).strip(),
+            "observed_value": str(row.get("observed_value", "")).strip(),
+        }
+        if normalized["status"] not in CONTEXT_ALLOWED_STATUSES:
+            raise ValueError(
+                f"context evidence has an invalid status for {candidate_id}: "
+                f"{normalized['status'] or '<empty>'}"
+            )
+        previous = by_id.get(candidate_id)
+        if previous is not None and previous != normalized:
+            raise ValueError(
+                f"context evidence contains conflicting rows for {candidate_id}"
+            )
+        by_id[candidate_id] = normalized
+    accepted_evidence_ids = {
+        str(candidate.get("context_evidence_candidate_id", "") or candidate_id).strip()
+        for candidate_id, candidate in candidates.items()
+    }
+    unknown_evidence_ids = sorted(set(by_id) - accepted_evidence_ids)
+    if unknown_evidence_ids:
+        raise ValueError(
+            "context evidence names candidates outside the bound catalog: "
+            + ", ".join(unknown_evidence_ids)
+        )
+    result: dict[str, dict[str, str]] = {}
+    for candidate_id, candidate in candidates.items():
+        evidence_id = str(
+            candidate.get("context_evidence_candidate_id", "") or candidate_id
+        ).strip()
+        record = by_id.get(evidence_id, {})
+        required = bool(candidate.get("formal_context_evidence_required"))
+        status = str(record.get("status", ""))
+        candidate["_context_ok"] = bool(
+            not required or status in CONTEXT_SUPPORTED_STATUSES
+        )
+        candidate["_context_status"] = (
+            "not_required" if not required else status or "not_evaluable"
+        )
+        candidate["_context_reason"] = str(record.get("reason", ""))
+        candidate["_context_evidence_id"] = evidence_id
+        result[candidate_id] = {
+            "candidate_id": candidate_id,
+            "context_evidence_candidate_id": evidence_id,
+            "status": str(candidate["_context_status"]),
+            "release_eligible": str(candidate_can_release(candidate)).lower(),
+            "reason": str(candidate["_context_reason"]),
+        }
+    return result
 
 
 def minimum_identity_core_fraction(candidate: dict) -> float:

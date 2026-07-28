@@ -23,6 +23,9 @@ from scipy.spatial import cKDTree
 
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
+    apply_candidate_context,
+    candidate_can_release,
+    catalog_candidates,
     deterministic_membership_hash,
     group_candidate_detected,
     group_candidate_score,
@@ -75,28 +78,47 @@ def validate_authority(args: argparse.Namespace) -> dict:
     }
     if not supplied_evidence or bound_evidence != supplied_evidence:
         raise SystemExit("cluster evidence differs from stage authority")
+    bound_context = authority.get("context_evidence")
+    if args.context_evidence:
+        if (
+            not bound_context
+            or Path(str(bound_context.get("path", ""))).resolve()
+            != args.context_evidence.resolve()
+            or bound_context.get("sha256") != sha256(args.context_evidence)
+        ):
+            raise SystemExit("context evidence differs from stage authority")
+    elif bound_context:
+        raise SystemExit("stage authority binds context evidence but none was supplied")
     return authority
 
 
-def candidate_catalog(path: Path) -> tuple[dict[str, dict], set[str]]:
-    catalog = json.loads(path.read_text(encoding="utf-8"))
+def candidate_catalog(
+    path: Path, context_evidence: Path | None,
+) -> tuple[dict[str, dict], set[str], dict[str, dict[str, str]]]:
+    catalog = catalog_candidates(json.loads(path.read_text(encoding="utf-8")))
+    context_rows = (
+        read_tsv(context_evidence).fillna("").to_dict("records")
+        if context_evidence else []
+    )
+    context_summary = apply_candidate_context(catalog, context_rows)
     candidates: dict[str, dict] = {}
     generic: set[str] = set()
-    for row in catalog.get("candidate_boundaries", []):
+    for candidate_id, row in catalog.items():
         strategy = str(row.get("writeback_strategy", ""))
         if (
             row.get("candidate_role") not in {"broad", "fine"}
             or not row.get("release_broad_label")
+            or not candidate_can_release(row)
             or strategy.startswith("watch_only")
             or strategy == "canonical_cluster_membership"
         ):
             continue
-        candidates[str(row["candidate_id"])] = row
+        candidates[candidate_id] = row
         if strategy == "generic_exact_remainder_after_specific_lineages":
-            generic.add(str(row["candidate_id"]))
+            generic.add(candidate_id)
     if not candidates or not generic:
         raise SystemExit("candidate catalog lacks releasable or generic remainder candidates")
-    return candidates, generic
+    return candidates, generic, context_summary
 
 
 def top_two_by_cell(frame: pd.DataFrame, value: str, prefix: str) -> pd.DataFrame:
@@ -439,13 +461,16 @@ def main() -> int:
     ap.add_argument("--stage-authority", required=True, type=Path)
     ap.add_argument("--membership", required=True, type=Path)
     ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--scores", action="append", type=Path, default=[])
     ap.add_argument("--cluster-evidence", action="append", type=Path, default=[])
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
     validate_authority(args)
-    candidates, generic_ids = candidate_catalog(args.catalog)
+    candidates, generic_ids, context_summary = candidate_catalog(
+        args.catalog, args.context_evidence
+    )
     source_supported_parents = source_supported_parent_candidates(
         args.cluster_evidence, candidates
     )
@@ -545,6 +570,10 @@ def main() -> int:
         "remaining_unresolved_fraction": remaining / len(output_membership),
         "broad_return_census": dict(Counter(accepted.release_broad_label)) if len(accepted) else {},
         "final_broad_census": dict(census),
+        "context_evidence": (
+            artifact(args.context_evidence) if args.context_evidence else None
+        ),
+        "context_release_eligibility": context_summary,
         "policy": "strict direct multi-family seeds; coherent local expansion; specific before generic; unresolved overlaps preserved; anatomical parent override requires matching selected-subcluster parent identity support",
     }
     (args.out / "post_merge_unresolved_review_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

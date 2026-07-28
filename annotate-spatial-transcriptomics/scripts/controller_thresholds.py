@@ -81,6 +81,38 @@ def load_controller_thresholds(path: Path | None = None) -> dict:
     _fraction_map(document.get("fine_release_policy"), "fine_release_policy")
     _fraction_map(document.get("state_release_policy"), "state_release_policy")
 
+    catalog_review = document.get("catalog_wide_lineage_review_policy", {})
+    integer_minimums = {
+        "maximum_decision_rounds": 1,
+        "minimum_current_label_observations_per_source_group": 1,
+        "minimum_recall_component_members": 2,
+        "minimum_recall_direct_seed_members": 1,
+        "spatial_knn_k": 2,
+    }
+    if any(
+        int(catalog_review.get(key, -1)) < minimum
+        for key, minimum in integer_minimums.items()
+    ):
+        raise ValueError("invalid catalog-wide lineage review integer policy")
+    for key in (
+        "minimum_present_label_supported_fraction",
+        "minimum_present_label_competitor_fraction",
+        "minimum_recall_direct_seed_fraction",
+        "minimum_recall_seed_evidence_margin",
+    ):
+        value = float(catalog_review.get(key, -1))
+        if not 0 <= value <= 1:
+            raise ValueError(f"invalid catalog-wide lineage review threshold: {key}")
+    support_margin = float(
+        catalog_review.get("minimum_recall_support_evidence_margin", -2)
+    )
+    if not -1 <= support_margin <= 1:
+        raise ValueError("invalid catalog-wide lineage support margin")
+    if not isinstance(
+        catalog_review.get("generic_remainder_recall_components_enabled"), bool
+    ):
+        raise ValueError("invalid generic-remainder catalog-review policy")
+
     resolution = document.get("resolution_selection", {})
     for purpose in (
         "whole_tissue_cohort_partition", "cohort_identity_resolution"

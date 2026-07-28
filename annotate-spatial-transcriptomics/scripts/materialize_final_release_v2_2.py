@@ -10,7 +10,10 @@ from pathlib import Path
 
 from controller_thresholds import load_controller_thresholds
 from evidence_schema_lib import sha256
-from lineage_controller_lib import deterministic_membership_hash, read_tsv, write_tsv
+from lineage_controller_lib import (
+    apply_candidate_context, candidate_can_release, catalog_candidates,
+    deterministic_membership_hash, read_tsv, write_tsv,
+)
 
 
 def main() -> int:
@@ -19,6 +22,8 @@ def main() -> int:
     ap.add_argument("--stage-authority", required=True, type=Path)
     ap.add_argument("--post-atlas-membership", required=True, type=Path)
     ap.add_argument("--atlas-completeness-manifest", required=True, type=Path)
+    ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--fine-assignments", type=Path)
     ap.add_argument("--state-proposals", action="append", type=Path, default=[])
     ap.add_argument("--out", required=True, type=Path)
@@ -51,6 +56,42 @@ def main() -> int:
     contradiction_ceiling = thresholds[
         "observation_writeback_policy"
     ]["maximum_contradiction_fraction"]
+    catalog_record = contract.get("candidate_catalog", {})
+    if (
+        Path(str(catalog_record.get("path", ""))).resolve()
+        != args.catalog.resolve()
+        or catalog_record.get("sha256") != sha256(args.catalog)
+    ):
+        raise SystemExit("final candidate catalog differs from annotation contract")
+    bound_context = contract.get("candidate_context_evidence")
+    authority_context = authority.get("context_evidence")
+    if args.context_evidence:
+        if (
+            not bound_context
+            or Path(str(bound_context.get("path", ""))).resolve()
+            != args.context_evidence.resolve()
+            or bound_context.get("sha256") != sha256(args.context_evidence)
+            or not authority_context
+            or Path(str(authority_context.get("path", ""))).resolve()
+            != args.context_evidence.resolve()
+            or authority_context.get("sha256") != sha256(args.context_evidence)
+        ):
+            raise SystemExit("final context evidence is missing, stale or unbound")
+    elif bound_context or authority_context:
+        raise SystemExit("final release omitted contract-bound context evidence")
+    candidates = catalog_candidates(
+        json.loads(args.catalog.read_text(encoding="utf-8"))
+    )
+    context_summary = apply_candidate_context(
+        candidates,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
+    eligible_broad_labels = {
+        str(candidate.get("release_broad_label", ""))
+        for candidate in candidates.values()
+        if str(candidate.get("candidate_role", "")) == "broad"
+        and candidate_can_release(candidate)
+    }
     authority_membership = authority.get("post_atlas_membership", {})
     if (
         Path(str(authority_membership.get("path", ""))).resolve()
@@ -126,6 +167,17 @@ def main() -> int:
                 or not row.get("final_fine_label")
             ):
                 raise SystemExit("fine assignments are duplicated or not release-grade")
+            candidate = candidates.get(str(row.get("candidate_id", "")), {})
+            if (
+                not candidate_can_release(candidate)
+                or str(candidate.get("release_broad_label", ""))
+                != str(row.get("parent_broad_label", ""))
+                or str(candidate.get("release_fine_label", ""))
+                != str(row.get("final_fine_label", ""))
+            ):
+                raise SystemExit(
+                    "fine assignment targets a context-ineligible or mismatched candidate"
+                )
             fine[cell] = row
 
     state_by_group: dict[tuple[str, str], set[str]] = defaultdict(set)
@@ -161,6 +213,10 @@ def main() -> int:
         row = dict(source)
         cell = str(row["cell_id"])
         broad = str(row.get("final_broad_label", ""))
+        if broad and broad not in eligible_broad_labels:
+            raise SystemExit(
+                f"final broad label is not eligible under bound context: {broad}"
+            )
         assignment = fine.get(cell)
         if assignment:
             if broad != assignment.get("parent_broad_label"):
@@ -246,6 +302,14 @@ def main() -> int:
             "sha256": sha256(args.atlas_completeness_manifest),
         },
         "formal_broad_fine_state_qc_membership_written": True,
+        "context_evidence": (
+            {
+                "path": str(args.context_evidence.resolve()),
+                "sha256": sha256(args.context_evidence),
+            }
+            if args.context_evidence else None
+        ),
+        "context_release_eligibility": context_summary,
     }
     manifest_path = args.out / "final_release_manifest.json"
     manifest_path.write_text(

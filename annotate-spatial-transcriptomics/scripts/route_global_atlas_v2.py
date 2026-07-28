@@ -11,6 +11,9 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from evidence_schema_lib import sha256, validate_artifact_ref
+from lineage_controller_lib import (
+    apply_candidate_context, candidate_can_release, catalog_candidates,
+)
 
 
 ACCEPTED_TIERS = {"high", "moderate_only"}
@@ -104,6 +107,8 @@ def main() -> int:
     ap.add_argument("--atlas-mapping", required=True, type=Path)
     ap.add_argument("--calibration-manifest", required=True, type=Path)
     ap.add_argument("--workflow-profile", required=True, type=Path)
+    ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--cell-id-col", default="cell_id")
     ap.add_argument("--analysis-scope-col", default="analysis_scope")
@@ -127,6 +132,19 @@ def main() -> int:
     excluded_returns = set(policy.get("primary_public_atlas_exclusions", []))
     if not crosswalk or allowed_returns & excluded_returns:
         raise SystemExit("active workflow profile has an invalid Atlas crosswalk/scope")
+    candidates = catalog_candidates(
+        json.loads(args.catalog.read_text(encoding="utf-8"))
+    )
+    context_summary = apply_candidate_context(
+        candidates,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
+    context_eligible_broad = {
+        str(candidate.get("release_broad_label", ""))
+        for candidate in candidates.values()
+        if str(candidate.get("candidate_role", "")) == "broad"
+        and candidate_can_release(candidate)
+    }
     calibration = validate_calibration(args.calibration_manifest, args.atlas_mapping, policy)
 
     ledger_rows = read_tsv(args.cell_ledger)
@@ -170,7 +188,9 @@ def main() -> int:
         ood = truth(atlas.get(args.ood_col, ""))
         ontology = truth(atlas.get(args.ontology_conflict_col, ""))
         class_calibrated = calibration.get(source_label, {}).get("eligible", False)
-        in_scope = mapped in allowed_returns and mapped not in excluded_returns
+        profile_scope = mapped in allowed_returns and mapped not in excluded_returns
+        context_eligible = mapped in context_eligible_broad
+        in_scope = profile_scope and context_eligible
         accepted = tier in ACCEPTED_TIERS and class_calibrated and bool(mapped) and not ood and not ontology and in_scope
         is_qc = not primary and state in QC_STATES
         is_unresolved = not primary and state in UNRESOLVED_STATES
@@ -222,6 +242,8 @@ def main() -> int:
             "atlas_tier": tier,
             "atlas_class_calibrated": str(class_calibrated).lower(),
             "atlas_scope_pass": str(in_scope).lower(),
+            "atlas_profile_scope_pass": str(profile_scope).lower(),
+            "candidate_context_release_eligible": str(context_eligible).lower(),
             "out_of_distribution": str(ood).lower(),
             "ontology_conflict": str(ontology).lower(),
             "atlas_state_route": route,
@@ -277,6 +299,12 @@ def main() -> int:
         "atlas_mapping": {"path": str(args.atlas_mapping.resolve()), "sha256": sha256(args.atlas_mapping)},
         "calibration_manifest": {"path": str(args.calibration_manifest.resolve()), "sha256": sha256(args.calibration_manifest)},
         "workflow_profile": {"path": str(args.workflow_profile.resolve()), "sha256": sha256(args.workflow_profile)},
+        "candidate_catalog": {"path": str(args.catalog.resolve()), "sha256": sha256(args.catalog)},
+        "context_evidence": (
+            {"path": str(args.context_evidence.resolve()), "sha256": sha256(args.context_evidence)}
+            if args.context_evidence else None
+        ),
+        "context_release_eligibility": context_summary,
         "artifacts": {
             "routing": {"path": str(route_path.resolve()), "sha256": sha256(route_path)},
             "review_queue": {"path": str(review_path.resolve()), "sha256": sha256(review_path)},

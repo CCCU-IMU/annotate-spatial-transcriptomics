@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "catalog_wide_lineage_review.schema.json",
+  "title": "Post-Atlas catalog-wide double-sided lineage review",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "stage",
+    "artifact_role",
+    "review_round",
+    "maximum_decision_rounds",
+    "formal_membership_written",
+    "catalog_wide_double_sided_review",
+    "broad_lineage_is_primary_review_unit",
+    "source_subclusters_are_internal_evidence_only",
+    "whole_object_per_cell_classifier_used",
+    "geometry_can_trigger_review_but_cannot_assign_labels",
+    "historical_labels_used_as_identity_evidence",
+    "annotation_contract",
+    "stage_authority",
+    "membership",
+    "candidate_catalog",
+    "threshold_registry",
+    "observation_scores",
+    "cluster_evidence",
+    "eligible_broad_n",
+    "precision_review_source_group_n",
+    "recall_challenger_component_n",
+    "recall_group_watch_n",
+    "cell_type_review_n",
+    "review_queue_n",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {"const": "2.2"},
+    "status": {"enum": ["PASS", "ITERATION_REQUIRED"]},
+    "stage": {"const": "post_atlas_catalog_wide_lineage_review"},
+    "artifact_role": {"const": "biological_quality_review"},
+    "review_round": {"type": "integer", "minimum": 1},
+    "maximum_decision_rounds": {"type": "integer", "minimum": 1},
+    "formal_membership_written": {"const": false},
+    "catalog_wide_double_sided_review": {"const": true},
+    "broad_lineage_is_primary_review_unit": {"const": true},
+    "source_subclusters_are_internal_evidence_only": {"const": true},
+    "whole_object_per_cell_classifier_used": {"const": false},
+    "geometry_can_trigger_review_but_cannot_assign_labels": {"const": true},
+    "historical_labels_used_as_identity_evidence": {"const": false},
+    "annotation_contract": {"$ref": "#/$defs/artifact"},
+    "stage_authority": {"$ref": "#/$defs/artifact"},
+    "membership": {"$ref": "#/$defs/artifact"},
+    "candidate_catalog": {"$ref": "#/$defs/artifact"},
+    "threshold_registry": {"$ref": "#/$defs/artifact"},
+    "context_evidence": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/artifact"}]
+    },
+    "observation_scores": {
+      "type": "array", "minItems": 1,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "cluster_evidence": {
+      "type": "array", "minItems": 1,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "eligible_broad_n": {"type": "integer", "minimum": 0},
+    "context_not_evaluable_broad_n": {"type": "integer", "minimum": 0},
+    "precision_review_source_group_n": {"type": "integer", "minimum": 0},
+    "recall_challenger_component_n": {"type": "integer", "minimum": 0},
+    "recall_group_watch_n": {"type": "integer", "minimum": 0},
+    "cell_type_review_n": {"type": "integer", "minimum": 0},
+    "review_queue_n": {"type": "integer", "minimum": 0},
+    "artifacts": {
+      "type": "object",
+      "required": [
+        "lineage_review_matrix",
+        "present_label_precision_audit",
+        "outside_label_recall_components",
+        "outside_label_recall_component_membership",
+        "outside_label_group_watch",
+        "broad_lineage_review_summary",
+        "broad_lineage_review_scope_membership",
+        "review_queue"
+      ],
+      "additionalProperties": {"$ref": "#/$defs/artifact"}
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256", "n_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "n_bytes": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  }
+}

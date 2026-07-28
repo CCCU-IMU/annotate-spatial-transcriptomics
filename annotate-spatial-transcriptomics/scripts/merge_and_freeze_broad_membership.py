@@ -8,7 +8,10 @@ import json
 from pathlib import Path
 
 from evidence_schema_lib import sha256
-from lineage_controller_lib import deterministic_membership_hash, read_tsv, write_tsv
+from lineage_controller_lib import (
+    apply_candidate_context, candidate_can_release, catalog_candidates,
+    deterministic_membership_hash, read_tsv, write_tsv,
+)
 
 
 def artifact_ok(record: dict, path: Path) -> bool:
@@ -94,6 +97,8 @@ def main() -> int:
     ap.add_argument("--contract", required=True, type=Path)
     ap.add_argument("--stage-authority", required=True, type=Path)
     ap.add_argument("--analysis-membership", required=True, type=Path)
+    ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument(
         "--candidate-membership", required=True, type=Path, action="append",
         help="repeat for each terminal cohort/local replacement candidate partition",
@@ -115,6 +120,20 @@ def main() -> int:
         raise SystemExit("stage authority does not permit broad freeze")
     if contract.get("canonical_lineage_controller", {}).get("controller_version") != "2.2.0":
         raise SystemExit("contract does not bind v2.2.0 controller")
+    authority_records = {"candidate_catalog": args.catalog}
+    if args.context_evidence:
+        authority_records["context_evidence"] = args.context_evidence
+    for key, path in authority_records.items():
+        record = authority.get(key, {})
+        if not artifact_ok(record, path):
+            raise SystemExit(f"broad-freeze authority differs for {key}")
+    candidates = catalog_candidates(
+        json.loads(args.catalog.read_text(encoding="utf-8"))
+    )
+    context_summary = apply_candidate_context(
+        candidates,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
     if len(args.candidate_membership) != len(args.candidate_source_manifest):
         raise SystemExit("each candidate membership requires one canonical source manifest")
     authority_sources = authority.get("candidate_source_manifests", [])
@@ -186,6 +205,17 @@ def main() -> int:
                 raise SystemExit("candidate membership has an invalid pre-freeze state")
             if row.get("proposed_state") == "broad_candidate" and not row.get("proposed_broad_label"):
                 raise SystemExit("broad candidate lacks proposed broad label")
+            if row.get("proposed_state") == "broad_candidate":
+                candidate_id = str(row.get("candidate_id", ""))
+                broad = str(row.get("proposed_broad_label", ""))
+                candidate = candidates.get(candidate_id, {})
+                if (
+                    not candidate_can_release(candidate)
+                    or str(candidate.get("release_broad_label", "")) != broad
+                ):
+                    raise SystemExit(
+                        f"broad freeze rejected a context-ineligible or mismatched candidate: {candidate_id}"
+                    )
             proposals[cell] = row
     if set(proposals) != analysis_id_set:
         missing = len(analysis_id_set - set(proposals))
@@ -241,6 +271,18 @@ def main() -> int:
             for path in args.candidate_membership
         ],
         "candidate_source_manifests": source_records,
+        "candidate_catalog": {
+            "path": str(args.catalog.resolve()),
+            "sha256": sha256(args.catalog),
+        },
+        "context_evidence": (
+            {
+                "path": str(args.context_evidence.resolve()),
+                "sha256": sha256(args.context_evidence),
+            }
+            if args.context_evidence else None
+        ),
+        "context_release_eligibility": context_summary,
     }
     (args.out / "broad_freeze_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

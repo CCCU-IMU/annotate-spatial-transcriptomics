@@ -6,7 +6,7 @@
   "required": [
     "schema_version", "framework_version", "skill_release_version", "project_id", "sample_id",
     "project_config", "workflow_profile", "biological_profile", "candidate_catalog",
-    "threshold_registry",
+    "threshold_registry", "candidate_context_policy",
     "selected_input_snapshot", "input_scope", "artifact_role_policy", "expression_ancestry_policy",
     "whole_tissue_partition", "query_reclustering", "broad_family_evidence",
     "canonical_lineage_controller",
@@ -23,6 +23,24 @@
     "biological_profile": {"$ref": "#/$defs/artifact"},
     "candidate_catalog": {"$ref": "#/$defs/artifact"},
     "threshold_registry": {"$ref": "#/$defs/artifact"},
+    "candidate_context_evidence": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/artifact"}]
+    },
+    "candidate_context_policy": {
+      "type": "object",
+      "required": [
+        "scope", "identity_evidence_authority",
+        "missing_or_not_evaluable_release_eligible",
+        "all_candidate_release_outlets_must_recheck"
+      ],
+      "properties": {
+        "scope": {"const": "evaluation_permission_only"},
+        "identity_evidence_authority": {"const": false},
+        "missing_or_not_evaluable_release_eligible": {"const": false},
+        "all_candidate_release_outlets_must_recheck": {"const": true}
+      },
+      "additionalProperties": false
+    },
     "selected_input_snapshot": {
       "type": "object",
       "required": ["registry_path", "snapshot_id", "sha256", "path", "artifact_role"],
@@ -122,7 +140,7 @@
         "phase_authority", "random_seed", "resolution_selector",
         "resolution_evidence_builder", "unmodeled_discovery",
         "cohort_reclustering", "scripts", "dependencies", "scoring_policy",
-        "subset_policy", "remainder_policy"
+        "subset_policy", "remainder_policy", "catalog_wide_review_policy"
       ],
       "properties": {
         "controller_version": {"const": "2.2.0"},
@@ -147,7 +165,7 @@
             "cluster_cohort_recluster": {"const": "candidate_only_no_release_membership"},
             "local_mixed_subcluster_split": {"const": "candidate_only_no_release_membership"},
             "merge_and_freeze_broad": {"const": "formal_broad_freeze"},
-            "atlas_and_completeness_review": {"const": "unlabeled_broad_rescue_only"},
+            "atlas_and_completeness_review": {"const": "unlabeled_atlas_rescue_and_bounded_catalog_review"},
             "materialize_final_release": {"const": "final_broad_fine_state_release"}
           },
           "additionalProperties": false
@@ -164,12 +182,22 @@
             "close_exact_remainders.py",
             "build_whole_tissue_cohort_plan.py",
             "adjudicate_second_round_subclusters.py",
+            "build_candidate_context_evidence.py",
             "merge_and_freeze_broad_membership.py",
             "route_global_atlas_v2.py",
             "validate_global_atlas_v2.py",
             "apply_post_merge_atlas_routing.py",
+            "review_post_merge_unresolved_components.py",
             "audit_post_merge_completeness.py",
+            "audit_catalog_wide_lineage_challengers.py",
+            "validate_catalog_wide_lineage_review_decisions.py",
+            "apply_catalog_wide_lineage_review.py",
             "validate_sheep_ovary_biological_quality.py",
+            "apply_sheep_ovary_follicle_roi_repair.py",
+            "screen_rare_cell_programs.R",
+            "screen_spatial_foci.py",
+            "materialize_oocyte_cluster_membership.py",
+            "apply_cell_id_membership_patch.py",
             "materialize_parent_locked_fine_proposals.py",
             "materialize_final_release_v2_2.py",
             "evaluate_annotation_robustness.py",
@@ -181,12 +209,22 @@
             "close_exact_remainders.py": {"$ref": "#/$defs/artifact"},
             "build_whole_tissue_cohort_plan.py": {"$ref": "#/$defs/artifact"},
             "adjudicate_second_round_subclusters.py": {"$ref": "#/$defs/artifact"},
+            "build_candidate_context_evidence.py": {"$ref": "#/$defs/artifact"},
             "merge_and_freeze_broad_membership.py": {"$ref": "#/$defs/artifact"},
             "route_global_atlas_v2.py": {"$ref": "#/$defs/artifact"},
             "validate_global_atlas_v2.py": {"$ref": "#/$defs/artifact"},
             "apply_post_merge_atlas_routing.py": {"$ref": "#/$defs/artifact"},
+            "review_post_merge_unresolved_components.py": {"$ref": "#/$defs/artifact"},
             "audit_post_merge_completeness.py": {"$ref": "#/$defs/artifact"},
+            "audit_catalog_wide_lineage_challengers.py": {"$ref": "#/$defs/artifact"},
+            "validate_catalog_wide_lineage_review_decisions.py": {"$ref": "#/$defs/artifact"},
+            "apply_catalog_wide_lineage_review.py": {"$ref": "#/$defs/artifact"},
             "validate_sheep_ovary_biological_quality.py": {"$ref": "#/$defs/artifact"},
+            "apply_sheep_ovary_follicle_roi_repair.py": {"$ref": "#/$defs/artifact"},
+            "screen_rare_cell_programs.R": {"$ref": "#/$defs/artifact"},
+            "screen_spatial_foci.py": {"$ref": "#/$defs/artifact"},
+            "materialize_oocyte_cluster_membership.py": {"$ref": "#/$defs/artifact"},
+            "apply_cell_id_membership_patch.py": {"$ref": "#/$defs/artifact"},
             "materialize_parent_locked_fine_proposals.py": {"$ref": "#/$defs/artifact"},
             "materialize_final_release_v2_2.py": {"$ref": "#/$defs/artifact"},
             "evaluate_annotation_robustness.py": {"$ref": "#/$defs/artifact"},
@@ -269,6 +307,21 @@
             "first_round_forbidden": {"const": true},
             "unselected_member_is_qc": {"const": false}
           }
+        },
+        "catalog_wide_review_policy": {
+          "type": "object",
+          "required": [
+            "scope", "primary_unit", "whole_object_per_cell_classifier",
+            "stable_partition_reuse_default", "maximum_decision_rounds"
+          ],
+          "properties": {
+            "scope": {"const": "every_context_evaluable_broad"},
+            "primary_unit": {"const": "second_round_source_subcluster"},
+            "whole_object_per_cell_classifier": {"const": false},
+            "stable_partition_reuse_default": {"const": true},
+            "maximum_decision_rounds": {"type": "integer", "minimum": 1, "maximum": 2}
+          },
+          "additionalProperties": false
         }
       }
     },

@@ -52,12 +52,20 @@ class ReviewHardeningContractTests(unittest.TestCase):
                 encoding="utf-8",
             )
             output = root / "final.tsv.gz"
+            context = root / "context.tsv"
+            context.write_text(
+                "candidate_id\tstatus\treason\n"
+                "luteal_steroidogenic\tsupported\tfixture stage permits evaluation\n",
+                encoding="utf-8",
+            )
             result = run(
                 "apply_cell_id_membership_patch.py",
                 "--base-membership", base,
                 "--proposal", proposal,
                 "--update-column", "final_broad_label",
                 "--update-column", "state_annotations",
+                "--catalog", CATALOG,
+                "--context-evidence", context,
                 "--out", output,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -121,10 +129,16 @@ class ReviewHardeningContractTests(unittest.TestCase):
                 "c\tdirect_multifamily_somatic_hard_contradiction\n",
                 encoding="utf-8",
             )
+            catalog = root / "catalog.json"
+            catalog.write_text(json.dumps({"candidate_boundaries": [{
+                "candidate_id": "oocyte", "candidate_role": "broad",
+                "release_broad_label": "Oocyte",
+            }]}), encoding="utf-8")
             result = run(
                 "materialize_oocyte_cluster_membership.py",
                 "--canonical-membership", canonical,
                 "--passing-clusters", passing,
+                "--catalog", catalog,
                 "--explicit-exclusions", exclusions,
                 "--out", root / "out",
             )

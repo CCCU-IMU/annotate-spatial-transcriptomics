@@ -11,6 +11,7 @@ from pathlib import Path
 
 from controller_thresholds import load_controller_thresholds
 from lineage_controller_lib import (
+    apply_candidate_context,
     canonical_cluster_challenger,
     candidate_can_release,
     catalog_candidates,
@@ -69,6 +70,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scoring-output", required=True, type=Path)
     parser.add_argument("--catalog", required=True, type=Path)
+    parser.add_argument("--context-evidence", type=Path)
     parser.add_argument(
         "--selection-purpose", required=True,
         choices=["whole_tissue_cohort_partition", "cohort_identity_resolution"],
@@ -102,6 +104,10 @@ def main() -> int:
     writeback = thresholds["observation_writeback_policy"]
     catalog_doc = json.loads(args.catalog.read_text(encoding="utf-8"))
     candidate_map = catalog_candidates(catalog_doc)
+    context_summary = apply_candidate_context(
+        candidate_map,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
     candidate_ids = set(candidate_map)
     if set(manifest.get("candidate_universe", [])) != candidate_ids:
         raise SystemExit("full-grid scoring candidate universe differs from catalog")
@@ -399,6 +405,14 @@ def main() -> int:
             "path": str(args.catalog.resolve()),
             "sha256": sha256(args.catalog),
         },
+        "context_evidence": (
+            {
+                "path": str(args.context_evidence.resolve()),
+                "sha256": sha256(args.context_evidence),
+            }
+            if args.context_evidence else None
+        ),
+        "context_release_eligibility": context_summary,
         "resolution_grid_evidence": {
             "path": str(output_path.resolve()),
             "sha256": sha256(output_path),

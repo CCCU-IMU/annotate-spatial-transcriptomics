@@ -55,6 +55,10 @@ def main() -> int:
                 errors.append(f"route row {line} writes outside unlabeled post-merge membership")
             if row.get("atlas_tier") not in {"high", "moderate_only"} or row.get("atlas_class_calibrated") != "true" or row.get("atlas_scope_pass") != "true":
                 errors.append(f"route row {line} bypasses calibrated class/scope gates")
+            if row.get("candidate_context_release_eligible") != "true":
+                errors.append(
+                    f"route row {line} bypasses candidate context eligibility"
+                )
             if truth(row.get("out_of_distribution", "")) or truth(row.get("ontology_conflict", "")):
                 errors.append(f"route row {line} writes an OOD/ontology-conflicted result")
         if row.get("primary_broad") and row.get("proposed_broad_label") != row.get("primary_broad"):

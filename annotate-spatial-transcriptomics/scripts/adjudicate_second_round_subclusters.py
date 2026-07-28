@@ -10,7 +10,7 @@ from pathlib import Path
 
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
-    candidate_can_release, canonical_cluster_challenger, catalog_candidates,
+    apply_candidate_context, candidate_can_release, canonical_cluster_challenger, catalog_candidates,
     dominant_generic_remainder_group,
     effective_broad_writeback_strategy, group_candidate_detected,
     group_candidate_score, group_identity_core_fraction,
@@ -66,21 +66,10 @@ def main() -> int:
 
     catalog_doc = json.loads(args.catalog.read_text(encoding="utf-8"))
     candidates = catalog_candidates(catalog_doc)
-    context_supported: set[str] = set()
-    if args.context_evidence:
-        context_supported = {
-            str(row.get("candidate_id", ""))
-            for row in read_tsv(args.context_evidence)
-            if str(row.get("status", "")).strip().lower()
-            in {"supported", "pass"}
-        }
-    for candidate_id, candidate in candidates.items():
-        context_id = str(
-            candidate.get("context_evidence_candidate_id", "") or candidate_id
-        )
-        candidate["_context_ok"] = (
-            candidate_id in context_supported or context_id in context_supported
-        )
+    apply_candidate_context(
+        candidates,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
     evidence_rows = [
         row for row in read_tsv(args.cluster_evidence)
         if row.get("resolution_role") == "selected"

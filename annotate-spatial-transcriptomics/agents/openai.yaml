@@ -1,4 +1,4 @@
 interface:
   display_name: "Evidence-first Transcriptomics Annotation v2.2"
   short_description: "Second-round-first open-world spatial annotation"
-  default_prompt: "Use $annotate-spatial-transcriptomics with the contract-bound v2.2 controller. Use the whole-tissue pass only to create exact initial-cluster cohorts; annotate every cohort from project-local raw counts with SCT/PCA/SNN/Leiden and a label-blind full-catalog scan. Split observations only inside a competing second-round mixed subcluster, freeze broad labels after all cohorts merge, then run calibrated all-cell Atlas review and parent-locked fine/state release. Keep updates to at most five short biological findings."
+  default_prompt: "Use $annotate-spatial-transcriptomics with the contract-bound v2.2 controller: create provisional whole-tissue cohorts, annotate each from project-local raw counts with label-blind SCT/PCA/SNN/Leiden, freeze broad labels only after merge, then run Atlas plus a complete double-sided precision/recall review of every context-evaluable broad before parent-locked fine/state release. Keep updates to at most five short biological findings."

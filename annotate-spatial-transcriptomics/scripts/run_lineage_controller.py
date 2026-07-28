@@ -40,6 +40,9 @@ CANONICAL_SCRIPTS = (
     "apply_post_merge_atlas_routing.py",
     "review_post_merge_unresolved_components.py",
     "audit_post_merge_completeness.py",
+    "audit_catalog_wide_lineage_challengers.py",
+    "validate_catalog_wide_lineage_review_decisions.py",
+    "apply_catalog_wide_lineage_review.py",
     "validate_sheep_ovary_biological_quality.py",
     "apply_sheep_ovary_follicle_roi_repair.py",
     "screen_rare_cell_programs.R",
@@ -217,6 +220,11 @@ def validate_contract(contract_path: Path) -> tuple[dict, dict[str, Path]]:
     paths["catalog"] = resolve_bound(
         contract_path, contract.get("candidate_catalog", {}), "candidate catalog"
     )
+    context_record = contract.get("candidate_context_evidence")
+    if context_record:
+        paths["context_evidence"] = resolve_bound(
+            contract_path, context_record, "candidate context evidence"
+        )
     paths["selected_input"] = selected_path
     input_scope = contract.get("input_scope", {})
     paths["analysis_set"] = resolve_bound(
@@ -685,6 +693,10 @@ def phase_whole(args, contract: dict, paths: dict[str, Path]) -> dict:
         "--catalog", str(paths["catalog"]),
         "--selection-purpose", "whole_tissue_cohort_partition",
         "--out", str(evidence_out),
+        *(
+            ["--context-evidence", str(paths["context_evidence"])]
+            if "context_evidence" in paths else []
+        ),
     ], output / "logs/01_resolution_evidence.log")
     selector_out = output / "02_resolution_selection"
     run([
@@ -1067,6 +1079,10 @@ def phase_cohort(args, contract: dict, paths: dict[str, Path]) -> dict:
         "--scoring-output", str(grid_scoring), "--catalog", str(paths["catalog"]),
         "--selection-purpose", "cohort_identity_resolution",
         "--out", str(evidence_out),
+        *(
+            ["--context-evidence", str(paths["context_evidence"])]
+            if "context_evidence" in paths else []
+        ),
     ], output / "logs/02_resolution_evidence.log")
     selection_out = output / "03_resolution_selection"
     run([
@@ -1524,14 +1540,21 @@ def phase_merge(args, contract: dict, paths: dict[str, Path]) -> dict:
         "merge_and_freeze_broad", args.contract, paths, output,
         whole_manifest=args.whole_manifest,
         candidate_source_manifests=source_manifests,
+        candidate_catalog=paths["catalog"],
+        context_evidence=paths.get("context_evidence"),
     )
     command = [
         sys.executable, str(paths["merge_and_freeze_broad_membership.py"]),
         "--contract", str(args.contract.resolve()),
         "--stage-authority", str(authority),
         "--analysis-membership", str(args.analysis_membership.resolve()),
+        "--catalog", str(paths["catalog"]),
         "--out", str(output / "00_broad_freeze"),
     ]
+    if "context_evidence" in paths:
+        command.extend([
+            "--context-evidence", str(paths["context_evidence"])
+        ])
     for membership_path, source_path in zip(candidate_paths, source_manifests):
         command.extend(["--candidate-membership", str(membership_path.resolve())])
         command.extend(["--candidate-source-manifest", str(source_path.resolve())])
@@ -1691,6 +1714,10 @@ def run_targeted_follicle_roi_iteration(
             "--catalog", str(paths["catalog"]),
             "--selection-purpose", "cohort_identity_resolution",
             "--out", str(evidence_out),
+            *(
+                ["--context-evidence", str(paths["context_evidence"])]
+                if "context_evidence" in paths else []
+            ),
         ], roi_output / "logs/02_resolution_evidence.log")
         selection_out = roi_output / "03_resolution_selection"
         run([
@@ -1724,6 +1751,8 @@ def run_targeted_follicle_roi_iteration(
         base_scores=observation_score_paths,
         repair_scores=list(repair_scores.values()),
         repair_ancestry=list(ancestry_paths.values()),
+        candidate_catalog=paths["catalog"],
+        context_evidence=paths.get("context_evidence"),
     )
     materialized = output_root / "materialized_repair"
     command = [
@@ -1733,8 +1762,11 @@ def run_targeted_follicle_roi_iteration(
         "--stage-authority", str(repair_authority),
         "--membership", str(post_membership),
         "--quality-review", str(quality_path),
+        "--catalog", str(paths["catalog"]),
         "--out", str(materialized),
     ]
+    if "context_evidence" in paths:
+        command.extend(["--context-evidence", str(paths["context_evidence"])])
     for path in observation_score_paths:
         command.extend(["--base-scores", str(path)])
     for roi_id in target_rois:
@@ -1772,6 +1804,141 @@ def run_targeted_follicle_roi_iteration(
         "repair_manifest": repair_manifest_path,
         "target_rois": target_rois,
     }
+
+
+def run_catalog_wide_review_iterations(
+    args, paths: dict[str, Path], output: Path, membership: Path,
+    observation_score_paths: list[Path], cluster_evidence_paths: list[Path],
+) -> dict:
+    """Run bounded post-Atlas precision/recall review without reclustering."""
+    policy = json.loads(
+        paths["threshold_registry"].read_text(encoding="utf-8")
+    )["catalog_wide_lineage_review_policy"]
+    maximum_decisions = int(policy["maximum_decision_rounds"])
+    supplied_decisions = list(args.lineage_review_decisions or [])
+    if len(supplied_decisions) > maximum_decisions:
+        raise RuntimeError("catalog-wide review decisions exceed the bounded-round policy")
+    current_membership = membership
+    prior_validations: list[Path] = []
+    apply_manifests: list[Path] = []
+    previous_review: Path | None = None
+    last_review: Path | None = None
+    for review_round in range(1, maximum_decisions + 2):
+        review_out = output / f"07_catalog_wide_review_round_{review_round:02d}"
+        review_authority = stage_authority(
+            "atlas_and_completeness_review", args.contract, paths, review_out,
+            post_atlas_membership=current_membership,
+            candidate_catalog=paths["catalog"],
+            threshold_registry=paths["threshold_registry"],
+            context_evidence=paths.get("context_evidence"),
+            observation_scores=observation_score_paths,
+            cluster_evidence=cluster_evidence_paths,
+        )
+        command = [
+            sys.executable,
+            str(paths["audit_catalog_wide_lineage_challengers.py"]),
+            "--contract", str(args.contract),
+            "--stage-authority", str(review_authority),
+            "--membership", str(current_membership.resolve()),
+            "--catalog", str(paths["catalog"]),
+            "--threshold-registry", str(paths["threshold_registry"]),
+            "--round-index", str(review_round),
+            "--workers", str(max(1, int(args.resolution_workers))),
+            "--out", str(review_out),
+        ]
+        if "context_evidence" in paths:
+            command.extend([
+                "--context-evidence", str(paths["context_evidence"])
+            ])
+        if previous_review:
+            command.extend([
+                "--previous-review-manifest", str(previous_review.resolve())
+            ])
+        for path in prior_validations:
+            command.extend([
+                "--prior-decision-validation", str(path.resolve())
+            ])
+        for path in observation_score_paths:
+            command.extend(["--scores", str(path.resolve())])
+        for path in cluster_evidence_paths:
+            command.extend(["--cluster-evidence", str(path.resolve())])
+        run(
+            command,
+            output / f"logs/07_catalog_wide_review_round_{review_round:02d}.log",
+            allowed_codes=(0, 2),
+        )
+        last_review = review_out / "catalog_wide_lineage_review_manifest.json"
+        review = json.loads(last_review.read_text(encoding="utf-8"))
+        if review.get("status") == "PASS":
+            if len(supplied_decisions) > len(prior_validations):
+                raise RuntimeError("unused catalog-wide review decision file remains")
+            return {
+                "status": "PASS", "membership": current_membership,
+                "review_manifest": last_review,
+                "decision_validations": prior_validations,
+                "apply_manifests": apply_manifests,
+            }
+        decision_index = review_round - 1
+        if decision_index >= maximum_decisions or decision_index >= len(supplied_decisions):
+            return {
+                "status": "ITERATION_REQUIRED", "membership": current_membership,
+                "review_manifest": last_review,
+                "decision_validations": prior_validations,
+                "apply_manifests": apply_manifests,
+            }
+        decision_out = output / f"07_catalog_wide_decision_round_{review_round:02d}"
+        run([
+            sys.executable,
+            str(paths["validate_catalog_wide_lineage_review_decisions.py"]),
+            "--review-manifest", str(last_review),
+            "--decisions", str(supplied_decisions[decision_index].resolve()),
+            "--out", str(decision_out),
+        ], output / f"logs/07_catalog_wide_decision_round_{review_round:02d}.log", allowed_codes=(0, 2))
+        validation_path = (
+            decision_out / "catalog_wide_lineage_decision_validation.json"
+        )
+        validation = json.loads(validation_path.read_text(encoding="utf-8"))
+        if validation.get("status") != "PASS":
+            return {
+                "status": "ITERATION_REQUIRED", "membership": current_membership,
+                "review_manifest": last_review,
+                "decision_validations": prior_validations + [validation_path],
+                "apply_manifests": apply_manifests,
+            }
+        apply_out = output / f"07_catalog_wide_apply_round_{review_round:02d}"
+        apply_authority = stage_authority(
+            "atlas_and_completeness_review", args.contract, paths, apply_out,
+            post_atlas_membership=current_membership,
+            catalog_review_manifest=last_review,
+            catalog_decision_validation=validation_path,
+            candidate_catalog=paths["catalog"],
+            context_evidence=paths.get("context_evidence"),
+        )
+        apply_command = [
+            sys.executable, str(paths["apply_catalog_wide_lineage_review.py"]),
+            "--contract", str(args.contract),
+            "--stage-authority", str(apply_authority),
+            "--membership", str(current_membership.resolve()),
+            "--review-manifest", str(last_review),
+            "--decision-validation", str(validation_path),
+            "--catalog", str(paths["catalog"]),
+            "--out", str(apply_out),
+        ]
+        if "context_evidence" in paths:
+            apply_command.extend([
+                "--context-evidence", str(paths["context_evidence"])
+            ])
+        run(
+            apply_command,
+            output / f"logs/07_catalog_wide_apply_round_{review_round:02d}.log",
+        )
+        apply_manifest = apply_out / "catalog_wide_lineage_review_apply_manifest.json"
+        apply_doc = json.loads(apply_manifest.read_text(encoding="utf-8"))
+        current_membership = Path(str(apply_doc["membership"]["path"]))
+        prior_validations.append(validation_path)
+        apply_manifests.append(apply_manifest)
+        previous_review = last_review
+    raise RuntimeError("catalog-wide review loop exceeded its bounded policy")
 
 
 def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
@@ -1829,7 +1996,12 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         "--atlas-mapping", str(args.atlas_mapping.resolve()),
         "--calibration-manifest", str(args.calibration_manifest.resolve()),
         "--workflow-profile", str(paths["workflow_profile"]),
+        "--catalog", str(paths["catalog"]),
         "--out", str(routing_out),
+        *(
+            ["--context-evidence", str(paths["context_evidence"])]
+            if "context_evidence" in paths else []
+        ),
     ], output / "logs/00_atlas_routing.log", allowed_codes=(0, 2))
     validation_path = output / "01_atlas_validation.json"
     validation_command = [
@@ -1846,7 +2018,12 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         "--frozen-broad", str(args.frozen_broad_membership.resolve()),
         "--routing", str(routing_out / "atlas_state_routing.tsv.gz"),
         "--atlas-validation", str(validation_path),
+        "--catalog", str(paths["catalog"]),
         "--out", str(apply_out),
+        *(
+            ["--context-evidence", str(paths["context_evidence"])]
+            if "context_evidence" in paths else []
+        ),
     ], output / "logs/02_post_atlas_membership.log")
     applied = json.loads(
         (apply_out / "post_atlas_membership_manifest.json").read_text(encoding="utf-8")
@@ -1861,6 +2038,7 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         post_atlas_membership=post_membership,
         observation_scores=observation_score_paths,
         cluster_evidence=cluster_evidence_paths,
+        context_evidence=paths.get("context_evidence"),
     )
     unresolved_review_out = output / "03_post_merge_unresolved_review"
     unresolved_review_command = [
@@ -1879,6 +2057,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         unresolved_review_command.extend(
             ["--cluster-evidence", str(path.resolve())]
         )
+    if "context_evidence" in paths:
+        unresolved_review_command.extend([
+            "--context-evidence", str(paths["context_evidence"])
+        ])
     run(
         unresolved_review_command,
         output / "logs/03_post_merge_unresolved_review.log",
@@ -1912,9 +2094,14 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         command.extend(["--local-subset-validation", str(path.resolve())])
     for path in local_remainder_audit_paths:
         command.extend(["--local-remainder-audit", str(path.resolve())])
+    if "context_evidence" in paths:
+        command.extend(["--context-evidence", str(paths["context_evidence"])])
     if quality_required:
         command.append("--defer-canonical-zero-to-biological-review")
-    run(command, output / "logs/04_completeness.log")
+    run(
+        command, output / "logs/04_completeness.log",
+        allowed_codes=(0, 2),
+    )
     completeness_manifest = completeness_out / "post_merge_completeness_manifest.json"
     quality_manifest: dict[str, str] | None = None
     quality_status = "NOT_REQUIRED"
@@ -1995,21 +2182,104 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
                     command.extend([
                         "--local-remainder-audit", str(path.resolve())
                     ])
+                if "context_evidence" in paths:
+                    command.extend([
+                        "--context-evidence", str(paths["context_evidence"])
+                    ])
                 if quality_required:
                     command.append(
                         "--defer-canonical-zero-to-biological-review"
                     )
-                run(command, output / "logs/06_post_repair_completeness.log")
+                run(
+                    command, output / "logs/06_post_repair_completeness.log",
+                    allowed_codes=(0, 2),
+                )
                 completeness_manifest = (
                     completeness_out / "post_merge_completeness_manifest.json"
                 )
+    catalog_review = run_catalog_wide_review_iterations(
+        args, paths, output, post_membership,
+        observation_score_paths, cluster_evidence_paths,
+    )
+    catalog_review_status = str(catalog_review["status"])
+    post_membership = Path(catalog_review["membership"])
+    catalog_apply_manifests = list(catalog_review["apply_manifests"])
+    membership_output = artifact(post_membership)
+    post_rows = read_tsv(post_membership)
+    n_unresolved_biological = sum(
+        not str(row.get("final_broad_label", row.get("broad_label", "")))
+        for row in post_rows
+    )
+    if catalog_apply_manifests:
+        completeness_out = output / "08_post_catalog_completeness"
+        command = [
+            sys.executable, str(paths["audit_post_merge_completeness.py"]),
+            "--membership", str(post_membership),
+            "--catalog", str(paths["catalog"]),
+            "--out", str(completeness_out),
+        ]
+        for path in cluster_evidence_paths:
+            command.extend(["--cluster-evidence", str(path.resolve())])
+        for path in fine_proposal_paths:
+            command.extend(["--fine-audit", str(path.resolve())])
+        for path in unmodeled_manifest_paths:
+            command.extend(["--unmodeled", str(path.resolve())])
+        if args.unmodeled_decisions:
+            command.extend([
+                "--unmodeled-review", str(args.unmodeled_decisions.resolve())
+            ])
+        for path in local_subset_validation_paths:
+            command.extend(["--local-subset-validation", str(path.resolve())])
+        for path in local_remainder_audit_paths:
+            command.extend(["--local-remainder-audit", str(path.resolve())])
+        for path in catalog_apply_manifests:
+            command.extend(["--catalog-wide-review-manifest", str(path.resolve())])
+        if "context_evidence" in paths:
+            command.extend(["--context-evidence", str(paths["context_evidence"])])
+        if quality_required:
+            command.append("--defer-canonical-zero-to-biological-review")
+        run(
+            command, output / "logs/08_post_catalog_completeness.log",
+            allowed_codes=(0, 2),
+        )
+        completeness_manifest = (
+            completeness_out / "post_merge_completeness_manifest.json"
+        )
+        if quality_required:
+            quality_out = output / "09_post_catalog_biological_quality"
+            quality_command = [
+                sys.executable,
+                str(paths["validate_sheep_ovary_biological_quality.py"]),
+                "--membership", str(post_membership.resolve()),
+                "--catalog", str(paths["catalog"]),
+                "--out", str(quality_out),
+            ]
+            for path in observation_score_paths:
+                quality_command.extend(["--scores", str(path.resolve())])
+            run(
+                quality_command,
+                output / "logs/09_post_catalog_biological_quality.log",
+                allowed_codes=(0, 2),
+            )
+            quality_path = (
+                quality_out / "sheep_ovary_biological_quality_review.json"
+            )
+            quality_doc = json.loads(quality_path.read_text(encoding="utf-8"))
+            quality_status = str(quality_doc.get("status", ""))
+            quality_manifest = artifact(quality_path)
+    completeness_status = str(json.loads(
+        completeness_manifest.read_text(encoding="utf-8")
+    ).get("status", ""))
     return {
         "status": (
             "ITERATION_REQUIRED"
-            if quality_status == "ITERATION_REQUIRED" else "PASS"
+            if quality_status == "ITERATION_REQUIRED"
+            or catalog_review_status == "ITERATION_REQUIRED"
+            or completeness_status != "PASS"
+            else "PASS"
         ),
         "phase": "atlas_and_completeness_review",
-        "stage_authority": artifact(unresolved_review_authority),
+        "stage_authority": artifact(authority),
         "prerequisite": artifact(args.prerequisite_manifest),
         "formal_membership_written": False,
         "membership": membership_output,
@@ -2021,6 +2291,16 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         "biological_quality_status": quality_status,
         "biological_quality_review": quality_manifest,
         "targeted_follicle_roi_repair": follicle_repair_manifest,
+        "catalog_wide_lineage_review_status": catalog_review_status,
+        "catalog_wide_lineage_review": artifact(
+            catalog_review["review_manifest"]
+        ),
+        "catalog_wide_decision_validations": [
+            artifact(path) for path in catalog_review["decision_validations"]
+        ],
+        "catalog_wide_apply_manifests": [
+            artifact(path) for path in catalog_apply_manifests
+        ],
         "unlabeled_broad_rescue_n": applied["unlabeled_broad_rescue_n"],
         "n_unresolved_biological": n_unresolved_biological,
         "fine_candidate_proposals": [artifact(path) for path in fine_proposal_paths],
@@ -2056,6 +2336,10 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
     ]
     for path in fine_proposal_paths:
         fine_command.extend(["--fine-audit", str(path.resolve())])
+    if "context_evidence" in paths:
+        fine_command.extend([
+            "--context-evidence", str(paths["context_evidence"])
+        ])
     run(fine_command, output / "logs/00_fine_materialization.log")
     fine_assignments = fine_out / "parent_locked_fine_assignments.tsv.gz"
     authority = stage_authority(
@@ -2064,6 +2348,7 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
         prerequisite_manifest=args.prerequisite_manifest,
         fine_assignments=fine_assignments,
         state_annotation_proposals=state_proposal_paths,
+        context_evidence=paths.get("context_evidence"),
     )
     final_out = output / "01_final_release"
     final_command = [
@@ -2071,11 +2356,16 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
         "--contract", str(args.contract), "--stage-authority", str(authority),
         "--post-atlas-membership", str(args.post_atlas_membership.resolve()),
         "--atlas-completeness-manifest", str(args.prerequisite_manifest.resolve()),
+        "--catalog", str(paths["catalog"]),
         "--fine-assignments", str(fine_assignments),
         "--out", str(final_out),
     ]
     for path in state_proposal_paths:
         final_command.extend(["--state-proposals", str(path.resolve())])
+    if "context_evidence" in paths:
+        final_command.extend([
+            "--context-evidence", str(paths["context_evidence"])
+        ])
     run(final_command, output / "logs/01_final_release.log")
     final_manifest = json.loads(
         (final_out / "final_release_manifest.json").read_text(encoding="utf-8")
@@ -2165,6 +2455,13 @@ def parse_args() -> argparse.Namespace:
     atlas.add_argument("--calibration-manifest", required=True, type=Path)
     atlas.add_argument("--atlas-decisions", type=Path)
     atlas.add_argument("--unmodeled-decisions", type=Path)
+    atlas.add_argument(
+        "--lineage-review-decisions", type=Path, action="append", default=[],
+        help=(
+            "repeat in chronological order for at most two catalog-wide "
+            "post-Atlas biological review rounds"
+        ),
+    )
     atlas.add_argument("--resolution-workers", type=int, default=5)
 
     final = sub.add_parser("materialize_final_release")

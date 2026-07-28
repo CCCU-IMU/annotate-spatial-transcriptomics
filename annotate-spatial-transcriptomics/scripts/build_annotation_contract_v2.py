@@ -237,6 +237,12 @@ def main() -> int:
             )
             if args.context_evidence else None
         ),
+        "candidate_context_policy": {
+            "scope": "evaluation_permission_only",
+            "identity_evidence_authority": False,
+            "missing_or_not_evaluable_release_eligible": False,
+            "all_candidate_release_outlets_must_recheck": True,
+        },
         "selected_input_snapshot": {
             "registry_path": str(snapshot_registry.resolve()),
             "snapshot_id": args.snapshot_id,
@@ -307,7 +313,9 @@ def main() -> int:
                 "cluster_cohort_recluster": "candidate_only_no_release_membership",
                 "local_mixed_subcluster_split": "candidate_only_no_release_membership",
                 "merge_and_freeze_broad": "formal_broad_freeze",
-                "atlas_and_completeness_review": "unlabeled_broad_rescue_only",
+                "atlas_and_completeness_review": (
+                    "unlabeled_atlas_rescue_and_bounded_catalog_review"
+                ),
                 "materialize_final_release": "final_broad_fine_state_release",
             },
             "random_seed": args.seed,
@@ -347,6 +355,9 @@ def main() -> int:
                     "apply_post_merge_atlas_routing.py",
                     "review_post_merge_unresolved_components.py",
                     "audit_post_merge_completeness.py",
+                    "audit_catalog_wide_lineage_challengers.py",
+                    "validate_catalog_wide_lineage_review_decisions.py",
+                    "apply_catalog_wide_lineage_review.py",
                     "validate_sheep_ovary_biological_quality.py",
                     "apply_sheep_ovary_follicle_roi_repair.py",
                     "screen_rare_cell_programs.R",
@@ -411,6 +422,17 @@ def main() -> int:
                 ],
                 "first_round_forbidden": True,
                 "unselected_member_is_qc": False,
+            },
+            "catalog_wide_review_policy": {
+                "scope": "every_context_evaluable_broad",
+                "primary_unit": "second_round_source_subcluster",
+                "whole_object_per_cell_classifier": False,
+                "stable_partition_reuse_default": True,
+                "maximum_decision_rounds": int(
+                    controller_thresholds[
+                        "catalog_wide_lineage_review_policy"
+                    ]["maximum_decision_rounds"]
+                ),
             },
         },
         "observation_writeback": {

@@ -12,6 +12,7 @@ from controller_thresholds import (
     load_controller_thresholds, observation_writeback_defaults,
 )
 from lineage_controller_lib import (
+    apply_candidate_context,
     GENERIC_REMAINDER_IDS,
     aggregate_program_supported,
     aggregate_score,
@@ -477,20 +478,10 @@ def main() -> int:
             raise RuntimeError("context evidence differs from stage authority")
     elif bound_context:
         raise RuntimeError("stage authority binds context evidence but none was supplied")
-    context_supported: set[str] = set()
-    if args.context_evidence:
-        context_supported = {
-            row.get("candidate_id", "")
-            for row in read_tsv(args.context_evidence)
-            if row.get("status", "").strip().lower() in {"supported", "pass"}
-        }
-    for candidate_id, candidate in catalog.items():
-        evidence_id = str(
-            candidate.get("context_evidence_candidate_id", "") or candidate_id
-        )
-        candidate["_context_ok"] = (
-            candidate_id in context_supported or evidence_id in context_supported
-        )
+    apply_candidate_context(
+        catalog,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
     # Freeze the broad phase first.  Fine labels are materialized only after
     # every exact remainder has closed and only inside the candidate's frozen
     # broad parent.  The fine candidate_id remains provenance in broad phase.

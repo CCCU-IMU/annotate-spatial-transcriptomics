@@ -30,6 +30,14 @@ def main() -> int:
         errors.extend(artifact_errors)
         if path:
             resolved[key] = path
+    context_record = contract.get("candidate_context_evidence")
+    if context_record:
+        path, artifact_errors = validate_artifact_ref(
+            root, context_record, "candidate context evidence"
+        )
+        errors.extend(artifact_errors)
+        if path:
+            resolved["candidate_context_evidence"] = path
     scope = contract.get("input_scope", {})
     scope_paths: dict[str, Path] = {}
     for key in ("full_object", "analysis_set", "excluded_initial_qc"):
@@ -132,10 +140,20 @@ def main() -> int:
         "cluster_cohort_recluster": "candidate_only_no_release_membership",
         "local_mixed_subcluster_split": "candidate_only_no_release_membership",
         "merge_and_freeze_broad": "formal_broad_freeze",
-        "atlas_and_completeness_review": "unlabeled_broad_rescue_only",
+        "atlas_and_completeness_review": (
+            "unlabeled_atlas_rescue_and_bounded_catalog_review"
+        ),
         "materialize_final_release": "final_broad_fine_state_release",
     }:
         errors.append("annotation contract phase authority differs from v2.2 architecture")
+    context_policy = contract.get("candidate_context_policy", {})
+    if context_policy != {
+        "scope": "evaluation_permission_only",
+        "identity_evidence_authority": False,
+        "missing_or_not_evaluable_release_eligible": False,
+        "all_candidate_release_outlets_must_recheck": True,
+    }:
+        errors.append("annotation contract does not fail closed for context-gated candidates")
     for name in (
         "run_observation_lineage_scoring.R",
         "derive_candidate_local_subsets.R",
@@ -149,6 +167,9 @@ def main() -> int:
         "apply_post_merge_atlas_routing.py",
         "review_post_merge_unresolved_components.py",
         "audit_post_merge_completeness.py",
+        "audit_catalog_wide_lineage_challengers.py",
+        "validate_catalog_wide_lineage_review_decisions.py",
+        "apply_catalog_wide_lineage_review.py",
         "validate_sheep_ovary_biological_quality.py",
         "apply_sheep_ovary_follicle_roi_repair.py",
         "screen_rare_cell_programs.R",
@@ -192,6 +213,9 @@ def main() -> int:
             expected_writeback = thresholds["observation_writeback_policy"]
             expected_scoring = thresholds["scoring_policy"]
             expected_local = thresholds["local_subset_policy"]
+            expected_catalog_review = thresholds[
+                "catalog_wide_lineage_review_policy"
+            ]
             contract_writeback = contract.get(
                 "observation_writeback", {}
             ).get("policy", {})
@@ -205,6 +229,19 @@ def main() -> int:
                         f"controller scoring policy differs from threshold registry: {key}"
                     )
             subset = controller.get("subset_policy", {})
+            catalog_review = controller.get("catalog_wide_review_policy", {})
+            if catalog_review != {
+                "scope": "every_context_evaluable_broad",
+                "primary_unit": "second_round_source_subcluster",
+                "whole_object_per_cell_classifier": False,
+                "stable_partition_reuse_default": True,
+                "maximum_decision_rounds": int(
+                    expected_catalog_review["maximum_decision_rounds"]
+                ),
+            }:
+                errors.append(
+                    "controller catalog-wide review policy differs from threshold registry"
+                )
             expected_subset = {
                 "subset_validation_supported_fraction": contract_writeback[
                     "supported_subset_min_lineage_supported_fraction"

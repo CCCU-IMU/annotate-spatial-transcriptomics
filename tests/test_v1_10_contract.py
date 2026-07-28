@@ -117,8 +117,14 @@ class V110ContractTests(unittest.TestCase):
             )
             passing = root / "passing.tsv"
             passing.write_text("recluster_cluster\tadjudication_status\n2\tpass\n")
+            catalog = root / "catalog.json"
+            catalog.write_text(json.dumps({"candidate_boundaries": [{
+                "candidate_id": "oocyte", "candidate_role": "broad",
+                "release_broad_label": "Oocyte",
+            }]}))
             result = run(SCRIPTS / "materialize_oocyte_cluster_membership.py",
                          "--canonical-membership", canonical, "--passing-clusters", passing,
+                         "--catalog", catalog,
                          "--out", root / "out")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             with (root / "out/materialized_oocyte_membership.tsv").open(newline="") as handle:

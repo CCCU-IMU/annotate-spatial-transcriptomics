@@ -17,7 +17,10 @@ from pathlib import Path
 import pandas as pd
 
 from evidence_schema_lib import sha256
-from lineage_controller_lib import deterministic_membership_hash
+from lineage_controller_lib import (
+    apply_candidate_context, candidate_can_release, catalog_candidates,
+    deterministic_membership_hash, read_tsv as read_record_tsv,
+)
 
 
 CANDIDATE_TO_BROAD = {
@@ -122,6 +125,8 @@ def main() -> int:
     ap.add_argument("--stage-authority", required=True, type=Path)
     ap.add_argument("--membership", required=True, type=Path)
     ap.add_argument("--quality-review", required=True, type=Path)
+    ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--base-scores", action="append", required=True, type=Path)
     ap.add_argument("--repair-score", action="append", default=[])
     ap.add_argument("--repair-ancestry", action="append", default=[])
@@ -138,10 +143,32 @@ def main() -> int:
         or authority.get("annotation_contract_sha256") != sha256(args.contract)
     ):
         raise SystemExit("stage authority does not permit follicle ROI repair")
-    for key, path in (("pre_repair_membership", args.membership), ("pre_repair_biological_quality", args.quality_review)):
+    bound_records = [
+        ("pre_repair_membership", args.membership),
+        ("pre_repair_biological_quality", args.quality_review),
+        ("candidate_catalog", args.catalog),
+    ]
+    if args.context_evidence:
+        bound_records.append(("context_evidence", args.context_evidence))
+    for key, path in bound_records:
         record = authority.get(key, {})
         if Path(str(record.get("path", ""))).resolve() != path.resolve() or record.get("sha256") != sha256(path):
             raise SystemExit(f"{key} differs from stage authority")
+
+    candidates = catalog_candidates(json.loads(args.catalog.read_text(encoding="utf-8")))
+    context_summary = apply_candidate_context(
+        candidates,
+        read_record_tsv(args.context_evidence) if args.context_evidence else [],
+    )
+    eligible_candidate_to_broad = {
+        candidate_id: broad
+        for candidate_id, broad in CANDIDATE_TO_BROAD.items()
+        if candidate_id in candidates
+        and candidate_can_release(candidates[candidate_id])
+        and str(candidates[candidate_id].get("release_broad_label", "")) == broad
+    }
+    if not eligible_candidate_to_broad:
+        raise SystemExit("follicle ROI repair has no context-eligible wall candidate")
 
     review = json.loads(args.quality_review.read_text(encoding="utf-8"))
     if review.get("status") != "ITERATION_REQUIRED":
@@ -215,8 +242,11 @@ def main() -> int:
             raise SystemExit(f"{roi} has no typed failing wall layer")
         typed_authority[roi] = sorted(allowed)
         wall_ids = sorted(cell for cell in roi_ids if str(revised.at[cell, "final_broad_label"]) in WALL_BROADS | {""})
-        scored = score.loc[score.cell_id.isin(wall_ids) & score.candidate_id.isin(CANDIDATE_TO_BROAD)].copy()
-        scored["target_broad"] = scored.candidate_id.map(CANDIDATE_TO_BROAD)
+        scored = score.loc[
+            score.cell_id.isin(wall_ids)
+            & score.candidate_id.isin(eligible_candidate_to_broad)
+        ].copy()
+        scored["target_broad"] = scored.candidate_id.map(eligible_candidate_to_broad)
         scored = scored.loc[scored.target_broad.isin(allowed)]
         scored["eligible"] = (
             scored.family_coherent & scored.identity_core_direct
@@ -328,6 +358,9 @@ def main() -> int:
         "repaired_membership": artifact(membership_path),
         "combined_observation_scores": artifact(score_path),
         "changes": artifact(change_path),
+        "candidate_catalog": artifact(args.catalog),
+        "context_evidence": artifact(args.context_evidence) if args.context_evidence else None,
+        "context_release_eligibility": context_summary,
         "repair_rois": repair_rois,
         "typed_layer_writeback_authority": typed_authority,
         "n_changed_observations": len(changes),

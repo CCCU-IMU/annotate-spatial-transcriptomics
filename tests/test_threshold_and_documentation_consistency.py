@@ -85,6 +85,7 @@ class ThresholdAndDocumentationConsistencyTests(unittest.TestCase):
         registry_consumers = (
             "build_resolution_grid_evidence.py",
             "close_exact_remainders.py",
+            "audit_catalog_wide_lineage_challengers.py",
             "materialize_parent_locked_fine_proposals.py",
             "materialize_final_release_v2_2.py",
             "validate_lineage_controller_release.py",

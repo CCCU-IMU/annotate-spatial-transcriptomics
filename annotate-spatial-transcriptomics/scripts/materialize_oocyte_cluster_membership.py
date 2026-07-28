@@ -11,7 +11,10 @@ import argparse
 import json
 from pathlib import Path
 
-from lineage_controller_lib import read_tsv, sha256, write_tsv
+from lineage_controller_lib import (
+    apply_candidate_context, candidate_can_release, catalog_candidates,
+    read_tsv, sha256, write_tsv,
+)
 
 
 ALLOWED_EXCLUSION_CLASSES = {
@@ -24,11 +27,26 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--canonical-membership", required=True, type=Path)
     ap.add_argument("--passing-clusters", required=True, type=Path)
+    ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--explicit-exclusions", type=Path)
     ap.add_argument("--cell-id-column", default="cell_id")
     ap.add_argument("--cluster-column", default="recluster_cluster")
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
+
+    candidates = catalog_candidates(json.loads(args.catalog.read_text(encoding="utf-8")))
+    context_summary = apply_candidate_context(
+        candidates, read_tsv(args.context_evidence) if args.context_evidence else []
+    )
+    oocyte_candidates = sorted(
+        candidate_id for candidate_id, candidate in candidates.items()
+        if str(candidate.get("candidate_role", "")) == "broad"
+        and str(candidate.get("release_broad_label", "")) == "Oocyte"
+        and candidate_can_release(candidate)
+    )
+    if not oocyte_candidates:
+        raise SystemExit("canonical Oocyte materialization has no context-eligible broad candidate")
 
     canonical = read_tsv(args.canonical_membership)
     passing_rows = read_tsv(args.passing_clusters)
@@ -112,6 +130,10 @@ def main() -> int:
         "schema_version": "2.2",
         "canonical_membership_sha256": sha256(args.canonical_membership),
         "passing_clusters_sha256": sha256(args.passing_clusters),
+        "candidate_catalog_sha256": sha256(args.catalog),
+        "context_evidence_sha256": sha256(args.context_evidence) if args.context_evidence else "",
+        "context_release_eligibility": context_summary,
+        "eligible_oocyte_candidate_ids": oocyte_candidates,
         "canonical_n": len(canonical),
         "passing_clusters": sorted(passing),
         "eligible_canonical_members_n": eligible_n,

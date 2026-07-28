@@ -14,6 +14,9 @@
 - exact remainder 中已由正交证据确认的跨谱系 blocker 不再被混合 remainder 的 aggregate contradiction 二次过滤；state-only 程序不充当 broad parent blocker，避免把仍含 Smooth muscle 等独立程序的 remainder 整体误写回 Granulosa 或 Stromal。
 - broad 只能在全部 cohort 合并后冻结；fine/state 只可从已解析的高纯度二级 subcluster 提案，并在正确 frozen parent 内物化。Granulosa 的可选 fine 与 Hypoxia/Proliferation/Atresia/Luteinization state 已纳入可执行目录。
 - Atlas 仅在 broad freeze 后运行：可直接救回 calibrated、非 OOD 的 unlabeled broad，但不能静默覆盖已有 broad 或写 fine。最终才执行完整性、缺失谱系、unmodeled、fine census 和 `QC <10% 且 <50,000`。
+- Atlas、组织学修复之后新增以 broad 细胞类型为一级单位的双侧复核：每个已注释 broad 只形成一个任务，同时检查现有成员过召回和全组织其余成员欠召回；原二级 source subcluster、直接多家族空间组件及 selected-resolution DEG/pseudobulk 触发的 group watch 仅作为内部证据与精确 patch 边界。审计本身无写回权，最多接受两轮细胞类型级证据决策；每次改动后完整重审，默认复用稳定分区而不重跑 SCT/PCA/SNN/Leiden。
+- 逐细胞类型复核新增不可省略的四项结论：当前成员纯度、全 query 召回、分子身份与整张切片空间合理性；缺一项不能关闭已有 broad。新增由 profile/catalog 自动生成的完整 marker-family manifest、项目自身非 SCT raw-count 导出器和 broad 级证据包，specific-lineage recall 同时回流为当前标签的 over-recall 问题；generic Stromal 禁止凭 ECM 从全组织召回，Oocyte 保留 canonical targeted-cohort 路径。
+- 修复阶段上下文门控泄漏：上下文只授予候选“可评估权限”，不提供身份分数。`not_evaluable`/`refuted`/缺失上下文候选及其依赖 fine 不再计入完整性阳性、Atlas 救回、broad freeze、语义 patch、fine 物化或最终发布；反之，membership 中出现上下文不可评估标签会硬失败。初步完整性审计不再提前截断后续生物学复核。
 - 修复 post-merge contextual-parent 过度写回：空间邻域只能建立解剖背景；目标父类必须在同一 selected 二级亚簇具有独立多通道程序，才可把 lineage-of-origin component 写回该父类。缺少目标父类来源支持时保留 `unresolved_biological`。严格 component 自身的多家族/空间支持现在作为正式局部来源证据进入 completeness，避免少数真实程序因源亚簇 aggregate 稀释而被误判为无支持。
 - 新增无标签权威的 `derived_partition_cache`。当输入、精确 cohort membership、grid/contract、seed 与聚类脚本哈希均未变化时，语义/scorer/writeback/report 修订可复用 raw-count SCT/PCA/SNN/Leiden 分区，只重算完整目录评分、分辨率选择和下游 membership；任一聚类输入变化或 `failed_diagnostic` 来源都会使复用失败。
 - 新增 `apply_cell_id_membership_patch.py`，所有语义修复与 proposal overlay 必须按唯一 `cell_id` 连接、恢复 base 顺序并证明非 proposal 成员未改变；禁止把 marker 矩阵或候选表的行序直接赋给 membership。

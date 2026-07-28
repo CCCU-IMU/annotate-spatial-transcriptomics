@@ -10,7 +10,7 @@ Release-critical scoring, writeback, resolution-selection and residual-QC defaul
 2. `cluster_cohort_recluster` independently reclusters every initial cluster from project-local non-SCT raw counts and freezes full-catalog subcluster evidence.
 3. `local_mixed_subcluster_split` resolves only second-round subclusters with two or more separable competing identity cores.
 4. `merge_and_freeze_broad` merges mutually exclusive second-round outcomes and creates formal broad membership.
-5. `atlas_and_completeness_review` maps all cells at broad level, rescues only unlabeled cells and audits present, absent and unmodeled lineages.
+5. `atlas_and_completeness_review` maps all cells at broad level, lets Atlas rescue only unlabeled cells, performs bounded biological corrections, and then audits every context-evaluable broad on both present-label precision and outside-label recall.
 6. `materialize_final_release` parent-locks fine labels, preserves states and converts terminal unresolved observations to typed QC.
 
 The first phase has no release authority. It cannot emit formal broad, fine, QC or release membership. Artifacts registered as `failed_diagnostic` cannot enter any phase as membership or reference truth.
@@ -55,7 +55,13 @@ Fine proposals become labels only under the matching frozen broad parent. State 
 
 Present/zero-census lineages, embedded programs, unmodeled programs and the complete parent-by-fine catalog are audited after merge. A post-merge component that passed its own strict multi-family and spatial validation counts as source-linked local evidence even when the source subcluster aggregate diluted it. An anatomical parent override additionally requires an independently detected target-parent program in that same selected second-round subcluster; neighborhood or morphology alone cannot change identity, and an unsupported override remains `unresolved_biological`. Residual QC limits apply only during final materialization.
 
+After unresolved-only closure, perform one catalog-wide double-sided review for every context-evaluable broad. One broad cell type is the primary decision unit: its existing membership is checked for precision while all other observations are searched for recall in the same review. Original second-round source subclusters are internal evidence units. Recall uses a direct multi-family spatial component or a source-subcluster group watch when selected-resolution multichannel evidence predicts a lineage deficit that sparse observation scores could not localize. The latter requires targeted raw-count review and cannot assign an entire source group. The audit has no label authority. Exact cell-type decisions may be applied for at most two rounds, and each round must be followed by a complete repeat audit. A retained cell type is reusable only when its reviewed cell-ID scope signature is unchanged. Context-ineligible candidates are `not_evaluable`, never positive completeness evidence or Atlas/fine/final release targets.
+
+Context is evaluation permission, not identity evidence. Missing, conflicting, `refuted` or `not_evaluable` context removes every release path for that candidate and its context-dependent fine children. Such candidates remain visible in the audit but cannot make a zero census positive. Conversely, an already released context-ineligible broad is a hard inconsistency that must return to its exact source membership; it cannot be excused by fine-program counts.
+
 For sheep ovary, a post-Atlas follicle-histology failure may trigger one canonical bounded iteration only when all open biological issues are tied to explicit follicle ROI IDs. Rebuild every affected ROI from the selected input's non-SCT raw-count assay through SCT/PCA/SNN/Leiden, score the full catalog, and authorize writeback only for typed failing wall layers. Direct coherent Theca, vascular and mature nonvascular Smooth-muscle identities compete before the generic Stromal remainder. Merge fresh ROI scores into the complete disjoint score ledger and rerun the biological validator on the full membership. A cropped ROI review cannot close Oocyte, other broad classes or whole-section spatial localization.
+
+A present broad review cannot close until that one cell type has explicit current-member precision, whole-query recall, molecular identity and whole-section spatial-consistency conclusions. Internal source groups and spatial components provide evidence and patch bounds only.
 
 ## Determinism and completion
 
@@ -69,5 +75,7 @@ Use stable ID sorting, a fixed master seed and deterministic per-resolution/per-
 - local splitting only behind a recorded mixed-subcluster trigger;
 - exact disjoint broad coverage at merge;
 - post-merge-only Atlas, fine and QC authority;
+- context-ineligible candidates cannot enter scoring decisions, Atlas rescue, bounded review writeback, fine materialization, completeness positives or final release;
+- every context-evaluable broad has a closed catalog-wide precision/recall review after the last membership change;
 - one raw-count, typed, bounded follicle iteration with full-membership revalidation;
 - typed residual reasons, completeness closure and final semantic hash.

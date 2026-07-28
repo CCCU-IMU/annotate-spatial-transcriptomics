@@ -8,7 +8,10 @@ import json
 from pathlib import Path
 
 from evidence_schema_lib import sha256
-from lineage_controller_lib import deterministic_membership_hash, read_tsv, write_tsv
+from lineage_controller_lib import (
+    apply_candidate_context, candidate_can_release, catalog_candidates,
+    deterministic_membership_hash, read_tsv, write_tsv,
+)
 
 
 def main() -> int:
@@ -16,12 +19,27 @@ def main() -> int:
     ap.add_argument("--frozen-broad", required=True, type=Path)
     ap.add_argument("--routing", required=True, type=Path)
     ap.add_argument("--atlas-validation", required=True, type=Path)
+    ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
     validation = json.loads(args.atlas_validation.read_text(encoding="utf-8"))
     if validation.get("status") != "PASS":
         raise SystemExit("Atlas review queue is not fully closed")
+    candidates = catalog_candidates(
+        json.loads(args.catalog.read_text(encoding="utf-8"))
+    )
+    context_summary = apply_candidate_context(
+        candidates,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
+    context_eligible_broad = {
+        str(candidate.get("release_broad_label", ""))
+        for candidate in candidates.values()
+        if str(candidate.get("candidate_role", "")) == "broad"
+        and candidate_can_release(candidate)
+    }
     frozen_rows = read_tsv(args.frozen_broad)
     route_rows = read_tsv(args.routing)
     frozen = {str(row.get("cell_id", "")): row for row in frozen_rows}
@@ -46,6 +64,10 @@ def main() -> int:
         elif route_name in {"direct_unlabeled_broad_return", "direct_qc_broad_return"}:
             if not proposed:
                 raise SystemExit("direct Atlas rescue lacks a proposed broad label")
+            if proposed not in context_eligible_broad:
+                raise SystemExit(
+                    "direct Atlas rescue targets a context-ineligible broad label"
+                )
             row["final_state"] = "defined_broad_only"
             row["final_broad_label"] = proposed
             row["confidence"] = "moderate"
@@ -84,6 +106,14 @@ def main() -> int:
             "path": str(args.atlas_validation.resolve()),
             "sha256": sha256(args.atlas_validation),
         },
+        "candidate_catalog": {
+            "path": str(args.catalog.resolve()), "sha256": sha256(args.catalog),
+        },
+        "context_evidence": (
+            {"path": str(args.context_evidence.resolve()), "sha256": sha256(args.context_evidence)}
+            if args.context_evidence else None
+        ),
+        "context_release_eligibility": context_summary,
     }
     manifest_path = args.out / "post_atlas_membership_manifest.json"
     manifest_path.write_text(

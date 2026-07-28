@@ -372,6 +372,26 @@ def main() -> int:
         errors.append("post-merge completeness audit is missing or stale")
     elif load(completeness_path).get("status") != "PASS":
         errors.append("post-merge completeness audit did not pass")
+    catalog_review_path = artifact_path(
+        atlas.get("catalog_wide_lineage_review", {}),
+        "catalog-wide lineage review", errors,
+    )
+    if catalog_review_path:
+        catalog_review = load(catalog_review_path)
+        if (
+            catalog_review.get("status") != "PASS"
+            or catalog_review.get("stage")
+            != "post_atlas_catalog_wide_lineage_review"
+            or catalog_review.get("catalog_wide_double_sided_review") is not True
+            or int(catalog_review.get("review_queue_n", -1)) != 0
+            or catalog_review.get("membership", {}).get("sha256")
+            != atlas.get("membership", {}).get("sha256")
+        ):
+            errors.append(
+                "catalog-wide precision/recall review is open, stale or on another membership"
+            )
+    if atlas.get("catalog_wide_lineage_review_status") != "PASS":
+        errors.append("catalog-wide lineage review did not pass")
 
     final_controller = load(args.final_manifest)
     if not bound(final_controller, args.contract) or final_controller.get("phase") != "materialize_final_release":

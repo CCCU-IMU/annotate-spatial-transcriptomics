@@ -8,6 +8,9 @@ import json
 from pathlib import Path
 
 from lineage_controller_lib import (
+    apply_candidate_context,
+    candidate_can_release,
+    catalog_candidates,
     deterministic_membership_hash,
     read_tsv,
     sha256,
@@ -34,6 +37,8 @@ def main() -> int:
     parser.add_argument("--base-membership", required=True, type=Path)
     parser.add_argument("--proposal", required=True, type=Path)
     parser.add_argument("--update-column", required=True, action="append")
+    parser.add_argument("--catalog", type=Path)
+    parser.add_argument("--context-evidence", type=Path)
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args()
 
@@ -53,6 +58,42 @@ def main() -> int:
     for column in columns:
         if any(column not in row for row in proposal_rows):
             raise SystemExit(f"proposal lacks update column: {column}")
+    identity_columns = {
+        "final_broad_label", "broad_label", "proposed_broad_label",
+        "final_fine_label",
+    }
+    context_summary = None
+    if identity_columns.intersection(columns):
+        if not args.catalog:
+            raise SystemExit(
+                "identity-label patches require --catalog and a context recheck"
+            )
+        candidates = catalog_candidates(
+            json.loads(args.catalog.read_text(encoding="utf-8"))
+        )
+        context_summary = apply_candidate_context(
+            candidates,
+            read_tsv(args.context_evidence) if args.context_evidence else [],
+        )
+        eligible_broad = {
+            str(candidate.get("release_broad_label", ""))
+            for candidate in candidates.values()
+            if candidate_can_release(candidate)
+        }
+        eligible_fine = {
+            str(candidate.get("release_fine_label", ""))
+            for candidate in candidates.values()
+            if candidate_can_release(candidate)
+            and str(candidate.get("release_fine_label", ""))
+        }
+        for row in proposal_rows:
+            for column in identity_columns.intersection(columns):
+                value = str(row.get(column, "")).strip()
+                allowed = eligible_fine if column == "final_fine_label" else eligible_broad
+                if value and value not in allowed:
+                    raise SystemExit(
+                        f"identity-label patch is unknown or context-ineligible: {column}={value}"
+                    )
 
     output_rows: list[dict[str, object]] = []
     for base_row in base_rows:
@@ -112,6 +153,18 @@ def main() -> int:
         "base_order_preserved": True,
         "proposal_ids_subset_of_base": True,
         "nonproposal_values_unchanged": True,
+        "candidate_catalog": (
+            {"path": str(args.catalog.resolve()), "sha256": sha256(args.catalog)}
+            if args.catalog else None
+        ),
+        "context_evidence": (
+            {
+                "path": str(args.context_evidence.resolve()),
+                "sha256": sha256(args.context_evidence),
+            }
+            if args.context_evidence else None
+        ),
+        "context_release_eligibility": context_summary,
     }
     manifest_path = args.out.parent / f"{args.out.name}.cell_id_patch_manifest.json"
     manifest_path.write_text(

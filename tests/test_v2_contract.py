@@ -273,7 +273,8 @@ class V2ContractTests(unittest.TestCase):
                         "--heldout-mapping", mapping, "--combined-mapping", mapping, "--out", calibration)
             self.assertEqual(bound.returncode, 0, bound.stdout + bound.stderr)
             result = run(SCRIPTS / "route_global_atlas_v2.py", "--cell-ledger", ledger, "--atlas-mapping", mapping,
-                         "--calibration-manifest", calibration, "--workflow-profile", WORKFLOW, "--out", root / "out")
+                         "--calibration-manifest", calibration, "--workflow-profile", WORKFLOW,
+                         "--catalog", CATALOG, "--out", root / "out")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             with gzip.open(root / "out/atlas_state_routing.tsv.gz", "rt", encoding="utf-8", newline="") as handle:
                 rows = {row["cell_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
@@ -328,7 +329,8 @@ class V2ContractTests(unittest.TestCase):
             self.assertEqual(bound.returncode, 0, bound.stdout + bound.stderr)
             result = run(
                 SCRIPTS / "route_global_atlas_v2.py", "--cell-ledger", ledger, "--atlas-mapping", mapping,
-                "--calibration-manifest", calibration, "--workflow-profile", WORKFLOW, "--out", root / "out",
+                "--calibration-manifest", calibration, "--workflow-profile", WORKFLOW,
+                "--catalog", CATALOG, "--out", root / "out",
                 "--min-discordant-n", 2, "--min-discordant-fraction", 0.9,
             )
             self.assertEqual(result.returncode, 2, result.stdout + result.stderr)

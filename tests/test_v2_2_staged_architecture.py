@@ -744,6 +744,8 @@ class V22StagedArchitectureTests(unittest.TestCase):
             }))
             analysis = root / "analysis.tsv"
             write_tsv(analysis, [{"cell_id": "c1"}])
+            catalog = root / "catalog.json"
+            catalog.write_text(json.dumps(CATALOG), encoding="utf-8")
             candidate = root / "candidate.tsv.gz"
             write_tsv(candidate, [{
                 "cell_id": "c1", "source_boundary": "custom",
@@ -773,11 +775,16 @@ class V22StagedArchitectureTests(unittest.TestCase):
                     "path": str(source),
                     "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
                 }],
+                "candidate_catalog": {
+                    "path": str(catalog),
+                    "sha256": hashlib.sha256(catalog.read_bytes()).hexdigest(),
+                },
             }))
             result = run(
                 "merge_and_freeze_broad_membership.py",
                 "--contract", contract, "--stage-authority", authority,
                 "--analysis-membership", analysis,
+                "--catalog", catalog,
                 "--candidate-membership", candidate,
                 "--candidate-source-manifest", source,
                 "--out", root / "out",
@@ -1059,8 +1066,18 @@ class V22StagedArchitectureTests(unittest.TestCase):
                 "path": str(thresholds),
                 "sha256": hashlib.sha256(thresholds.read_bytes()).hexdigest(),
             }
+            catalog = root / "catalog.json"
+            catalog.write_text(json.dumps({"candidate_boundaries": [{
+                "candidate_id": "granulosa", "candidate_role": "broad",
+                "release_broad_label": "Granulosa", "release_fine_label": "",
+            }]}))
+            catalog_record = {
+                "path": str(catalog),
+                "sha256": hashlib.sha256(catalog.read_bytes()).hexdigest(),
+            }
             contract.write_text(json.dumps({
                 "threshold_registry": threshold_record,
+                "candidate_catalog": catalog_record,
             }))
             membership = root / "post_atlas.tsv"
             rows = []
@@ -1120,7 +1137,8 @@ class V22StagedArchitectureTests(unittest.TestCase):
             result = run(
                 "materialize_final_release_v2_2.py", "--contract", contract,
                 "--stage-authority", authority, "--post-atlas-membership", membership,
-                "--atlas-completeness-manifest", review, "--out", out,
+                "--atlas-completeness-manifest", review, "--catalog", catalog,
+                "--out", out,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             final = read_tsv(out / "final_release_membership.tsv.gz")

@@ -10,7 +10,8 @@ from pathlib import Path
 
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
-    catalog_candidates, group_candidate_detected, read_tsv, write_tsv,
+    apply_candidate_context, candidate_can_release, catalog_candidates,
+    group_candidate_detected, read_tsv, write_tsv,
 )
 
 
@@ -22,6 +23,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--membership", required=True, type=Path)
     ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--context-evidence", type=Path)
     ap.add_argument(
         "--cluster-evidence", required=True, action="append", type=Path,
         help="repeat once for every completed second-round cohort",
@@ -41,6 +43,10 @@ def main() -> int:
             "canonical post-merge component review whose accepted cell-level "
             "decisions can provide source support for minority local programs"
         ),
+    )
+    ap.add_argument(
+        "--catalog-wide-review-manifest", action="append", type=Path, default=[],
+        help="validated catalog-wide review apply manifests in chronological order",
     )
     ap.add_argument(
         "--defer-canonical-zero-to-biological-review",
@@ -71,14 +77,21 @@ def main() -> int:
 
     catalog_doc = json.loads(args.catalog.read_text(encoding="utf-8"))
     candidates = catalog_candidates(catalog_doc)
+    context_summary = apply_candidate_context(
+        candidates,
+        read_tsv(args.context_evidence) if args.context_evidence else [],
+    )
     candidate_universe = set(candidates)
     broad_candidates: dict[str, set[str]] = defaultdict(set)
+    broad_release_candidates: dict[str, set[str]] = defaultdict(set)
     fine_candidates: dict[str, set[str]] = defaultdict(set)
     for candidate_id, candidate in candidates.items():
         role = str(candidate.get("candidate_role", ""))
         broad = str(candidate.get("release_broad_label", ""))
         if role in {"broad", "fine"} and broad:
             broad_candidates[broad].add(candidate_id)
+        if role == "broad" and broad:
+            broad_release_candidates[broad].add(candidate_id)
         if role == "fine" and broad:
             fine_candidates[broad].add(candidate_id)
 
@@ -190,10 +203,68 @@ def main() -> int:
                 and not decision.startswith("remain_unresolved")
                 and cell_id and candidate_id and broad
             ):
+                if not candidate_can_release(candidates.get(candidate_id, {})):
+                    errors.append(
+                        f"{candidate_id}: post-merge review released a context-ineligible candidate"
+                    )
+                    continue
                 supported_post_merge_cells.add((cell_id, candidate_id, broad))
                 supported_post_merge_programs.add((
                     str(row.get("component_id", "")), candidate_id, broad
                 ))
+    supported_catalog_review_cells: set[tuple[str, str, str]] = set()
+    supported_catalog_review_programs: set[tuple[str, str, str]] = set()
+    previous_membership_path: Path | None = None
+    for index, path in enumerate(args.catalog_wide_review_manifest):
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            manifest.get("status") != "PASS_REQUIRES_NEXT_REVIEW_ROUND"
+            or manifest.get("stage") != "catalog_wide_lineage_review_apply"
+        ):
+            raise SystemExit("catalog-wide review apply manifest is not canonical PASS")
+        authority_record = manifest.get("stage_authority", {})
+        authority_path = Path(str(authority_record.get("path", "")))
+        if (
+            not authority_path.is_file()
+            or authority_record.get("sha256") != sha256(authority_path)
+        ):
+            raise SystemExit("catalog-wide review stage authority is missing or stale")
+        authority = json.loads(authority_path.read_text(encoding="utf-8"))
+        writer = Path(__file__).resolve().parent / "apply_catalog_wide_lineage_review.py"
+        writer_record = authority.get("scripts", {}).get(writer.name, {})
+        if (
+            authority.get("mode") != "stage_authority"
+            or authority.get("phase") != "atlas_and_completeness_review"
+            or Path(str(writer_record.get("path", ""))).resolve() != writer.resolve()
+            or writer_record.get("sha256") != sha256(writer)
+        ):
+            raise SystemExit("catalog-wide review was not written by the canonical controller")
+        source_record = manifest.get("source_membership", {})
+        result_record = manifest.get("membership", {})
+        source_path = Path(str(source_record.get("path", "")))
+        result_path = Path(str(result_record.get("path", "")))
+        if (
+            not source_path.is_file() or source_record.get("sha256") != sha256(source_path)
+            or not result_path.is_file() or result_record.get("sha256") != sha256(result_path)
+            or (previous_membership_path is not None and source_path.resolve() != previous_membership_path.resolve())
+        ):
+            raise SystemExit("catalog-wide review membership chain is missing or stale")
+        previous_membership_path = result_path
+        changes_record = manifest.get("changes", {})
+        changes_path = Path(str(changes_record.get("path", "")))
+        if not changes_path.is_file() or changes_record.get("sha256") != sha256(changes_path):
+            raise SystemExit("catalog-wide review changes are missing or stale")
+        for row in read_tsv(changes_path):
+            cell_id = str(row.get("cell_id", ""))
+            candidate_id = str(row.get("candidate_id", ""))
+            broad = str(row.get("new_broad_label", ""))
+            if cell_id and candidate_id and broad:
+                supported_catalog_review_cells.add((cell_id, candidate_id, broad))
+                supported_catalog_review_programs.add((
+                    str(row.get("review_id", "")), candidate_id, broad
+                ))
+    if previous_membership_path is not None and previous_membership_path.resolve() != args.membership.resolve():
+        raise SystemExit("last catalog-wide review manifest does not bind audited membership")
     unsupported_release_members: Counter[str] = Counter()
     unsupported_release_groups: dict[str, set[tuple[str, str]]] = defaultdict(set)
     for row in membership:
@@ -222,8 +293,13 @@ def main() -> int:
             source_supported = (
                 str(row.get("cell_id", "")), candidate_id, broad
             ) in supported_post_merge_cells
+        elif origin.startswith("catalog_wide_lineage_review_round_"):
+            source_supported = (
+                str(row.get("cell_id", "")), candidate_id, broad
+            ) in supported_catalog_review_cells
         supported = bool(
             candidate
+            and candidate_can_release(candidate)
             and str(candidate.get("release_broad_label", "")) == broad
             and source_supported
         )
@@ -233,8 +309,17 @@ def main() -> int:
 
     broad_rows: list[dict[str, object]] = []
     for broad, candidate_ids in sorted(broad_candidates.items()):
+        eligible_candidate_ids = {
+            candidate_id for candidate_id in candidate_ids
+            if candidate_can_release(candidates[candidate_id])
+        }
+        eligible_broad_release_ids = {
+            candidate_id for candidate_id in broad_release_candidates[broad]
+            if candidate_can_release(candidates[candidate_id])
+        }
+        context_ineligible_ids = candidate_ids - eligible_candidate_ids
         evidence = [
-            row for candidate_id in candidate_ids
+            row for candidate_id in eligible_candidate_ids
             for row in evidence_by_candidate.get(candidate_id, [])
         ]
         positive = [
@@ -242,19 +327,30 @@ def main() -> int:
             if detected(row, candidates[str(row.get("candidate_id", ""))])
         ]
         local_positive_n = sum(
-            candidate_id in candidate_ids
+            candidate_id in eligible_candidate_ids
             for _, _, candidate_id in (
                 supported_local_subsets | supported_local_remainders
             )
         )
         local_positive_n += sum(
-            candidate_id in candidate_ids and component_broad == broad
+            candidate_id in eligible_candidate_ids and component_broad == broad
             for _, candidate_id, component_broad in supported_post_merge_programs
+        )
+        local_positive_n += sum(
+            candidate_id in eligible_candidate_ids and component_broad == broad
+            for _, candidate_id, component_broad in supported_catalog_review_programs
         )
         positive_program_n = len(positive) + local_positive_n
         n_final = broad_census[broad]
         unsupported_n = unsupported_release_members[broad]
-        if n_final and positive_program_n and not unsupported_n:
+        if n_final and not eligible_broad_release_ids:
+            status = "blocked"
+            rationale = "released_broad_is_not_evaluable_under_bound_context"
+            errors.append(
+                f"{broad}: final membership exists although every broad release "
+                "candidate is context-ineligible"
+            )
+        elif n_final and positive_program_n and not unsupported_n:
             status = "supported"
             rationale = "each_non_atlas_source_group_matches_its_multichannel_candidate_program"
         elif n_final and atlas_rescue_census[broad] == n_final:
@@ -267,6 +363,9 @@ def main() -> int:
                 f"{broad}: {unsupported_n or n_final} released observations lack "
                 "source-linked second-round support"
             )
+        elif not eligible_broad_release_ids and context_ineligible_ids:
+            status = "not_evaluable"
+            rationale = "bound_context_does_not_permit_this_stage_dependent_lineage_evaluation"
         elif positive_program_n:
             canonical_zero = any(
                 str(candidates[candidate_id].get("writeback_strategy", ""))
@@ -297,6 +396,12 @@ def main() -> int:
         broad_rows.append({
             "broad_label": broad,
             "candidate_ids": ";".join(sorted(candidate_ids)),
+            "release_eligible_candidate_ids": ";".join(
+                sorted(eligible_candidate_ids)
+            ),
+            "context_not_evaluable_candidate_ids": ";".join(
+                sorted(context_ineligible_ids)
+            ),
             "final_n_observations": n_final,
             "selected_subcluster_evidence_n": len(evidence),
             "positive_program_n": positive_program_n,
@@ -320,7 +425,9 @@ def main() -> int:
     for parent in sorted(label for label in broad_census if label in fine_candidates):
         for candidate_id in sorted(fine_candidates[parent]):
             statuses = fine_status.get((parent, candidate_id), [])
-            if not statuses:
+            if not candidate_can_release(candidates[candidate_id]):
+                status = "not_evaluable"
+            elif not statuses:
                 status = "missing"
                 errors.append(f"{parent}/{candidate_id}: fine candidate was not audited")
             elif "supported" in statuses:
@@ -335,6 +442,9 @@ def main() -> int:
                 "candidate_id": candidate_id,
                 "status": status,
                 "evaluated_subcluster_n": len(statuses),
+                "context_status": candidates[candidate_id].get(
+                    "_context_status", "not_evaluable"
+                ),
             })
 
     unmodeled_rows: list[dict[str, str]] = []
@@ -418,7 +528,7 @@ def main() -> int:
         fine_path, fine_rows,
         fields=[
             "parent_broad_label", "candidate_id", "status",
-            "evaluated_subcluster_n",
+            "evaluated_subcluster_n", "context_status",
         ],
     )
     write_tsv(unmodeled_path, unmodeled_rows)
@@ -436,6 +546,13 @@ def main() -> int:
         "supported_post_merge_component_observation_n": len(
             supported_post_merge_cells
         ),
+        "supported_catalog_wide_review_observation_n": len(
+            supported_catalog_review_cells
+        ),
+        "catalog_wide_review_apply_manifests": [
+            {"path": str(path.resolve()), "sha256": sha256(path)}
+            for path in args.catalog_wide_review_manifest
+        ],
         "membership": {
             "path": str(args.membership.resolve()),
             "sha256": sha256(args.membership),
@@ -444,6 +561,14 @@ def main() -> int:
             "path": str(args.catalog.resolve()),
             "sha256": sha256(args.catalog),
         },
+        "context_evidence": (
+            {
+                "path": str(args.context_evidence.resolve()),
+                "sha256": sha256(args.context_evidence),
+            }
+            if args.context_evidence else None
+        ),
+        "context_release_eligibility": context_summary,
         "broad_audit": {"path": str(broad_path.resolve()), "sha256": sha256(broad_path)},
         "fine_audit": {"path": str(fine_path.resolve()), "sha256": sha256(fine_path)},
         "unmodeled_audit": {"path": str(unmodeled_path.resolve()), "sha256": sha256(unmodeled_path)},
