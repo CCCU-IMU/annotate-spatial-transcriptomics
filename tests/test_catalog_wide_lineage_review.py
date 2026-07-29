@@ -45,6 +45,59 @@ def artifact(path: Path) -> dict[str, str]:
     return {"path": str(path.resolve()), "sha256": sha(path)}
 
 
+def write_evidence_packet_manifest(
+    root: Path, review_manifest: Path, queue: list[dict[str, str]],
+) -> tuple[Path, dict[str, str]]:
+    packet_hashes: dict[str, str] = {}
+    rows = []
+    for row in queue:
+        review_id = row["review_id"]
+        packet_hashes[review_id] = hashlib.sha256(
+            f"packet::{review_id}::{row['unit_signature']}".encode()
+        ).hexdigest()
+        present = row["review_mode"] == "broad_lineage_review"
+        recall_question = 5 if row["target_broad_label"] == "Granulosa" else 0
+        rows.append({
+            "review_id": review_id, "review_mode": row["review_mode"],
+            "target_broad_label": row["target_broad_label"],
+            "unit_signature": row["unit_signature"],
+            "evidence_packet_sha256": packet_hashes[review_id],
+            "current_n": 5 if present else 0,
+            "current_competitor_question_n": 0,
+            "cross_type_over_recall_question_n": 0,
+            "outside_recall_question_n": recall_question,
+            "precision_evaluable": str(present).lower(),
+            "recall_evaluable": "true", "molecular_evaluable": "true",
+            "spatial_evaluable": "true",
+        })
+    packet_index = root / "evidence_packet_index.tsv"
+    write_tsv(packet_index, rows)
+    current_questions = root / "current_questions.tsv.gz"
+    write_tsv(current_questions, [{
+        "broad_label": "Stromal/mesenchymal", "cell_id": "c0",
+    }])
+    recall_questions = root / "recall_questions.tsv.gz"
+    write_tsv(recall_questions, [{
+        "broad_label": "Granulosa", "cell_id": f"c{index}",
+    } for index in range(5)])
+    broad_manifest = root / "broad_evidence_manifest.json"
+    broad_manifest.write_text(json.dumps({
+        "artifacts": {
+            "current_member_questions": artifact(current_questions),
+            "recall_membership": artifact(recall_questions),
+        },
+    }), encoding="utf-8")
+    manifest = root / "evidence_packet_manifest.json"
+    manifest.write_text(json.dumps({
+        "status": "PASS",
+        "artifact_role": "broad_cell_type_review_evidence_packet_index",
+        "review_manifest": artifact(review_manifest),
+        "broad_evidence_manifest": artifact(broad_manifest),
+        "packet_index": artifact(packet_index),
+    }), encoding="utf-8")
+    return manifest, packet_hashes
+
+
 def cluster_evidence(cluster: str, candidate: str, positive: bool) -> dict[str, object]:
     return {
         "resolution_role": "selected", "source_boundary": "cohort_1",
@@ -252,12 +305,16 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
                 "candidate_id": "granulosa",
             } for index in range(5)])
             decisions = root / "decisions.tsv"
+            packet_manifest, packet_hashes = write_evidence_packet_manifest(
+                root, review_1 / "catalog_wide_lineage_review_manifest.json", queue
+            )
             decision_rows = []
             for row in queue:
                 recall = row["target_broad_label"] == "Granulosa"
                 decision_rows.append({
                     "review_id": row["review_id"], "review_mode": row["review_mode"],
                     "outcome": "apply_cell_type_membership_patch" if recall else "retain_current_cell_type",
+                    "evidence_packet_sha256": packet_hashes[row["review_id"]],
                     "current_member_precision": "not_applicable" if recall else "supported",
                     "whole_query_recall": "under_recall_detected" if recall else "complete",
                     "spatial_consistency": "localized_issue" if recall else "consistent",
@@ -273,6 +330,7 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
             result = subprocess.run([
                 sys.executable, str(SCRIPTS / "validate_catalog_wide_lineage_review_decisions.py"),
                 "--review-manifest", str(review_1 / "catalog_wide_lineage_review_manifest.json"),
+                "--evidence-packet-manifest", str(packet_manifest),
                 "--decisions", str(decisions), "--out", str(validation_out),
             ], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
@@ -321,11 +379,12 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
                 "--previous-review-manifest", str(review_1 / "catalog_wide_lineage_review_manifest.json"),
                 "--prior-decision-validation", str(validation), "--out", str(review_2),
             ], capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+            self.assertEqual(result.returncode, 2, result.stderr or result.stdout)
             manifest = json.loads(
                 (review_2 / "catalog_wide_lineage_review_manifest.json").read_text()
             )
-            self.assertEqual(manifest["status"], "PASS")
+            self.assertEqual(manifest["status"], "ITERATION_REQUIRED")
+            self.assertEqual(manifest["review_queue_n"], 2)
 
 
 class CatalogWideLineageReviewArchitectureTests(unittest.TestCase):
@@ -347,6 +406,10 @@ class CatalogWideLineageReviewArchitectureTests(unittest.TestCase):
         self.assertIn("--lineage-review-decisions", controller)
         self.assertIn("catalog_wide_lineage_review_status", validator)
         self.assertIn("catalog_wide_double_sided_review", validator)
+        audit = (SCRIPTS / "audit_catalog_wide_lineage_challengers.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("逐大类全样本复核", audit)
 
     def test_review_thresholds_are_centralized(self) -> None:
         thresholds = json.loads(THRESHOLDS.read_text(encoding="utf-8"))

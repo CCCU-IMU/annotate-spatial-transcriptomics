@@ -2,6 +2,9 @@
 
 ## 2.2.0 — development target (unreleased)
 
+- 修复 D05521A1/D05521C3 暴露的逐大类复核形式通过漏洞：每个 broad 现在必须绑定同一 membership 上的当前成员精度、全 query 召回、raw-count/全转录组 pseudobulk 与空间证据包；自由文本关键词和项目本地硬编码 PASS 不再构成证据，有未解决 challenger 时必须 exact cell-ID patch 或 targeted review，任一 patch 后全部 broad 重新开审。
+- 羊卵巢 Oocyte canonical 与 follicle-ROI 状态进入相应 broad 的 evidence packet；对话阶段名固定为“逐大类全样本复核”，不再以“目录复核/来源组复核/强制重放”等近义词替代。
+- 修复运行与产物边界：正式阶段增加 exact Python/R compile/import/reader 预检；大 cohort 强制单 resolution worker 并生成经验内存计划；R entrypoint 不再 `chdir=TRUE`；Atlas 可选字段在 disjoint union 后标准化，非空 review queue 返回可恢复的 `REVIEW_REQUIRED`；cache 使用 membership semantic hash；incident validation 与 membership transform ledger 均绑定当前来源。
 - 将正式架构改为“第一轮只建 cohort、第二轮重聚类负责注释”。第一轮仅生成 provisional program/watch 和精确 cluster membership，不能产生 broad/fine/QC release membership，也不再运行全对象 candidate-local/remainder 闭环。
 - 每个初始 cluster 都与第一轮 membership 哈希精确绑定，并从项目自身非 SCT raw counts 执行 `SCT v2/glmGamPoi → PCA → query-only SNN → Leiden grid`；极小 cohort 显式记录 `underpowered_not_evaluable`，不继承 provisional broad。
 - 全组织分辨率选择优先空间结构与相邻稳定性；第二轮分辨率选择优先身份程序、DEG/anti-DEG、pseudobulk 和相邻稳定性。两者使用同一确定性选择器但不同、显式绑定的 selection purpose。

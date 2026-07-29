@@ -34,6 +34,7 @@ from lineage_controller_lib import (
     candidate_can_release,
     candidate_can_support_broad_review,
     catalog_candidates,
+    deterministic_cell_id_set_hash,
     read_tsv,
 )
 
@@ -88,12 +89,19 @@ def main() -> int:
     ap.add_argument("--count-export", required=True, type=Path)
     ap.add_argument("--marker-manifest", required=True, type=Path)
     ap.add_argument("--membership", required=True, type=Path)
-    ap.add_argument("--coordinates", required=True, type=Path)
+    ap.add_argument("--review-manifest", required=True, type=Path)
+    ap.add_argument("--coordinates", type=Path)
     ap.add_argument("--catalog", required=True, type=Path)
+    ap.add_argument("--threshold-registry", required=True, type=Path)
     ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
+    threshold_document = json.loads(
+        args.threshold_registry.read_text(encoding="utf-8")
+    )
+    scoring_policy = threshold_document["scoring_policy"]
+    review_policy = threshold_document["catalog_wide_lineage_review_policy"]
     export_manifest_path = args.count_export / "cell_type_review_count_export_manifest.json"
     export_manifest = json.loads(export_manifest_path.read_text(encoding="utf-8"))
     if (
@@ -102,6 +110,30 @@ def main() -> int:
         or export_manifest.get("raw_count_assay") == "SCT"
     ):
         raise SystemExit("cell-type review export is not project-local raw counts")
+
+    review = json.loads(args.review_manifest.read_text(encoding="utf-8"))
+    if (
+        review.get("stage") != "post_atlas_catalog_wide_lineage_review"
+        or review.get("status") != "ITERATION_REQUIRED"
+        or review.get("catalog_wide_double_sided_review") is not True
+    ):
+        raise SystemExit("broad cell-type evidence requires one open canonical review round")
+    review_membership = review.get("membership", {})
+    if (
+        Path(str(review_membership.get("path", ""))).resolve()
+        != args.membership.resolve()
+        or review_membership.get("sha256") != sha256(args.membership)
+    ):
+        raise SystemExit("cell-type evidence membership differs from the open review")
+    queue_record = review.get("artifacts", {}).get("review_queue", {})
+    queue_path = Path(str(queue_record.get("path", "")))
+    if not queue_path.is_file() or queue_record.get("sha256") != sha256(queue_path):
+        raise SystemExit("cell-type review queue is missing or stale")
+    queue = pd.read_csv(queue_path, sep="\t", dtype=str).fillna("")
+    if queue.empty or queue.review_id.eq("").any() or queue.review_id.duplicated().any():
+        raise SystemExit("cell-type review queue must contain unique nonempty review_id")
+    if queue.target_broad_label.eq("").any() or queue.target_broad_label.duplicated().any():
+        raise SystemExit("one open review round must contain exactly one task per broad type")
 
     marker_manifest = pd.read_csv(args.marker_manifest, sep="\t", dtype=str).fillna("")
     gene_map = pd.read_csv(args.count_export / "cell_type_review_gene_map.tsv", sep="\t", dtype=str).fillna("")
@@ -113,7 +145,10 @@ def main() -> int:
     if counts.shape != (len(present_genes), len(cells)):
         raise SystemExit("raw-count marker matrix dimensions differ from its gene/cell ledgers")
     membership = pd.read_csv(args.membership, sep="\t", dtype=str, low_memory=False).fillna("")
-    coordinates = pd.read_csv(args.coordinates, sep="\t", dtype={"cell_id": str})
+    coordinate_path = args.coordinates or Path(str(export_manifest.get("coordinates", "")))
+    if not coordinate_path.is_file():
+        raise SystemExit("cell-type review coordinate ledger is missing")
+    coordinates = pd.read_csv(coordinate_path, sep="\t", dtype={"cell_id": str})
     required_membership = {"cell_id", "final_broad_label", "source_boundary", "source_cluster"}
     if not required_membership.issubset(membership):
         raise SystemExit("cell-type review membership lacks broad/source columns")
@@ -127,7 +162,7 @@ def main() -> int:
         raise SystemExit("cell order changed while joining cell-type review inputs")
     n = len(data)
     xy = data[["x", "y"]].to_numpy(dtype=float)
-    k = min(12, max(1, n - 1))
+    k = min(int(review_policy["spatial_knn_k"]), max(1, n - 1))
     tree = cKDTree(xy)
     neighbors = tree.query(xy, k=k + 1, workers=max(1, args.workers))[1][:, 1:]
 
@@ -162,7 +197,9 @@ def main() -> int:
         genes = sorted(set(frame.gene))
         direct_gene_n = np.vstack([detected[gene] for gene in genes]).sum(axis=0)
         local_gene_n = np.vstack([
-            local_detected[gene] >= 0.10 for gene in genes
+            local_detected[gene]
+            >= float(scoring_policy["local_gene_detection_fraction"])
+            for gene in genes
         ]).sum(axis=0)
         direct_score = top_two_mean([scaled[gene] for gene in genes], n)
         local_score = top_two_mean([local_scaled[gene] for gene in genes], n)
@@ -172,7 +209,10 @@ def main() -> int:
             | (local_gene_n >= 3)
         )
         family_evidence[(candidate_id, family_id)] = {
-            "score": (0.35 * direct_score + 0.65 * local_score).astype(np.float32),
+            "score": (
+                float(scoring_policy["direct_weight"]) * direct_score
+                + float(scoring_policy["local_weight"]) * local_score
+            ).astype(np.float32),
             "coherent": coherent,
             "direct_gene_n": direct_gene_n.astype(np.int16),
         }
@@ -215,8 +255,18 @@ def main() -> int:
         ]).sum(axis=0)
         candidate_evidence[candidate_id] = {
             "score": score,
-            "support": (family_n >= required_n) & (score > 0.02),
-            "direct_seed": (direct_family_n >= min(2, len(tested))) & (total_direct_gene_n >= 3),
+            "support": (family_n >= required_n) & (
+                score > float(review_policy["minimum_raw_review_family_score"])
+            ),
+            "direct_seed": (
+                direct_family_n >= min(
+                    int(review_policy["minimum_raw_review_direct_families"]),
+                    len(tested),
+                )
+            ) & (
+                total_direct_gene_n
+                >= int(review_policy["minimum_raw_review_direct_genes"])
+            ),
             "family_n": family_n,
         }
         candidate_to_broad[candidate_id] = str(candidate.get("release_broad_label", ""))
@@ -237,16 +287,47 @@ def main() -> int:
             "direct_seed": seed.any(axis=0),
         }
 
-    present_broads = sorted({label for label in data.final_broad_label if label in broad_evidence})
+    review_targets = queue[[
+        "review_id", "review_mode", "target_broad_label", "unit_signature",
+    ]].sort_values("target_broad_label", kind="mergesort")
+    missing_target_evidence = sorted(
+        set(review_targets.target_broad_label) - set(broad_evidence)
+    )
+    if missing_target_evidence:
+        raise SystemExit(
+            "open broad review lacks catalog-derived raw-count evidence: "
+            + ", ".join(missing_target_evidence)
+        )
+    target_metadata = {
+        str(row.target_broad_label): row
+        for row in review_targets.itertuples(index=False)
+    }
+    target_marker_inventory: dict[str, dict[str, int]] = {}
+    for broad, frame in marker_manifest.loc[
+        marker_manifest.evidence_role.eq("positive_family")
+    ].groupby("broad_label", sort=True):
+        requested = set(frame.gene)
+        available = requested & set(present_genes)
+        requested_families = set(frame.family_id)
+        available_families = set(frame.loc[frame.gene.isin(available), "family_id"])
+        target_marker_inventory[str(broad)] = {
+            "positive_marker_n_requested": len(requested),
+            "positive_marker_n_available": len(available),
+            "positive_family_n_requested": len(requested_families),
+            "positive_family_n_available": len(available_families),
+        }
     specific_broads = [broad for broad in broad_evidence if broad != "Stromal/mesenchymal"]
     summary_rows: list[dict[str, object]] = []
     precision_rows: list[dict[str, object]] = []
     component_rows: list[dict[str, object]] = []
     component_member_rows: list[dict[str, object]] = []
+    current_question_by_key: dict[tuple[str, str], dict[str, object]] = {}
+    plot_rows: list[dict[str, object]] = []
     args.out.mkdir(parents=True, exist_ok=True)
     plot_dir = args.out / "plots"
     plot_dir.mkdir(exist_ok=True)
-    for broad in present_broads:
+    for broad in sorted(target_metadata):
+        review_row = target_metadata[broad]
         current = data.final_broad_label.eq(broad).to_numpy()
         target = broad_evidence[broad]
         other_broads = [name for name in specific_broads if name != broad]
@@ -273,13 +354,26 @@ def main() -> int:
             ].to_numpy()
             group_support_fraction = float(target["support"][source_ids].mean())
             current_fraction = len(ids) / max(1, len(source_ids))
-            group_supported = group_support_fraction >= 0.10 and float(np.median(target["score"][source_ids])) > 0.01
-            use_inheritance = group_supported and current_fraction >= 0.50
+            group_supported = (
+                group_support_fraction
+                >= float(review_policy["minimum_recall_direct_seed_fraction"])
+                and float(np.median(target["score"][source_ids]))
+                > float(review_policy["minimum_raw_review_group_median_score"])
+            )
+            use_inheritance = (
+                group_supported
+                and current_fraction
+                >= float(review_policy["minimum_present_label_supported_fraction"])
+            )
             if use_inheritance:
                 inherited[ids] = ~target["support"][ids]
             competitor = (
                 (best_other_label[ids] != "")
-                & (best_other_score[ids] >= target["score"][ids] + 0.10)
+                & (
+                    best_other_score[ids]
+                    >= target["score"][ids]
+                    + float(review_policy["minimum_recall_seed_evidence_margin"])
+                )
                 & ~target["support"][ids]
             )
             precision_rows.append({
@@ -295,15 +389,46 @@ def main() -> int:
         effective_current = current & (target["support"] | inherited)
         competitor_question = (
             current & ~effective_current & (best_other_label != "")
-            & (best_other_score >= target["score"] + 0.10)
+            & (
+                best_other_score
+                >= target["score"]
+                + float(review_policy["minimum_recall_seed_evidence_margin"])
+            )
         )
+        unsupported_current = current & ~effective_current
+        for index in np.flatnonzero(unsupported_current):
+            current_question_by_key[(broad, str(data.cell_id.iloc[index]))] = {
+                "broad_label": broad,
+                "cell_id": str(data.cell_id.iloc[index]),
+                "question_reason": (
+                    "competing_specific_lineage"
+                    if competitor_question[index]
+                    else "insufficient_current_identity_support"
+                ),
+                "challenger_broad_label": str(best_other_label[index]),
+                "target_score": float(target["score"][index]),
+                "challenger_score": float(best_other_score[index]),
+            }
         recall = np.zeros(n, dtype=bool)
         accepted_components: list[np.ndarray] = []
         if broad != "Stromal/mesenchymal" and broad != "Oocyte":
-            recall = (~current) & target["support"] & (margin >= 0.08)
+            recall = (
+                (~current) & target["support"]
+                & (
+                    margin
+                    >= float(review_policy["minimum_raw_review_recall_margin"])
+                )
+            )
             for component in connected_components(neighbors, recall):
                 seed_n = int(target["direct_seed"][component].sum())
-                if len(component) < 5 or seed_n < 3 or seed_n / len(component) < 0.10:
+                if (
+                    len(component)
+                    < int(review_policy["minimum_recall_component_members"])
+                    or seed_n
+                    < int(review_policy["minimum_recall_direct_seed_members"])
+                    or seed_n / len(component)
+                    < float(review_policy["minimum_recall_direct_seed_fraction"])
+                ):
                     continue
                 accepted_components.append(component)
                 component_id = f"{broad.replace('/', '_').replace(' ', '_')}__{len(accepted_components):05d}"
@@ -333,6 +458,9 @@ def main() -> int:
         else:
             status = "no_raw_count_marker_spatial_challenger"
         summary_rows.append({
+            "review_id": review_row.review_id,
+            "review_mode": review_row.review_mode,
+            "unit_signature": review_row.unit_signature,
             "broad_label": broad,
             "current_n": int(current.sum()),
             "current_marker_supported_n": int((current & target["support"]).sum()),
@@ -343,6 +471,12 @@ def main() -> int:
             "accepted_recall_component_n": len(accepted_components),
             "accepted_recall_observation_n": recall_n,
             "review_status": status,
+            **target_marker_inventory.get(broad, {
+                "positive_marker_n_requested": 0,
+                "positive_marker_n_available": 0,
+                "positive_family_n_requested": 0,
+                "positive_family_n_available": 0,
+            }),
         })
         accepted = np.zeros(n, dtype=bool)
         for component in accepted_components:
@@ -360,8 +494,8 @@ def main() -> int:
         ax.set_title(f"{broad} | current {current.sum():,} | recall questions {accepted.sum():,}",
                      color="white", loc="left", fontsize=13)
         fig.tight_layout()
-        fig.savefig(plot_dir / f"{broad.replace('/', '_').replace(' ', '_')}.png",
-                    dpi=320, facecolor="#050505")
+        plot_path = plot_dir / f"{broad.replace('/', '_').replace(' ', '_')}.png"
+        fig.savefig(plot_path, dpi=320, facecolor="#050505")
         plt.close(fig)
 
     # Couple the two sides of the review.  A recall challenger for lineage B
@@ -391,6 +525,15 @@ def main() -> int:
         current = data.final_broad_label.eq(broad).to_numpy()
         recall_ids = recall_cells_by_target.get(broad, set())
         over_ids = challenger_cells_by_current.get(broad, set())
+        for cell in sorted(over_ids):
+            current_question_by_key.setdefault((broad, cell), {
+                "broad_label": broad,
+                "cell_id": cell,
+                "question_reason": "cross_type_recall_challenger",
+                "challenger_broad_label": "",
+                "target_score": "",
+                "challenger_score": "",
+            })
         recall_mask = data.cell_id.isin(recall_ids).to_numpy()
         over_mask = data.cell_id.isin(over_ids).to_numpy()
         fig, ax = plt.subplots(figsize=(12, 9), facecolor="#050505")
@@ -438,20 +581,42 @@ def main() -> int:
             color="white", loc="left", fontsize=12,
         )
         fig.tight_layout()
-        fig.savefig(plot_dir / f"{broad.replace('/', '_').replace(' ', '_')}.png",
-                    dpi=320, facecolor="#050505")
+        plot_path = plot_dir / f"{broad.replace('/', '_').replace(' ', '_')}.png"
+        fig.savefig(plot_path, dpi=320, facecolor="#050505")
         plt.close(fig)
+        plot_rows.append({
+            "review_id": target_metadata[broad].review_id,
+            "broad_label": broad,
+            "path": str(plot_path.resolve()),
+            "sha256": sha256(plot_path),
+        })
 
     summary_path = args.out / "broad_cell_type_review_summary.tsv"
     precision_path = args.out / "broad_cell_type_current_member_precision.tsv"
     component_path = args.out / "broad_cell_type_outside_recall_components.tsv"
     component_membership_path = args.out / "broad_cell_type_outside_recall_membership.tsv.gz"
+    current_question_path = args.out / "broad_cell_type_current_member_questions.tsv.gz"
+    plot_index_path = args.out / "broad_cell_type_spatial_plot_index.tsv"
     pd.DataFrame(summary_rows).to_csv(summary_path, sep="\t", index=False)
     pd.DataFrame(precision_rows).to_csv(precision_path, sep="\t", index=False)
     pd.DataFrame(component_rows).to_csv(component_path, sep="\t", index=False)
-    pd.DataFrame(component_member_rows).to_csv(
+    pd.DataFrame(component_member_rows, columns=[
+        "broad_label", "component_id", "cell_id", "current_broad_label",
+    ]).to_csv(
         component_membership_path, sep="\t", index=False, compression="gzip"
     )
+    pd.DataFrame(sorted(
+        current_question_by_key.values(),
+        key=lambda row: (str(row["broad_label"]), str(row["cell_id"])),
+    ), columns=[
+        "broad_label", "cell_id", "question_reason",
+        "challenger_broad_label", "target_score", "challenger_score",
+    ]).to_csv(
+        current_question_path, sep="\t", index=False, compression="gzip"
+    )
+    pd.DataFrame(plot_rows, columns=[
+        "review_id", "broad_label", "path", "sha256",
+    ]).to_csv(plot_index_path, sep="\t", index=False)
     manifest = {
         "schema_version": "2.2", "status": "PASS_REVIEW_EVIDENCE_ONLY",
         "artifact_role": "broad_cell_type_targeted_review_evidence",
@@ -464,14 +629,23 @@ def main() -> int:
         "count_export_manifest": artifact(export_manifest_path),
         "marker_manifest": artifact(args.marker_manifest),
         "membership": artifact(args.membership),
-        "coordinates": artifact(args.coordinates),
+        "membership_cell_id_semantic_sha256": deterministic_cell_id_set_hash(
+            membership.to_dict("records")
+        ),
+        "review_manifest": artifact(args.review_manifest),
+        "review_queue": artifact(queue_path),
+        "coordinates": artifact(coordinate_path),
         "catalog": artifact(args.catalog),
+        "threshold_registry": artifact(args.threshold_registry),
         "context_release_eligibility": context,
         "reviewed_broad_n": len(summary_rows),
+        "review_queue_n": len(queue),
         "artifacts": {
             "summary": artifact(summary_path), "precision": artifact(precision_path),
             "recall_components": artifact(component_path),
             "recall_membership": artifact(component_membership_path),
+            "current_member_questions": artifact(current_question_path),
+            "spatial_plot_index": artifact(plot_index_path),
         },
         "required_next_step": "for_each_broad_resolve_precision_recall_molecular_spatial_conclusions;full_transcriptome_DEG_pseudobulk_required_for_any_membership_patch",
     }

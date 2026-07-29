@@ -25,9 +25,38 @@ def artifact(path: Path) -> dict[str, object]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pseudobulk", required=True, type=Path)
+    ap.add_argument("--pseudobulk-manifest", required=True, type=Path)
+    ap.add_argument("--broad-evidence-manifest", required=True, type=Path)
     ap.add_argument("--marker-manifest", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
+    pseudobulk_manifest = json.loads(
+        args.pseudobulk_manifest.read_text(encoding="utf-8")
+    )
+    if (
+        pseudobulk_manifest.get("artifact_role")
+        != "broad_cell_type_full_transcriptome_pseudobulk"
+        or pseudobulk_manifest.get("assay_ancestry")
+        != "project_local_non_SCT_raw_counts"
+        or Path(str(pseudobulk_manifest.get("pseudobulk", ""))).resolve()
+        != args.pseudobulk.resolve()
+    ):
+        raise SystemExit("pseudobulk summary input lacks project-local raw-count ancestry")
+    broad_evidence = json.loads(
+        args.broad_evidence_manifest.read_text(encoding="utf-8")
+    )
+    recall_record = broad_evidence.get("artifacts", {}).get(
+        "recall_membership", {}
+    )
+    if (
+        broad_evidence.get("artifact_role")
+        != "broad_cell_type_targeted_review_evidence"
+        or Path(str(pseudobulk_manifest.get("source_membership", ""))).resolve()
+        != Path(str(broad_evidence.get("membership", {}).get("path", ""))).resolve()
+        or Path(str(pseudobulk_manifest.get("recall_membership", ""))).resolve()
+        != Path(str(recall_record.get("path", ""))).resolve()
+    ):
+        raise SystemExit("pseudobulk inputs differ from the broad cell-type evidence round")
     table = pd.read_csv(args.pseudobulk, sep="\t", low_memory=False)
     markers = pd.read_csv(args.marker_manifest, sep="\t", dtype=str).fillna("")
     required = {"gene", "group_id", "n_observations", "cpm", "detection_fraction"}
@@ -35,8 +64,13 @@ def main() -> int:
         raise SystemExit("pseudobulk table lacks required columns")
     current_groups = sorted(group for group in table.group_id.unique() if group.startswith("current::"))
     recall_groups = sorted(group for group in table.group_id.unique() if group.startswith("recall_question::"))
-    if not current_groups or not recall_groups:
-        raise SystemExit("pseudobulk requires current and recall-question groups")
+    outside_groups = {
+        group[len("outside_current::"):]: group
+        for group in table.group_id.unique()
+        if group.startswith("outside_current::")
+    }
+    if not current_groups:
+        raise SystemExit("pseudobulk requires current broad groups")
     logcpm = table.pivot(index="gene", columns="group_id", values="cpm").fillna(0)
     logcpm = np.log1p(logcpm)
     current_matrix = logcpm[current_groups]
@@ -49,7 +83,59 @@ def main() -> int:
     summary_rows: list[dict[str, object]] = []
     similarity_rows: list[dict[str, object]] = []
     differential_rows: list[dict[str, object]] = []
+    current_summary_rows: list[dict[str, object]] = []
+    current_differential_rows: list[dict[str, object]] = []
     table_index = table.set_index(["group_id", "gene"])
+    for group in current_groups:
+        target = group[len("current::"):]
+        outside_group = outside_groups.get(target, "")
+        if not outside_group:
+            raise SystemExit(f"current pseudobulk lacks target-versus-outside group: {target}")
+        target_marker_genes = sorted(set(markers.loc[
+            markers.broad_label.eq(target)
+            & markers.evidence_role.eq("positive_family"), "gene"
+        ]) & set(logcpm.index))
+        target_marker_cpm = table.loc[
+            table.group_id.eq(group) & table.gene.isin(target_marker_genes)
+        ]
+        other_groups = [value for value in current_groups if value != group]
+        similarities: list[tuple[str, float]] = []
+        for other in other_groups:
+            value = spearmanr(
+                logcpm.loc[informative, group].to_numpy(),
+                logcpm.loc[informative, other].to_numpy(),
+            ).correlation
+            if not np.isfinite(value):
+                value = 0.0
+            similarities.append((other[len("current::"):], float(value)))
+        similarities.sort(key=lambda item: (-item[1], item[0]))
+        current_summary_rows.append({
+            "broad_label": target,
+            "n_observations": int(table.loc[table.group_id.eq(group), "n_observations"].iloc[0]),
+            "nearest_other_current_broad": similarities[0][0] if similarities else "",
+            "nearest_other_current_spearman": similarities[0][1] if similarities else 0.0,
+            "target_positive_marker_n_available": len(target_marker_genes),
+            "target_positive_marker_n_detected": int((target_marker_cpm.cpm > 0).sum()),
+            "target_positive_marker_median_log1p_cpm": float(np.log1p(target_marker_cpm.cpm).median()) if len(target_marker_cpm) else 0.0,
+            "target_positive_marker_median_detection_fraction": float(target_marker_cpm.detection_fraction.median()) if len(target_marker_cpm) else 0.0,
+        })
+        genes = logcpm.index
+        target_raw = table_index.loc[group].reindex(genes).fillna(0)
+        outside_raw = table_index.loc[outside_group].reindex(genes).fillna(0)
+        log2fc = np.log2(
+            (target_raw.cpm.to_numpy() + 0.1)
+            / (outside_raw.cpm.to_numpy() + 0.1)
+        )
+        order = np.argsort(-np.abs(log2fc))[:100]
+        for index in order:
+            current_differential_rows.append({
+                "broad_label": target,
+                "gene": str(genes[index]),
+                "current_cpm": float(target_raw.cpm.iloc[index]),
+                "current_detection_fraction": float(target_raw.detection_fraction.iloc[index]),
+                "outside_cpm": float(outside_raw.cpm.iloc[index]),
+                "log2fc_current_vs_outside": float(log2fc[index]),
+            })
     for group in recall_groups:
         pieces = group.split("::")
         target = pieces[1]
@@ -117,20 +203,43 @@ def main() -> int:
     summary_path = args.out / "broad_cell_type_recall_pseudobulk_summary.tsv"
     similarity_path = args.out / "broad_cell_type_recall_similarity.tsv"
     differential_path = args.out / "broad_cell_type_recall_top_differential.tsv"
-    pd.DataFrame(summary_rows).to_csv(summary_path, sep="\t", index=False)
-    pd.DataFrame(similarity_rows).to_csv(similarity_path, sep="\t", index=False)
-    pd.DataFrame(differential_rows).to_csv(differential_path, sep="\t", index=False)
+    current_summary_path = args.out / "broad_cell_type_current_pseudobulk_summary.tsv"
+    current_differential_path = args.out / "broad_cell_type_current_vs_outside_top_differential.tsv"
+    pd.DataFrame(summary_rows, columns=[
+        "recall_group", "target_broad_label", "origin_broad_label",
+        "n_observations", "nearest_current_broad", "nearest_current_spearman",
+        "target_current_spearman", "target_positive_marker_n_available",
+        "target_positive_marker_n_detected",
+        "target_positive_marker_median_log1p_cpm",
+        "target_positive_marker_median_detection_fraction",
+    ]).to_csv(summary_path, sep="\t", index=False)
+    pd.DataFrame(similarity_rows, columns=[
+        "recall_group", "target_broad_label", "origin_broad_label",
+        "current_reference_broad", "spearman_top_variable_genes",
+    ]).to_csv(similarity_path, sep="\t", index=False)
+    pd.DataFrame(differential_rows, columns=[
+        "recall_group", "target_broad_label", "origin_broad_label", "gene",
+        "recall_cpm", "recall_detection_fraction", "log2fc_vs_current_target",
+        "log2fc_vs_current_origin",
+    ]).to_csv(differential_path, sep="\t", index=False)
+    pd.DataFrame(current_summary_rows).to_csv(current_summary_path, sep="\t", index=False)
+    pd.DataFrame(current_differential_rows).to_csv(current_differential_path, sep="\t", index=False)
     manifest = {
         "schema_version": "2.2", "status": "PASS_EVIDENCE_ONLY",
         "artifact_role": "broad_cell_type_full_transcriptome_pseudobulk_summary",
         "formal_membership_written": False,
         "pseudobulk": artifact(args.pseudobulk),
+        "pseudobulk_manifest": artifact(args.pseudobulk_manifest),
+        "broad_evidence_manifest": artifact(args.broad_evidence_manifest),
         "marker_manifest": artifact(args.marker_manifest),
         "informative_gene_n": len(informative),
+        "current_group_n": len(current_summary_rows),
         "review_group_n": len(summary_rows),
         "artifacts": {
             "summary": artifact(summary_path), "similarity": artifact(similarity_path),
             "top_differential": artifact(differential_path),
+            "current_summary": artifact(current_summary_path),
+            "current_top_differential": artifact(current_differential_path),
         },
         "warning": "Similarity and differential evidence inform one broad-level biological review; they do not assign cell labels.",
     }

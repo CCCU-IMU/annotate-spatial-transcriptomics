@@ -300,7 +300,7 @@ Agent 应自主完成常规分辨率比较、大类/定向 cohort 重聚类、�
 | 图构建 | `SCT v2/glmGamPoi -> PCA -> query-only SNN -> Leiden` |
 | PCs / k | 依据当前 cohort 规模、谱复杂度和相邻分辨率稳定性自适应；不复用 BANKSY 参数 |
 | Leiden候选网格 | `0.1,0.2,0.3,0.4,0.6`，`algorithm=4` |
-| Leiden并行 | 5 个候选 resolution 可由 5 个 `future` worker 并行；单个 Leiden 优化本身不多线程 |
+| Leiden并行 | 默认 `resolution-workers=1`；大型 Seurat carrier 禁止按 resolution fork 复制对象。64 CPU 用于矩阵内核或并行独立 cohort，而不是同一对象的 5 个分辨率副本 |
 
 全组织统一前处理可直接运行：
 
@@ -333,10 +333,12 @@ Rscript annotate-spatial-transcriptomics/scripts/run_seurat_cohort_recluster.R \
   --assay Spatial \
   --resolutions 0.1,0.2,0.3,0.4,0.6 \
   --resolution-contract sheep_ovary \
-  --resolution-workers 5
+  --resolution-workers 1
 ```
 
 membership 至少需要唯一 `cell_id`。锚点模式还需要 `query_or_anchor` 和 `anchor_label`；anchors 与 query 共同参与 SCT/PCA，但邻接图、Leiden、UMAP 和 DEG 必须只在 query 中计算。cohort DEG 使用全基因 `Spatial` LogNormalize 数据，而不是只在 SCT variable features 中寻找 marker。
+
+正式控制器会在重聚类前生成 cohort 资源计划：≥20,000 observations 时强制单 resolution worker，并建议 64 CPU；若调用者声明的内存低于经验峰值安全线，任务会在读取和复制大对象前阻断。
 
 需要固定的是**同批次技术前处理**，不能固定的是**生物学决策**：
 

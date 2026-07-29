@@ -11,6 +11,7 @@ from pathlib import Path
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
     apply_candidate_context, candidate_can_release, catalog_candidates,
+    deterministic_cell_id_set_hash, deterministic_membership_hash,
     group_candidate_detected, read_tsv, write_tsv,
 )
 
@@ -168,6 +169,7 @@ def main() -> int:
                 supported_local_remainders.add(key)
     supported_post_merge_cells: set[tuple[str, str, str]] = set()
     supported_post_merge_programs: set[tuple[str, str, str]] = set()
+    post_merge_review_membership_path: Path | None = None
     if args.post_merge_review_manifest:
         review = json.loads(
             args.post_merge_review_manifest.read_text(encoding="utf-8")
@@ -178,10 +180,19 @@ def main() -> int:
         ):
             raise SystemExit("post-merge component review is not canonical PASS")
         membership_record = review.get("membership", {})
+        post_merge_review_membership_path = Path(
+            str(membership_record.get("path", ""))
+        )
         if (
-            Path(str(membership_record.get("path", ""))).resolve()
+            not post_merge_review_membership_path.is_file()
+            or membership_record.get("sha256")
+            != sha256(post_merge_review_membership_path)
+        ):
+            raise SystemExit("post-merge review membership is missing or stale")
+        if (
+            not args.catalog_wide_review_manifest
+            and post_merge_review_membership_path.resolve()
             != args.membership.resolve()
-            or membership_record.get("sha256") != sha256(args.membership)
         ):
             raise SystemExit("post-merge review does not bind audited membership")
         decision_record = review.get("component_artifacts", {}).get(
@@ -214,7 +225,7 @@ def main() -> int:
                 ))
     supported_catalog_review_cells: set[tuple[str, str, str]] = set()
     supported_catalog_review_programs: set[tuple[str, str, str]] = set()
-    previous_membership_path: Path | None = None
+    previous_membership_path: Path | None = post_merge_review_membership_path
     for index, path in enumerate(args.catalog_wide_review_manifest):
         manifest = json.loads(path.read_text(encoding="utf-8"))
         if (
@@ -249,11 +260,36 @@ def main() -> int:
             or (previous_membership_path is not None and source_path.resolve() != previous_membership_path.resolve())
         ):
             raise SystemExit("catalog-wide review membership chain is missing or stale")
+        source_rows = read_tsv(source_path)
+        result_rows = read_tsv(result_path)
+        transform = manifest.get("membership_transform", {})
+        if (
+            transform.get("operation") != "catalog_wide_exact_cell_id_patch"
+            or transform.get("source_physical_sha256") != sha256(source_path)
+            or transform.get("result_physical_sha256") != sha256(result_path)
+            or transform.get("source_semantic_sha256")
+            != deterministic_membership_hash(source_rows)
+            or transform.get("result_semantic_sha256")
+            != deterministic_membership_hash(result_rows)
+            or transform.get("source_cell_id_set_sha256")
+            != deterministic_cell_id_set_hash(source_rows)
+            or transform.get("result_cell_id_set_sha256")
+            != deterministic_cell_id_set_hash(result_rows)
+            or transform.get("source_cell_id_set_sha256")
+            != transform.get("result_cell_id_set_sha256")
+        ):
+            raise SystemExit("catalog-wide membership transform ledger is invalid")
         previous_membership_path = result_path
         changes_record = manifest.get("changes", {})
         changes_path = Path(str(changes_record.get("path", "")))
         if not changes_path.is_file() or changes_record.get("sha256") != sha256(changes_path):
             raise SystemExit("catalog-wide review changes are missing or stale")
+        if (
+            transform.get("delta_physical_sha256") != sha256(changes_path)
+            or int(transform.get("changed_observation_n", -1))
+            != len(read_tsv(changes_path))
+        ):
+            raise SystemExit("catalog-wide membership delta differs from transform ledger")
         for row in read_tsv(changes_path):
             cell_id = str(row.get("cell_id", ""))
             candidate_id = str(row.get("candidate_id", ""))

@@ -60,6 +60,7 @@ if (length(setdiff(membership$cell_id, colnames(counts))) > 0) stop("membership 
 groups <- list()
 for (broad in sort(unique(membership$final_broad_label[nzchar(membership$final_broad_label)]))) {
   groups[[paste0("current::", broad)]] <- unique(membership[final_broad_label == broad, cell_id])
+  groups[[paste0("outside_current::", broad)]] <- unique(membership[final_broad_label != broad, cell_id])
 }
 for (broad in sort(unique(recall$broad_label[nzchar(recall$broad_label)]))) {
   target_ids <- unique(recall[broad_label == broad, cell_id])
@@ -115,6 +116,8 @@ manifest <- list(
   artifact_role = "broad_cell_type_full_transcriptome_pseudobulk",
   formal_membership_written = FALSE,
   source_rds = normalizePath(rds_path),
+  source_membership = normalizePath(membership_path),
+  recall_membership = normalizePath(recall_path),
   raw_count_assay = assay,
   assay_ancestry = "project_local_non_SCT_raw_counts",
   feature_n = nrow(counts),

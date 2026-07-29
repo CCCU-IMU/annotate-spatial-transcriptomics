@@ -19,16 +19,30 @@ LUTEAL_COMPATIBLE = {
     "luteal phase",
     "mid luteal",
     "late luteal",
+    "post estrus",
+    "post-estrus",
+    "late estrus",
     "pregnant",
     "pregnancy",
     "发情间期",
+    "发情后期",
     "黄体期",
     "妊娠",
 }
 
 
 def normalize(value: str) -> str:
-    return re.sub(r"\s+", " ", value.strip().lower().replace("_", " "))
+    normalized = re.sub(
+        r"\s+", " ", value.strip().lower().replace("_", " ")
+    )
+    # Project metadata often appends a replicate/sample suffix, for example
+    # “发情后期2”, “diestrus_rep2” or “luteal (3)”.  Remove only the terminal
+    # wrapper; the biological stage token remains unchanged and continues to
+    # provide evaluation permission rather than an identity score.
+    normalized = re.sub(
+        r"(?:\s*[- ]?rep(?:licate)?\s*\d+|\s*[（(]?\d+[）)]?)$", "", normalized
+    )
+    return normalized.strip()
 
 
 def main() -> int:

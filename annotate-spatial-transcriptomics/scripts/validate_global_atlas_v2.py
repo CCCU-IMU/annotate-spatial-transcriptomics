@@ -79,27 +79,33 @@ def main() -> int:
         errors.append("routing manifest status disagrees with the material review queue")
     decisions = read_tsv(args.decisions) if args.decisions else []
     if queue_ids:
-        decision_ids = [row.get("review_id", "") for row in decisions]
-        if set(decision_ids) != queue_ids or len(decision_ids) != len(set(decision_ids)):
-            errors.append("review decisions do not close the queue exactly once")
-        schema = Path(__file__).resolve().parents[1] / "schemas/atlas_discrepancy_decision.schema.json"
-        for line, row in enumerate(decisions, 2):
-            evidence = Path(row.get("evidence_artifact", ""))
-            if not evidence.is_absolute() and args.decisions:
-                evidence = args.decisions.parent / evidence
-            document, document_errors = validate_json_against_schema(evidence, schema)
-            errors.extend(f"decision row {line}: {message}" for message in document_errors)
-            if document_errors:
-                continue
-            if document.get("review_id") != row.get("review_id") or document.get("atlas_only") is not False:
-                errors.append(f"decision row {line} is stale or Atlas-only")
-            for index, artifact in enumerate(document.get("evidence_artifacts", []), 1):
-                _, artifact_errors = validate_evidence_artifact(evidence.parent, artifact, f"decision row {line} evidence {index}")
-                errors.extend(artifact_errors)
+        if args.decisions:
+            decision_ids = [row.get("review_id", "") for row in decisions]
+            if set(decision_ids) != queue_ids or len(decision_ids) != len(set(decision_ids)):
+                errors.append("review decisions do not close the queue exactly once")
+            schema = Path(__file__).resolve().parents[1] / "schemas/atlas_discrepancy_decision.schema.json"
+            for line, row in enumerate(decisions, 2):
+                evidence = Path(row.get("evidence_artifact", ""))
+                if not evidence.is_absolute():
+                    evidence = args.decisions.parent / evidence
+                document, document_errors = validate_json_against_schema(evidence, schema)
+                errors.extend(f"decision row {line}: {message}" for message in document_errors)
+                if document_errors:
+                    continue
+                if document.get("review_id") != row.get("review_id") or document.get("atlas_only") is not False:
+                    errors.append(f"decision row {line} is stale or Atlas-only")
+                for index, artifact in enumerate(document.get("evidence_artifacts", []), 1):
+                    _, artifact_errors = validate_evidence_artifact(evidence.parent, artifact, f"decision row {line} evidence {index}")
+                    errors.extend(artifact_errors)
     elif decisions:
         errors.append("decisions exist although the review queue is empty")
+    status = (
+        "BLOCKED" if errors
+        else "REVIEW_REQUIRED" if queue_ids and not args.decisions
+        else "PASS"
+    )
     result = {
-        "status": "PASS" if not errors else "BLOCKED",
+        "status": status,
         "schema_version": "2.0",
         "routing_manifest": str(args.routing_manifest.resolve()),
         "routing_manifest_sha256": sha256(args.routing_manifest),
@@ -111,7 +117,7 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if not errors else 2
+    return 0 if status == "PASS" else 2
 
 
 if __name__ == "__main__":

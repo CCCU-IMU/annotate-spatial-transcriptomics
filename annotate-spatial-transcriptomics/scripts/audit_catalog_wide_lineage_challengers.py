@@ -29,6 +29,7 @@ from lineage_controller_lib import (
     candidate_can_release,
     candidate_can_support_broad_review,
     catalog_candidates,
+    deterministic_membership_hash,
     group_candidate_detected,
     group_identity_core_direct_fraction,
     group_identity_core_fraction,
@@ -729,6 +730,9 @@ def main() -> int:
         membership.cell_id.astype(str), membership.final_broad_label.astype(str)
     ))
     all_query_ids = sorted(current_broad_by_cell)
+    global_membership_semantic_sha256 = deterministic_membership_hash(
+        membership.to_dict("records")
+    )
     for broad in broad_release_labels:
         if broad not in eligible_broad_labels:
             type_status_by_broad[broad] = "not_evaluable"
@@ -760,14 +764,14 @@ def main() -> int:
                 f"watch_group:{boundary}:{cluster}"
                 for boundary, cluster in sorted(watch_groups_by_broad.get(broad, set()))
             ]
+            + [f"global_membership:{global_membership_semantic_sha256}"]
         )
         signature = unit_signature(review_mode, broad, signature_tokens)
         closed = (review_mode, broad, signature) in prior_closed
-        # Every present broad is deliberately reviewed once.  Later rounds
-        # reopen only changed/remaining biological questions.
-        open_review = bool(
-            not closed and (args.round_index == 1 or child_issue_n > 0)
-        )
+        # Every present broad is reviewed on the exact complete-membership
+        # scope.  Any membership change alters the global semantic signature
+        # and reopens every broad; an unchanged retained scope can close.
+        open_review = not closed
         review_id = ""
         if open_review:
             review_index += 1
@@ -898,6 +902,7 @@ def main() -> int:
         "schema_version": "2.2",
         "status": "ITERATION_REQUIRED" if queue_rows else "PASS",
         "stage": "post_atlas_catalog_wide_lineage_review",
+        "user_facing_stage_name": "逐大类全样本复核",
         "artifact_role": "biological_quality_review",
         "review_round": args.round_index,
         "maximum_decision_rounds": int(policy["maximum_decision_rounds"]),
@@ -909,6 +914,7 @@ def main() -> int:
         "geometry_can_trigger_review_but_cannot_assign_labels": True,
         "historical_labels_used_as_identity_evidence": False,
         "membership": artifact(args.membership),
+        "membership_semantic_sha256": global_membership_semantic_sha256,
         "annotation_contract": artifact(args.contract),
         "stage_authority": artifact(args.stage_authority),
         "candidate_catalog": artifact(args.catalog),

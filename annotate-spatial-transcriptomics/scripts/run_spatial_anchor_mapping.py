@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn.neighbors import NearestNeighbors
 
 
@@ -176,6 +178,12 @@ def main() -> None:
         "heldout_independent": True,
         "query_membership_exact_order": True,
         "fine_anchor_eligible": False,
+        "runtime_versions": {
+            "python": sys.version.split()[0],
+            "numpy": np.__version__,
+            "pandas": pd.__version__,
+            "scikit_learn": sklearn.__version__,
+        },
         "warning": "Observed-density spatial proximity is an independent evidence channel, not a biological label. Calibrate tiers and combine it with expression evidence before writeback.",
     }
     (args.out / "mapping_manifest.json").write_text(

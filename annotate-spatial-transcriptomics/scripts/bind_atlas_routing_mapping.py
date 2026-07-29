@@ -32,11 +32,27 @@ def ids(path: Path, column: str) -> set[str]:
     return set(values)
 
 
+def read_rows(path: Path) -> tuple[list[dict[str, str]], list[str]]:
+    with open_text(path) as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        return list(reader), list(reader.fieldnames or [])
+
+
+def write_rows(path: Path, rows: list[dict[str, str]], fields: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "wt", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--calibration-manifest", required=True, type=Path)
     parser.add_argument("--heldout-mapping", required=True, type=Path)
     parser.add_argument("--combined-mapping", required=True, type=Path)
+    parser.add_argument("--normalized-combined-mapping", type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--cell-id-col", default="cell_id")
     args = parser.parse_args()
@@ -53,8 +69,39 @@ def main() -> int:
         raise SystemExit("target and held-out mappings overlap")
     if combined_ids != target_ids | heldout_ids:
         raise SystemExit("combined mapping is not the exact target plus held-out union")
+    combined_rows, combined_fields = read_rows(args.combined_mapping)
+    required_fields = {
+        args.cell_id_col, "predicted_label", "mapping_tier",
+        "out_of_distribution", "ontology_conflict",
+    }
+    missing_required = sorted(required_fields - set(combined_fields))
+    if missing_required:
+        raise SystemExit(
+            "combined Atlas mapping lacks required routing fields: "
+            + ", ".join(missing_required)
+        )
+    optional_defaults = {
+        "fine_anchor_eligible": "false",
+        "review_required": "false",
+        "proposed_fine_label": "",
+    }
+    normalized = (
+        args.normalized_combined_mapping.resolve()
+        if args.normalized_combined_mapping
+        else (args.out.parent / "combined_atlas_mapping.normalized.tsv.gz").resolve()
+    )
+    normalized_fields = list(combined_fields)
+    for field, default in optional_defaults.items():
+        if field not in normalized_fields:
+            normalized_fields.append(field)
+        for row in combined_rows:
+            if not str(row.get(field, "")).strip():
+                row[field] = default
+    write_rows(normalized, combined_rows, normalized_fields)
+    if ids(normalized, args.cell_id_col) != combined_ids:
+        raise SystemExit("Atlas schema normalization changed mapping membership")
     payload["artifacts"]["query_mapping"] = {
-        "path": str(args.combined_mapping.resolve()), "sha256": sha256(args.combined_mapping)
+        "path": str(normalized), "sha256": sha256(normalized)
     }
     payload["routing_mapping_binding"] = {
         "status": "PASS",
@@ -63,7 +110,9 @@ def main() -> int:
         "source_calibration_manifest_sha256": sha256(source),
         "target_mapping": {"path": str(target), "sha256": sha256(target), "n": len(target_ids)},
         "heldout_mapping": {"path": str(args.heldout_mapping.resolve()), "sha256": sha256(args.heldout_mapping), "n": len(heldout_ids)},
-        "combined_mapping": {"path": str(args.combined_mapping.resolve()), "sha256": sha256(args.combined_mapping), "n": len(combined_ids)},
+        "combined_mapping": {"path": str(normalized), "sha256": sha256(normalized), "n": len(combined_ids)},
+        "source_combined_mapping": {"path": str(args.combined_mapping.resolve()), "sha256": sha256(args.combined_mapping), "n": len(combined_ids)},
+        "optional_field_defaults": optional_defaults,
         "overlap_n": 0,
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)

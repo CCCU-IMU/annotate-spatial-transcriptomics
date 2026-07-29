@@ -11,7 +11,8 @@ from pathlib import Path
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
     apply_candidate_context, candidate_can_release, catalog_candidates,
-    deterministic_membership_hash, read_tsv, write_tsv,
+    deterministic_cell_id_set_hash, deterministic_membership_hash,
+    read_tsv, write_tsv,
 )
 
 
@@ -44,6 +45,49 @@ def main() -> int:
     validation = json.loads(args.decision_validation.read_text(encoding="utf-8"))
     if validation.get("status") != "PASS":
         raise SystemExit("catalog-wide review decisions are not fully resolved")
+    packet_record = validation.get("evidence_packet_manifest", {})
+    packet_path = Path(str(packet_record.get("path", "")))
+    if (
+        not packet_path.is_file()
+        or packet_record.get("sha256") != sha256(packet_path)
+    ):
+        raise SystemExit("catalog-wide decision evidence packets are missing or stale")
+    packet_manifest = json.loads(packet_path.read_text(encoding="utf-8"))
+    broad_record = packet_manifest.get("broad_evidence_manifest", {})
+    broad_manifest_path = Path(str(broad_record.get("path", "")))
+    if (
+        not broad_manifest_path.is_file()
+        or broad_record.get("sha256") != sha256(broad_manifest_path)
+    ):
+        raise SystemExit("catalog-wide decision lacks bound broad evidence")
+    broad_manifest = json.loads(
+        broad_manifest_path.read_text(encoding="utf-8")
+    )
+    question_record = broad_manifest.get("artifacts", {}).get(
+        "current_member_questions", {}
+    )
+    recall_record = broad_manifest.get("artifacts", {}).get(
+        "recall_membership", {}
+    )
+    question_path = Path(str(question_record.get("path", "")))
+    recall_path = Path(str(recall_record.get("path", "")))
+    if (
+        not question_path.is_file()
+        or question_record.get("sha256") != sha256(question_path)
+        or not recall_path.is_file()
+        or recall_record.get("sha256") != sha256(recall_path)
+    ):
+        raise SystemExit("catalog-wide exact challenger memberships are missing or stale")
+    precision_question_ids: dict[str, set[str]] = {}
+    for row in read_tsv(question_path):
+        precision_question_ids.setdefault(
+            str(row.get("broad_label", "")), set()
+        ).add(str(row.get("cell_id", "")))
+    recall_question_ids: dict[str, set[str]] = {}
+    for row in read_tsv(recall_path):
+        recall_question_ids.setdefault(
+            str(row.get("broad_label", "")), set()
+        ).add(str(row.get("cell_id", "")))
     authority_records = {
         "post_atlas_membership": args.membership,
         "catalog_review_manifest": args.review_manifest,
@@ -163,6 +207,16 @@ def main() -> int:
                     raise SystemExit(
                         f"{review_id}: cell-type patch assigns an unrelated outside member"
                     )
+                if current_label == review_target and target != current_label:
+                    if cell not in precision_question_ids.get(review_target, set()):
+                        raise SystemExit(
+                            f"{review_id}: current-member patch is outside the bound precision questions"
+                        )
+                elif current_label != review_target and target == review_target:
+                    if cell not in recall_question_ids.get(review_target, set()):
+                        raise SystemExit(
+                            f"{review_id}: recall patch is outside the bound whole-query questions"
+                        )
             if review_mode == "outside_label_recall":
                 allowed = {
                     str(row.get("cell_id", ""))
@@ -278,6 +332,17 @@ def main() -> int:
             for (old, new), count in sorted(transitions.items())
         },
         "membership_semantic_sha256": deterministic_membership_hash(output),
+        "membership_transform": {
+            "operation": "catalog_wide_exact_cell_id_patch",
+            "source_physical_sha256": sha256(args.membership),
+            "source_semantic_sha256": deterministic_membership_hash(source),
+            "result_physical_sha256": sha256(membership_path),
+            "result_semantic_sha256": deterministic_membership_hash(output),
+            "source_cell_id_set_sha256": deterministic_cell_id_set_hash(source),
+            "result_cell_id_set_sha256": deterministic_cell_id_set_hash(output),
+            "delta_physical_sha256": sha256(changes_path),
+            "changed_observation_n": len(changes),
+        },
         "next_required_action": "rerun_complete_catalog_wide_double_sided_review",
     }
     manifest_path = args.out / "catalog_wide_lineage_review_apply_manifest.json"

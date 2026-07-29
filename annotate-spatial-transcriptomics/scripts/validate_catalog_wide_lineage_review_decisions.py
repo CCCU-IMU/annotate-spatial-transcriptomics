@@ -51,6 +51,7 @@ CELL_TYPE_MOLECULAR = {"supported", "mixed", "unsupported", "not_evaluable"}
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--review-manifest", required=True, type=Path)
+    ap.add_argument("--evidence-packet-manifest", required=True, type=Path)
     ap.add_argument("--decisions", required=True, type=Path)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
@@ -67,6 +68,33 @@ def main() -> int:
         raise SystemExit("catalog-wide review queue is missing or stale")
     queue_rows = read_tsv(queue_path)
     queue = {str(row.get("review_id", "")): row for row in queue_rows}
+    packet_manifest = json.loads(
+        args.evidence_packet_manifest.read_text(encoding="utf-8")
+    )
+    packet_review = packet_manifest.get("review_manifest", {})
+    if (
+        packet_manifest.get("status") != "PASS"
+        or packet_manifest.get("artifact_role")
+        != "broad_cell_type_review_evidence_packet_index"
+        or Path(str(packet_review.get("path", ""))).resolve()
+        != args.review_manifest.resolve()
+        or packet_review.get("sha256") != sha256(args.review_manifest)
+    ):
+        raise SystemExit("broad review evidence packets do not bind this open review")
+    packet_record = packet_manifest.get("packet_index", {})
+    packet_path = Path(str(packet_record.get("path", "")))
+    if (
+        not packet_path.is_file()
+        or packet_record.get("sha256") != sha256(packet_path)
+    ):
+        raise SystemExit("broad review evidence packet index is missing or stale")
+    packet_rows = read_tsv(packet_path)
+    packets = {str(row.get("review_id", "")): row for row in packet_rows}
+    if (
+        "" in packets or len(packets) != len(packet_rows)
+        or set(packets) != set(queue)
+    ):
+        raise SystemExit("broad review evidence packets do not cover the queue exactly")
     decisions = read_tsv(args.decisions)
     decision_by_id = {str(row.get("review_id", "")): row for row in decisions}
     errors: list[str] = []
@@ -86,18 +114,20 @@ def main() -> int:
             continue
         if str(decision.get("review_mode", "")) != mode:
             errors.append(f"{review_id}: decision review_mode differs from queue")
+        packet = packets.get(review_id, {})
+        if (
+            str(packet.get("review_mode", "")) != mode
+            or str(packet.get("target_broad_label", ""))
+            != str(queued.get("target_broad_label", ""))
+            or str(packet.get("unit_signature", ""))
+            != str(queued.get("unit_signature", ""))
+            or str(decision.get("evidence_packet_sha256", ""))
+            != str(packet.get("evidence_packet_sha256", ""))
+        ):
+            errors.append(f"{review_id}: decision does not bind its canonical evidence packet")
         rationale = str(decision.get("rationale", "")).strip()
-        evidence = str(decision.get("evidence_basis", "")).strip().lower()
         if len(rationale) < 20:
             errors.append(f"{review_id}: biological rationale is too short")
-        if not (
-            "query" in evidence
-            and ("marker" in evidence or "deg" in evidence or "pseudobulk" in evidence)
-            and "spatial" in evidence
-        ):
-            errors.append(
-                f"{review_id}: decision lacks query molecular plus spatial evidence"
-            )
         if mode in {"broad_lineage_review", "missing_broad_review"}:
             precision = str(decision.get("current_member_precision", "")).strip()
             recall = str(decision.get("whole_query_recall", "")).strip()
@@ -111,6 +141,18 @@ def main() -> int:
                 errors.append(f"{review_id}: spatial_consistency is missing or invalid")
             if molecular not in CELL_TYPE_MOLECULAR:
                 errors.append(f"{review_id}: molecular_support is missing or invalid")
+            precision_evaluable = str(packet.get("precision_evaluable", "")).lower() == "true"
+            recall_evaluable = str(packet.get("recall_evaluable", "")).lower() == "true"
+            molecular_evaluable = str(packet.get("molecular_evaluable", "")).lower() == "true"
+            spatial_evaluable = str(packet.get("spatial_evaluable", "")).lower() == "true"
+            if precision in {"supported", "over_recall_detected"} and not precision_evaluable:
+                errors.append(f"{review_id}: precision conclusion lacks evaluable bound evidence")
+            if recall in {"complete", "under_recall_detected", "confirmed_absent"} and not recall_evaluable:
+                errors.append(f"{review_id}: recall conclusion lacks evaluable bound evidence")
+            if molecular != "not_evaluable" and not molecular_evaluable:
+                errors.append(f"{review_id}: molecular conclusion lacks evaluable bound evidence")
+            if spatial != "not_evaluable" and not spatial_evaluable:
+                errors.append(f"{review_id}: spatial conclusion lacks evaluable bound evidence")
             if mode == "broad_lineage_review":
                 if outcome != "targeted_raw_count_review_required" and precision in {"not_applicable", "not_evaluable"}:
                     errors.append(f"{review_id}: an annotated broad requires current-member precision review")
@@ -125,6 +167,74 @@ def main() -> int:
                     errors.append(
                         f"{review_id}: retaining a broad requires supported precision, complete recall, "
                         "consistent spatial distribution and supported molecular identity"
+                    )
+                if str(packet.get("current_precision_question_n", "")).strip():
+                    current_question_n = int(float(
+                        packet.get("current_precision_question_n", 0) or 0
+                    ))
+                else:
+                    current_question_n = int(float(
+                        packet.get("current_competitor_question_n", 0) or 0
+                    )) + int(float(
+                        packet.get("cross_type_over_recall_question_n", 0) or 0
+                    ))
+                recall_question_n = int(float(
+                    packet.get("outside_recall_question_n", 0) or 0
+                ))
+                if (
+                    outcome == "retain_current_cell_type"
+                    and current_question_n > 0
+                ):
+                    errors.append(
+                        f"{review_id}: current-member challengers require an exact patch or targeted review"
+                    )
+                if (
+                    outcome == "retain_current_cell_type"
+                    and recall_question_n > 0
+                ):
+                    errors.append(
+                        f"{review_id}: whole-query recall challengers require an exact patch or targeted review"
+                    )
+                ovary_spatial_status = str(
+                    packet.get("ovary_spatial_status", "not_applicable")
+                )
+                oocyte_review_status = str(
+                    packet.get("oocyte_review_status", "not_applicable")
+                )
+                follicle_status = str(
+                    packet.get("follicle_histology_status", "not_applicable")
+                )
+                if (
+                    outcome == "retain_current_cell_type"
+                    and ovary_spatial_status not in {"PASS", "not_applicable"}
+                ):
+                    errors.append(
+                        f"{review_id}: sheep-ovary broad spatial review is not closed"
+                    )
+                if (
+                    str(queued.get("target_broad_label", "")) == "Oocyte"
+                    and outcome == "retain_current_cell_type"
+                    and (
+                        oocyte_review_status != "PASS"
+                        or str(packet.get("oocyte_canonical_bound", "")).lower()
+                        != "true"
+                    )
+                ):
+                    errors.append(
+                        f"{review_id}: Oocyte cannot close without the canonical quality review"
+                    )
+                follicle_related = {
+                    "Granulosa", "Theca", "Vascular-associated",
+                    "Smooth muscle", "Stromal/mesenchymal",
+                }
+                if (
+                    str(queued.get("target_broad_label", ""))
+                    in follicle_related
+                    and outcome == "retain_current_cell_type"
+                    and follicle_status not in {"PASS", "not_applicable"}
+                ):
+                    errors.append(
+                        f"{review_id}: follicle ROI histology remains open for this lineage"
                     )
                 if outcome == "apply_cell_type_membership_patch" and not (
                     precision == "over_recall_detected"
@@ -175,6 +285,13 @@ def main() -> int:
         },
         "review_queue": {
             "path": str(queue_path.resolve()), "sha256": sha256(queue_path),
+        },
+        "evidence_packet_manifest": {
+            "path": str(args.evidence_packet_manifest.resolve()),
+            "sha256": sha256(args.evidence_packet_manifest),
+        },
+        "evidence_packet_index": {
+            "path": str(packet_path.resolve()), "sha256": sha256(packet_path),
         },
         "source_decisions": {
             "path": str(args.decisions.resolve()), "sha256": sha256(args.decisions),

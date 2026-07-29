@@ -70,9 +70,19 @@ def validate_calibration(manifest_path: Path, mapping_path: Path, policy: dict) 
         if errors:
             raise SystemExit("; ".join(errors))
     query_record = artifacts.get("query_mapping", {})
-    if Path(query_record.get("path", "")).resolve() != mapping_path.resolve() or query_record.get("sha256") != sha256(mapping_path):
-        raise SystemExit("Atlas mapping is not the hash-bound calibrated query mapping")
     binding = manifest.get("routing_mapping_binding", {})
+    query_bound = (
+        Path(query_record.get("path", "")).resolve() == mapping_path.resolve()
+        and query_record.get("sha256") == sha256(mapping_path)
+    )
+    source_combined = binding.get("source_combined_mapping", {})
+    source_bound = (
+        Path(source_combined.get("path", "")).resolve()
+        == mapping_path.resolve()
+        and source_combined.get("sha256") == sha256(mapping_path)
+    )
+    if not query_bound and not source_bound:
+        raise SystemExit("Atlas mapping is not the hash-bound calibrated query mapping")
     if binding.get("status") != "PASS" or int(binding.get("overlap_n", -1)) != 0:
         raise SystemExit("all-cell Atlas routing mapping lacks a valid disjoint-union binding")
     source_manifest = Path(binding.get("source_calibration_manifest", ""))
@@ -83,7 +93,12 @@ def validate_calibration(manifest_path: Path, mapping_path: Path, policy: dict) 
         path = Path(record.get("path", ""))
         if not path.is_file() or sha256(path) != record.get("sha256"):
             raise SystemExit(f"Atlas routing {key} binding is missing or stale")
-    if Path(binding["combined_mapping"]["path"]).resolve() != mapping_path.resolve():
+    if (
+        Path(binding["combined_mapping"]["path"]).resolve()
+        != mapping_path.resolve()
+        and Path(binding.get("source_combined_mapping", {}).get("path", "")).resolve()
+        != mapping_path.resolve()
+    ):
         raise SystemExit("Atlas routing combined mapping differs from the routed mapping")
     cumulative_path = Path(artifacts["heldout_cumulative_validation"]["path"])
     rows = read_tsv(cumulative_path)

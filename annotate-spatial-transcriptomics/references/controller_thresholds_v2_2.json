@@ -53,6 +53,13 @@
     "minimum_group_watch_identity_fraction": 0.005,
     "minimum_group_watch_fraction_deficit": 0.005,
     "minimum_group_watch_expected_missing_observations": 5,
+    "minimum_evaluable_positive_markers": 2,
+    "minimum_evaluable_positive_families": 1,
+    "minimum_raw_review_family_score": 0.02,
+    "minimum_raw_review_group_median_score": 0.01,
+    "minimum_raw_review_recall_margin": 0.08,
+    "minimum_raw_review_direct_families": 2,
+    "minimum_raw_review_direct_genes": 3,
     "spatial_knn_k": 12,
     "generic_remainder_recall_components_enabled": false
   },

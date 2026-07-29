@@ -1353,6 +1353,15 @@ def deterministic_membership_hash(rows: list[dict[str, object]]) -> str:
     return hashlib.sha256((payload + "\n").encode("utf-8")).hexdigest()
 
 
+def deterministic_cell_id_set_hash(rows: Iterable[dict[str, object]]) -> str:
+    """Hash membership identity independently of serialization and row order."""
+    cell_ids = [str(row.get("cell_id", "")) for row in rows]
+    if not cell_ids or "" in cell_ids or len(cell_ids) != len(set(cell_ids)):
+        raise ValueError("semantic membership requires unique nonempty cell_id")
+    payload = "\n".join(sorted(cell_ids)) + "\n"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def deterministic_candidate_membership_hash(
     rows: list[dict[str, object]],
 ) -> str:

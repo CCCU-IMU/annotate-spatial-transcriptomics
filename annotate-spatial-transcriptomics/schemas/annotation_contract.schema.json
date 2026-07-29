@@ -177,6 +177,8 @@
         "scripts": {
           "type": "object",
           "required": [
+            "validate_phase_runtime.py",
+            "plan_cohort_resources.py",
             "run_observation_lineage_scoring.R",
             "derive_candidate_local_subsets.R",
             "close_exact_remainders.py",
@@ -190,6 +192,12 @@
             "review_post_merge_unresolved_components.py",
             "audit_post_merge_completeness.py",
             "audit_catalog_wide_lineage_challengers.py",
+            "build_cell_type_review_marker_manifest.py",
+            "export_cell_type_review_counts.R",
+            "build_broad_cell_type_review_evidence.py",
+            "export_broad_cell_type_review_pseudobulk.R",
+            "summarize_broad_cell_type_review_pseudobulk.py",
+            "build_broad_cell_type_review_packet_index.py",
             "validate_catalog_wide_lineage_review_decisions.py",
             "apply_catalog_wide_lineage_review.py",
             "validate_sheep_ovary_biological_quality.py",
@@ -204,6 +212,8 @@
             "run_lineage_controller.py"
           ],
           "properties": {
+            "validate_phase_runtime.py": {"$ref": "#/$defs/artifact"},
+            "plan_cohort_resources.py": {"$ref": "#/$defs/artifact"},
             "run_observation_lineage_scoring.R": {"$ref": "#/$defs/artifact"},
             "derive_candidate_local_subsets.R": {"$ref": "#/$defs/artifact"},
             "close_exact_remainders.py": {"$ref": "#/$defs/artifact"},
@@ -217,6 +227,12 @@
             "review_post_merge_unresolved_components.py": {"$ref": "#/$defs/artifact"},
             "audit_post_merge_completeness.py": {"$ref": "#/$defs/artifact"},
             "audit_catalog_wide_lineage_challengers.py": {"$ref": "#/$defs/artifact"},
+            "build_cell_type_review_marker_manifest.py": {"$ref": "#/$defs/artifact"},
+            "export_cell_type_review_counts.R": {"$ref": "#/$defs/artifact"},
+            "build_broad_cell_type_review_evidence.py": {"$ref": "#/$defs/artifact"},
+            "export_broad_cell_type_review_pseudobulk.R": {"$ref": "#/$defs/artifact"},
+            "summarize_broad_cell_type_review_pseudobulk.py": {"$ref": "#/$defs/artifact"},
+            "build_broad_cell_type_review_packet_index.py": {"$ref": "#/$defs/artifact"},
             "validate_catalog_wide_lineage_review_decisions.py": {"$ref": "#/$defs/artifact"},
             "apply_catalog_wide_lineage_review.py": {"$ref": "#/$defs/artifact"},
             "validate_sheep_ovary_biological_quality.py": {"$ref": "#/$defs/artifact"},
@@ -316,7 +332,7 @@
           ],
           "properties": {
             "scope": {"const": "every_context_evaluable_broad"},
-            "primary_unit": {"const": "second_round_source_subcluster"},
+            "primary_unit": {"const": "broad_cell_type"},
             "whole_object_per_cell_classifier": {"const": false},
             "stable_partition_reuse_default": {"const": true},
             "maximum_decision_rounds": {"type": "integer", "minimum": 1, "maximum": 2}

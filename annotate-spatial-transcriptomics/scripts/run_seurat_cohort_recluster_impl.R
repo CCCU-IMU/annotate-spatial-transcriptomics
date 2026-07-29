@@ -27,7 +27,7 @@ resolution_contract <- tolower(ifelse(is.null(a$`resolution-contract`),"generic"
 if(!resolution_contract%in%c("generic","sheep_ovary"))stop("--resolution-contract must be generic or sheep_ovary")
 if(resolution_contract=="sheep_ovary"&&!identical(resolutions,c(0.1,0.2,0.3,0.4,0.6)))stop("sheep_ovary cohort grid must equal 0.1,0.2,0.3,0.4,0.6")
 detect_scheduler_cpus <- function(){for(name in c("LSB_DJOB_NUMPROC","SLURM_CPUS_PER_TASK","NSLOTS","AIP_CPUS")){value<-suppressWarnings(as.integer(Sys.getenv(name,unset="")));if(length(value)&&is.finite(value)&&value>0L)return(list(cpus=value,source=name))};list(cpus=NA_integer_,source="not_detected")}
-scheduler_cpu<-detect_scheduler_cpus();resolution_workers_default<-if(is.finite(scheduler_cpu$cpus))min(length(resolutions),scheduler_cpu$cpus)else 1L
+scheduler_cpu<-detect_scheduler_cpus();resolution_workers_default<-1L
 resolution_workers_requested <- as.integer(ifelse(is.null(a$`resolution-workers`),resolution_workers_default,a$`resolution-workers`))
 resolution_future_plan_requested <- tolower(ifelse(is.null(a$`resolution-future-plan`),"auto",a$`resolution-future-plan`))
 if(!is.finite(resolution_workers_requested)||resolution_workers_requested<1L)stop("--resolution-workers must be >= 1")

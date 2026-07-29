@@ -155,6 +155,8 @@ def main() -> int:
     }:
         errors.append("annotation contract does not fail closed for context-gated candidates")
     for name in (
+        "validate_phase_runtime.py",
+        "plan_cohort_resources.py",
         "run_observation_lineage_scoring.R",
         "derive_candidate_local_subsets.R",
         "close_exact_remainders.py",
@@ -168,6 +170,12 @@ def main() -> int:
         "review_post_merge_unresolved_components.py",
         "audit_post_merge_completeness.py",
         "audit_catalog_wide_lineage_challengers.py",
+        "build_cell_type_review_marker_manifest.py",
+        "export_cell_type_review_counts.R",
+        "build_broad_cell_type_review_evidence.py",
+        "export_broad_cell_type_review_pseudobulk.R",
+        "summarize_broad_cell_type_review_pseudobulk.py",
+        "build_broad_cell_type_review_packet_index.py",
         "validate_catalog_wide_lineage_review_decisions.py",
         "apply_catalog_wide_lineage_review.py",
         "validate_sheep_ovary_biological_quality.py",
@@ -232,7 +240,7 @@ def main() -> int:
             catalog_review = controller.get("catalog_wide_review_policy", {})
             if catalog_review != {
                 "scope": "every_context_evaluable_broad",
-                "primary_unit": "second_round_source_subcluster",
+                "primary_unit": "broad_cell_type",
                 "whole_object_per_cell_classifier": False,
                 "stable_partition_reuse_default": True,
                 "maximum_decision_rounds": int(

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from evidence_schema_lib import sha256
+from lineage_controller_lib import deterministic_cell_id_set_hash
 
 
 PHASES = (
@@ -28,6 +29,8 @@ PHASES = (
 )
 WHOLE_TISSUE_FORK_WORKER_CAP = 64
 CANONICAL_SCRIPTS = (
+    "validate_phase_runtime.py",
+    "plan_cohort_resources.py",
     "run_observation_lineage_scoring.R",
     "derive_candidate_local_subsets.R",
     "close_exact_remainders.py",
@@ -41,6 +44,12 @@ CANONICAL_SCRIPTS = (
     "review_post_merge_unresolved_components.py",
     "audit_post_merge_completeness.py",
     "audit_catalog_wide_lineage_challengers.py",
+    "build_cell_type_review_marker_manifest.py",
+    "export_cell_type_review_counts.R",
+    "build_broad_cell_type_review_evidence.py",
+    "export_broad_cell_type_review_pseudobulk.R",
+    "summarize_broad_cell_type_review_pseudobulk.py",
+    "build_broad_cell_type_review_packet_index.py",
     "validate_catalog_wide_lineage_review_decisions.py",
     "apply_catalog_wide_lineage_review.py",
     "validate_sheep_ovary_biological_quality.py",
@@ -273,7 +282,9 @@ def recluster_cache_fingerprint(
         "selected_input_sha256": str(
             contract["selected_input_snapshot"]["sha256"]
         ),
-        "query_membership_sha256": sha256(args.membership),
+        "query_membership_semantic_sha256": deterministic_cell_id_set_hash(
+            read_tsv(args.membership)
+        ),
         "cohort_id": str(args.cohort_id),
         "source_initial_cluster": str(args.source_initial_cluster),
         "candidate_resolutions": [float(value) for value in grid],
@@ -974,7 +985,25 @@ def phase_cohort(args, contract: dict, paths: dict[str, Path]) -> dict:
         )
     output = args.out.resolve()
     grid = [float(value) for value in contract["query_reclustering"]["candidate_resolutions"]]
-    workers = min(len(grid), args.resolution_workers)
+    resource_out = output / "00_resource_plan"
+    resource_command = [
+        sys.executable, str(paths["plan_cohort_resources.py"]),
+        "--rds", str(args.rds.resolve()),
+        "--rds-sha256", str(
+            contract["selected_input_snapshot"]["sha256"]
+        ),
+        "--membership", str(args.membership.resolve()),
+        "--resolution-workers", str(args.resolution_workers),
+        "--grid-size", str(len(grid)), "--out", str(resource_out),
+    ]
+    if args.allocated_memory_gb is not None:
+        resource_command.extend([
+            "--allocated-memory-gb", str(args.allocated_memory_gb)
+        ])
+    run(resource_command, output / "logs/00_resource_plan.log")
+    resource_plan_path = resource_out / "cohort_resource_plan.json"
+    resource_plan = json.loads(resource_plan_path.read_text(encoding="utf-8"))
+    workers = int(resource_plan["effective_resolution_workers"])
     cache_fingerprint, cache_payload = recluster_cache_fingerprint(
         contract, paths, args, grid
     )
@@ -1153,6 +1182,7 @@ def phase_cohort(args, contract: dict, paths: dict[str, Path]) -> dict:
         "provisional_broad_after_score_freeze": args.provisional_broad,
         "raw_count_assay": raw_assay,
         "raw_count_ancestry": artifact(ancestry_path),
+        "resource_plan": artifact(resource_plan_path),
         "partition_cache": artifact(
             cache_manifest_path, "derived_partition_cache"
         ),
@@ -1214,6 +1244,7 @@ def phase_cohort(args, contract: dict, paths: dict[str, Path]) -> dict:
         "raw_count_reclustering": "SCTv2_PCA_SNN_Leiden",
         "raw_count_assay": raw_assay,
         "raw_count_ancestry": artifact(ancestry_path),
+        "resource_plan": artifact(resource_plan_path),
         "partition_cache": artifact(
             cache_manifest_path, "derived_partition_cache"
         ),
@@ -1813,6 +1844,7 @@ def run_targeted_follicle_roi_iteration(
 def run_catalog_wide_review_iterations(
     args, paths: dict[str, Path], output: Path, membership: Path,
     observation_score_paths: list[Path], cluster_evidence_paths: list[Path],
+    biological_quality_required: bool,
 ) -> dict:
     """Run bounded post-Atlas precision/recall review without reclustering."""
     policy = json.loads(
@@ -1825,8 +1857,28 @@ def run_catalog_wide_review_iterations(
     current_membership = membership
     prior_validations: list[Path] = []
     apply_manifests: list[Path] = []
+    evidence_packet_manifests: list[Path] = []
     previous_review: Path | None = None
     last_review: Path | None = None
+
+    static_out = output / "07_catalog_wide_review_evidence_static"
+    marker_out = static_out / "00_marker_manifest"
+    run([
+        sys.executable,
+        str(paths["build_cell_type_review_marker_manifest.py"]),
+        "--profile", str(paths["profile"]),
+        "--catalog", str(paths["catalog"]),
+        "--out", str(marker_out),
+    ], output / "logs/07_catalog_wide_marker_manifest.log")
+    marker_manifest = marker_out / "cell_type_review_marker_manifest.tsv"
+    count_out = static_out / "01_raw_count_export"
+    run([
+        args.rscript, str(paths["export_cell_type_review_counts.R"]),
+        "--rds", str(paths["selected_input"]),
+        "--analysis-membership", str(membership.resolve()),
+        "--marker-manifest", str(marker_manifest),
+        "--out", str(count_out),
+    ], output / "logs/07_catalog_wide_raw_count_export.log")
     for review_round in range(1, maximum_decisions + 2):
         review_out = output / f"07_catalog_wide_review_round_{review_round:02d}"
         review_authority = stage_authority(
@@ -1881,7 +1933,113 @@ def run_catalog_wide_review_iterations(
                 "review_manifest": last_review,
                 "decision_validations": prior_validations,
                 "apply_manifests": apply_manifests,
+                "evidence_packet_manifests": evidence_packet_manifests,
             }
+        evidence_root = review_out / "broad_cell_type_evidence"
+        biological_quality_path: Path | None = None
+        if biological_quality_required:
+            biological_quality_out = evidence_root / "00_sheep_ovary_quality"
+            quality_command = [
+                sys.executable,
+                str(paths["validate_sheep_ovary_biological_quality.py"]),
+                "--membership", str(current_membership.resolve()),
+                "--catalog", str(paths["catalog"]),
+                "--out", str(biological_quality_out),
+            ]
+            for score_path in observation_score_paths:
+                quality_command.extend(["--scores", str(score_path.resolve())])
+            if args.canonical_oocyte_review:
+                quality_command.extend([
+                    "--canonical-oocyte-review",
+                    str(args.canonical_oocyte_review.resolve()),
+                ])
+            run(
+                quality_command,
+                output / f"logs/07_catalog_wide_quality_round_{review_round:02d}.log",
+                allowed_codes=(0, 2),
+            )
+            biological_quality_path = (
+                biological_quality_out
+                / "sheep_ovary_biological_quality_review.json"
+            )
+        broad_evidence_out = evidence_root / "00_raw_count_marker_spatial"
+        broad_command = [
+            sys.executable,
+            str(paths["build_broad_cell_type_review_evidence.py"]),
+            "--count-export", str(count_out),
+            "--marker-manifest", str(marker_manifest),
+            "--membership", str(current_membership.resolve()),
+            "--review-manifest", str(last_review.resolve()),
+            "--catalog", str(paths["catalog"]),
+            "--threshold-registry", str(paths["threshold_registry"]),
+            "--workers", str(max(1, int(args.resolution_workers))),
+            "--out", str(broad_evidence_out),
+        ]
+        if "context_evidence" in paths:
+            broad_command.extend([
+                "--context-evidence", str(paths["context_evidence"])
+            ])
+        run(
+            broad_command,
+            output / f"logs/07_catalog_wide_evidence_round_{review_round:02d}.log",
+        )
+        broad_evidence_manifest = (
+            broad_evidence_out / "broad_cell_type_review_evidence_manifest.json"
+        )
+        pseudobulk_out = evidence_root / "01_full_transcriptome_pseudobulk"
+        run([
+            args.rscript,
+            str(paths["export_broad_cell_type_review_pseudobulk.R"]),
+            "--rds", str(paths["selected_input"]),
+            "--membership", str(current_membership.resolve()),
+            "--recall-membership", str(
+                broad_evidence_out
+                / "broad_cell_type_outside_recall_membership.tsv.gz"
+            ),
+            "--out", str(pseudobulk_out),
+        ], output / f"logs/07_catalog_wide_pseudobulk_round_{review_round:02d}.log")
+        pseudobulk_summary_out = evidence_root / "02_pseudobulk_summary"
+        run([
+            sys.executable,
+            str(paths["summarize_broad_cell_type_review_pseudobulk.py"]),
+            "--pseudobulk", str(
+                pseudobulk_out / "broad_cell_type_review_pseudobulk.tsv.gz"
+            ),
+            "--pseudobulk-manifest", str(
+                pseudobulk_out
+                / "broad_cell_type_review_pseudobulk_manifest.json"
+            ),
+            "--broad-evidence-manifest", str(broad_evidence_manifest),
+            "--marker-manifest", str(marker_manifest),
+            "--out", str(pseudobulk_summary_out),
+        ], output / f"logs/07_catalog_wide_pseudobulk_summary_round_{review_round:02d}.log")
+        pseudobulk_summary_manifest = (
+            pseudobulk_summary_out
+            / "broad_cell_type_review_pseudobulk_summary_manifest.json"
+        )
+        packet_out = evidence_root / "03_evidence_packets"
+        packet_command = [
+            sys.executable,
+            str(paths["build_broad_cell_type_review_packet_index.py"]),
+            "--review-manifest", str(last_review.resolve()),
+            "--broad-evidence-manifest", str(broad_evidence_manifest),
+            "--pseudobulk-summary-manifest", str(pseudobulk_summary_manifest),
+            "--threshold-registry", str(paths["threshold_registry"]),
+            "--out", str(packet_out),
+        ]
+        if biological_quality_path:
+            packet_command.extend([
+                "--biological-quality-review",
+                str(biological_quality_path.resolve()),
+            ])
+        run(
+            packet_command,
+            output / f"logs/07_catalog_wide_packet_round_{review_round:02d}.log",
+        )
+        evidence_packet_manifest = (
+            packet_out / "broad_cell_type_review_packet_manifest.json"
+        )
+        evidence_packet_manifests.append(evidence_packet_manifest)
         decision_index = review_round - 1
         if decision_index >= maximum_decisions or decision_index >= len(supplied_decisions):
             return {
@@ -1889,12 +2047,14 @@ def run_catalog_wide_review_iterations(
                 "review_manifest": last_review,
                 "decision_validations": prior_validations,
                 "apply_manifests": apply_manifests,
+                "evidence_packet_manifests": evidence_packet_manifests,
             }
         decision_out = output / f"07_catalog_wide_decision_round_{review_round:02d}"
         run([
             sys.executable,
             str(paths["validate_catalog_wide_lineage_review_decisions.py"]),
             "--review-manifest", str(last_review),
+            "--evidence-packet-manifest", str(evidence_packet_manifest),
             "--decisions", str(supplied_decisions[decision_index].resolve()),
             "--out", str(decision_out),
         ], output / f"logs/07_catalog_wide_decision_round_{review_round:02d}.log", allowed_codes=(0, 2))
@@ -1908,6 +2068,7 @@ def run_catalog_wide_review_iterations(
                 "review_manifest": last_review,
                 "decision_validations": prior_validations + [validation_path],
                 "apply_manifests": apply_manifests,
+                "evidence_packet_manifests": evidence_packet_manifests,
             }
         apply_out = output / f"07_catalog_wide_apply_round_{review_round:02d}"
         apply_authority = stage_authority(
@@ -2015,7 +2176,37 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
     ]
     if args.atlas_decisions:
         validation_command.extend(["--decisions", str(args.atlas_decisions.resolve())])
-    run(validation_command, output / "logs/01_atlas_validation.log")
+    run(
+        validation_command, output / "logs/01_atlas_validation.log",
+        allowed_codes=(0, 2),
+    )
+    atlas_validation = json.loads(validation_path.read_text(encoding="utf-8"))
+    if atlas_validation.get("status") == "REVIEW_REQUIRED":
+        routing_manifest_path = (
+            routing_out / "atlas_state_routing_manifest.json"
+        )
+        routing_manifest = json.loads(
+            routing_manifest_path.read_text(encoding="utf-8")
+        )
+        return {
+            "status": "REVIEW_REQUIRED",
+            "phase": "atlas_and_completeness_review",
+            "pause_reason": "atlas_discrepancy_decisions_required",
+            "formal_membership_written": False,
+            "frozen_broad_membership": artifact(
+                args.frozen_broad_membership
+            ),
+            "atlas_routing": artifact(routing_manifest_path),
+            "atlas_validation": artifact(validation_path),
+            "review_queue": routing_manifest.get("artifacts", {}).get(
+                "review_queue"
+            ),
+            "resume_requires": (
+                "rerun the same phase with decisions bound to this review queue"
+            ),
+        }
+    if atlas_validation.get("status") != "PASS":
+        raise RuntimeError("Atlas validation is blocked by invalid evidence or decisions")
     apply_out = output / "02_post_atlas_membership"
     run([
         sys.executable, str(paths["apply_post_merge_atlas_routing.py"]),
@@ -2209,6 +2400,7 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
     catalog_review = run_catalog_wide_review_iterations(
         args, paths, output, post_membership,
         observation_score_paths, cluster_evidence_paths,
+        quality_required,
     )
     catalog_review_status = str(catalog_review["status"])
     post_membership = Path(catalog_review["membership"])
@@ -2225,6 +2417,7 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             sys.executable, str(paths["audit_post_merge_completeness.py"]),
             "--membership", str(post_membership),
             "--catalog", str(paths["catalog"]),
+            "--post-merge-review-manifest", str(unresolved_review_manifest_path),
             "--out", str(completeness_out),
         ]
         for path in cluster_evidence_paths:
@@ -2315,6 +2508,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         ),
         "catalog_wide_decision_validations": [
             artifact(path) for path in catalog_review["decision_validations"]
+        ],
+        "catalog_wide_evidence_packet_manifests": [
+            artifact(path)
+            for path in catalog_review["evidence_packet_manifests"]
         ],
         "catalog_wide_apply_manifests": [
             artifact(path) for path in catalog_apply_manifests
@@ -2418,6 +2615,66 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def run_phase_runtime_preflight(
+    args: argparse.Namespace, paths: dict[str, Path]
+) -> Path:
+    """Fail before phase work when the exact runtime or semantic reader is invalid."""
+    out = args.out.resolve() / "00_phase_runtime_preflight"
+    command = [
+        sys.executable, str(paths["validate_phase_runtime.py"]),
+        "--python", sys.executable,
+        "--rscript", str(args.rscript),
+        "--semantic-input", f"annotation_contract:json:{args.contract}",
+        "--semantic-input", f"biological_profile:json:{paths['profile']}",
+        "--semantic-input", f"candidate_catalog:json:{paths['catalog']}",
+        "--semantic-input", f"analysis_set:tsv:{paths['analysis_set']}",
+        "--out", str(out),
+    ]
+    for name in CANONICAL_SCRIPTS:
+        if name.endswith(".py"):
+            command.extend(["--python-script", str(paths[name])])
+    python_imports = {
+        "whole_tissue_partition": ("numpy", "pandas", "scipy"),
+        "cluster_cohort_recluster": ("numpy", "pandas", "scipy"),
+        "local_mixed_subcluster_split": ("numpy", "pandas", "scipy"),
+        "merge_and_freeze_broad": ("numpy", "pandas"),
+        "atlas_and_completeness_review": (
+            "numpy", "pandas", "scipy", "sklearn", "matplotlib",
+        ),
+        "materialize_final_release": ("numpy", "pandas"),
+    }
+    for module in python_imports[args.phase]:
+        command.extend(["--python-import", module])
+    r_packages = {
+        "whole_tissue_partition": (
+            "Seurat", "SeuratObject", "Matrix", "data.table", "jsonlite",
+        ),
+        "cluster_cohort_recluster": (
+            "Seurat", "SeuratObject", "Matrix", "data.table", "glmGamPoi",
+            "future", "future.apply",
+        ),
+        "local_mixed_subcluster_split": ("Matrix", "data.table"),
+        "merge_and_freeze_broad": (),
+        "atlas_and_completeness_review": (
+            "Seurat", "Matrix", "data.table", "jsonlite",
+        ),
+        "materialize_final_release": (),
+    }
+    for package in r_packages[args.phase]:
+        command.extend(["--r-package", package])
+    if "context_evidence" in paths:
+        context_kind = (
+            "json" if paths["context_evidence"].suffix.lower() == ".json"
+            else "tsv"
+        )
+        command.extend([
+            "--semantic-input",
+            f"candidate_context_evidence:{context_kind}:{paths['context_evidence']}",
+        ])
+    run(command, args.out.resolve() / "logs/00_phase_runtime_preflight.log")
+    return out / "phase_runtime_preflight.json"
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="phase", required=True)
@@ -2430,6 +2687,7 @@ def parse_args() -> argparse.Namespace:
     add_common(cohort)
     cohort.add_argument("--rds", required=True, type=Path)
     cohort.add_argument("--membership", required=True, type=Path)
+    cohort.add_argument("--allocated-memory-gb", type=float)
     cohort.add_argument("--whole-manifest", required=True, type=Path)
     cohort.add_argument("--cohort-id", required=True)
     cohort.add_argument("--source-initial-cluster", required=True)
@@ -2448,7 +2706,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     cohort.add_argument("--resolution-contract", default="sheep_ovary", choices=["generic", "sheep_ovary"])
-    cohort.add_argument("--resolution-workers", type=int, default=5)
+    cohort.add_argument(
+        "--resolution-workers", type=int, default=1,
+        help=(
+            "Leiden-resolution fork count; default 1 because each worker can "
+            "replicate the loaded Seurat/SCT carrier. Parallelize independent "
+            "cohorts instead of resolutions for large inputs."
+        ),
+    )
 
     local = sub.add_parser("local_mixed_subcluster_split")
     add_common(local)
@@ -2487,7 +2752,7 @@ def parse_args() -> argparse.Namespace:
             "post-Atlas biological review rounds"
         ),
     )
-    atlas.add_argument("--resolution-workers", type=int, default=5)
+    atlas.add_argument("--resolution-workers", type=int, default=1)
 
     final = sub.add_parser("materialize_final_release")
     add_common(final)
@@ -2500,6 +2765,7 @@ def main() -> int:
     args = parse_args()
     args.contract = args.contract.resolve()
     contract, paths = validate_contract(args.contract)
+    runtime_preflight = run_phase_runtime_preflight(args, paths)
     bound_seed = int(
         contract.get("canonical_lineage_controller", {}).get("random_seed", -1)
     )
@@ -2543,6 +2809,7 @@ def main() -> int:
     else:
         result = phase_final(args, contract, paths)
     result.update({
+        "runtime_preflight": artifact(runtime_preflight),
         "schema_version": "2.2", "controller_version": "2.2.0",
         "annotation_contract": artifact(args.contract),
         "seed": args.seed, "finished_at_utc": datetime.now(timezone.utc).isoformat(),

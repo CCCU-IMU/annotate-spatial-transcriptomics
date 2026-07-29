@@ -45,6 +45,19 @@ counts <- tryCatch(
 )
 if (nrow(counts) == 0 || ncol(counts) == 0) stop("selected raw-count assay is empty")
 
+metadata <- obj[[]]
+coordinate_candidates <- list(c("x", "y"), c("X", "Y"), c("imagecol", "imagerow"))
+coordinate_columns <- NULL
+for (candidate in coordinate_candidates) {
+  if (all(candidate %in% colnames(metadata))) {
+    coordinate_columns <- candidate
+    break
+  }
+}
+if (is.null(coordinate_columns)) {
+  stop("cell-type review requires project-local x/y coordinates in Seurat metadata")
+}
+
 read_character_table <- function(path) {
   if (grepl("\\.gz$", path, ignore.case = TRUE)) {
     connection <- gzfile(path, open = "rt")
@@ -64,6 +77,14 @@ if (anyDuplicated(membership$cell_id)) stop("analysis membership duplicates cell
 missing_cells <- setdiff(membership$cell_id, colnames(counts))
 if (length(missing_cells) > 0) stop("analysis membership contains cells absent from raw counts")
 counts <- counts[, membership$cell_id, drop = FALSE]
+coordinates <- data.table(
+  cell_id = membership$cell_id,
+  x = as.numeric(metadata[membership$cell_id, coordinate_columns[[1]]]),
+  y = as.numeric(metadata[membership$cell_id, coordinate_columns[[2]]])
+)
+if (any(!is.finite(coordinates$x)) || any(!is.finite(coordinates$y))) {
+  stop("cell-type review coordinates contain non-finite values")
+}
 
 marker_manifest <- unique(fread(marker_path, colClasses = "character"))
 if (!all(c("gene", "candidate_id", "broad_label", "evidence_role", "family_id") %in% names(marker_manifest))) {
@@ -97,6 +118,7 @@ fwrite(data.table(
   total_raw_counts = as.numeric(Matrix::colSums(counts)),
   detected_raw_genes = as.numeric(Matrix::colSums(counts > 0))
 ), file.path(out_dir, "cell_type_review_library_size.tsv.gz"), sep = "\t")
+fwrite(coordinates, file.path(out_dir, "cell_type_review_coordinates.tsv"), sep = "\t")
 
 manifest <- list(
   schema_version = "2.2",
@@ -112,7 +134,9 @@ manifest <- list(
   marker_matrix = normalizePath(paste0(matrix_path, ".gz")),
   gene_map = normalizePath(file.path(out_dir, "cell_type_review_gene_map.tsv")),
   cells = normalizePath(file.path(out_dir, "cell_type_review_cells.tsv")),
-  library_size = normalizePath(file.path(out_dir, "cell_type_review_library_size.tsv.gz"))
+  library_size = normalizePath(file.path(out_dir, "cell_type_review_library_size.tsv.gz")),
+  coordinates = normalizePath(file.path(out_dir, "cell_type_review_coordinates.tsv")),
+  coordinate_columns = coordinate_columns
 )
 write_json(manifest, file.path(out_dir, "cell_type_review_count_export_manifest.json"),
            pretty = TRUE, auto_unbox = TRUE)

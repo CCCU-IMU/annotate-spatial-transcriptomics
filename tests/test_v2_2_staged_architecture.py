@@ -329,6 +329,15 @@ class V22StagedArchitectureTests(unittest.TestCase):
             )
             self.assertEqual(first, semantic_only)
             self.assertNotIn("candidate_catalog", payload)
+            write_tsv(membership, [{"cell_id": "c2"}, {"cell_id": "c1"}])
+            reserialized, reserialized_payload = module.recluster_cache_fingerprint(
+                contract, paths, args, [0.1, 0.2, 0.3]
+            )
+            self.assertEqual(first, reserialized)
+            self.assertEqual(
+                payload["query_membership_semantic_sha256"],
+                reserialized_payload["query_membership_semantic_sha256"],
+            )
             args.seed = 2201
             changed_seed, _ = module.recluster_cache_fingerprint(
                 contract, paths, args, [0.1, 0.2, 0.3]
