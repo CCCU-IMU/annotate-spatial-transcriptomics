@@ -36,6 +36,7 @@ CANONICAL_SCRIPTS = (
     "close_exact_remainders.py",
     "build_whole_tissue_cohort_plan.py",
     "adjudicate_second_round_subclusters.py",
+    "audit_local_split_workload.py",
     "build_candidate_context_evidence.py",
     "merge_and_freeze_broad_membership.py",
     "route_global_atlas_v2.py",
@@ -151,6 +152,18 @@ def validate_contract(contract_path: Path) -> tuple[dict, dict[str, Path]]:
         raise RuntimeError("annotation contract does not bind controller v2.2.0")
     if controller.get("phase_order") != list(PHASES):
         raise RuntimeError("annotation contract does not bind the staged v2.2 architecture")
+    observation_unit = str(contract.get("observation_unit", "")).strip().lower()
+    if observation_unit not in {"cell", "nucleus", "cellbin", "spot"}:
+        raise RuntimeError("annotation contract has no supported observation_unit")
+    release_taxonomy = contract.get("release_taxonomy", {})
+    if (
+        release_taxonomy.get("independent_vascular_lineages")
+        != ["Endothelial", "Pericyte/mural", "Smooth muscle"]
+        or release_taxonomy.get("lymphatic_parent") != "Endothelial"
+        or release_taxonomy.get("legacy_vascular_associated_release_forbidden") is not True
+        or release_taxonomy.get("single_public_annotation_column") != "final_cell_type"
+    ):
+        raise RuntimeError("annotation contract does not bind the v2.2 vascular taxonomy")
     script_dir = Path(__file__).resolve().parent
     paths = {name: script_dir / name for name in CANONICAL_SCRIPTS}
     for name, path in paths.items():
@@ -646,7 +659,7 @@ def stage_authority(
 def run_scorer(
     args, paths: dict[str, Path], rds: Path, partitions: Path, output: Path,
     grid_only: bool = False, analysis_membership: Path | None = None,
-    assay: str = "",
+    assay: str = "", observation_unit: str = "",
 ) -> None:
     scoring_workers = (
         min(args.scoring_workers, WHOLE_TISSUE_FORK_WORKER_CAP)
@@ -659,6 +672,7 @@ def run_scorer(
         "--out", str(output), "--seed", str(args.seed),
         "--workers", str(scoring_workers),
         "--threshold-registry", str(paths["threshold_registry"]),
+        "--observation-unit", observation_unit,
     ]
     if grid_only:
         command.extend(["--grid-evidence-only", "true"])
@@ -696,6 +710,7 @@ def phase_whole(args, contract: dict, paths: dict[str, Path]) -> dict:
     run_scorer(
         args, paths, args.rds, args.partitions, grid_scoring,
         grid_only=True, analysis_membership=paths["analysis_set"],
+        observation_unit=contract["observation_unit"],
     )
     evidence_out = output / "01_resolution_evidence"
     run([
@@ -1101,6 +1116,7 @@ def phase_cohort(args, contract: dict, paths: dict[str, Path]) -> dict:
     run_scorer(
         args, paths, query_rds, grid_partitions, grid_scoring,
         grid_only=True, assay=raw_assay,
+        observation_unit=contract["observation_unit"],
     )
     evidence_out = output / "02_resolution_evidence"
     run([
@@ -1127,7 +1143,10 @@ def phase_cohort(args, contract: dict, paths: dict[str, Path]) -> dict:
     selected_partitions = selection_out / "selected_neighbor_partitions.tsv.gz"
     materialize_selected_neighbors(grid_partitions, selection, selected_partitions)
     scoring = output / "04_selected_scoring"
-    run_scorer(args, paths, query_rds, selected_partitions, scoring, assay=raw_assay)
+    run_scorer(
+        args, paths, query_rds, selected_partitions, scoring, assay=raw_assay,
+        observation_unit=contract["observation_unit"],
+    )
     unmodeled = output / "05_unmodeled"
     run([
         sys.executable, str(paths["discover_unmodeled_lineages.py"]),
@@ -1258,6 +1277,7 @@ def phase_cohort(args, contract: dict, paths: dict[str, Path]) -> dict:
         "base_candidate_membership": adjudication_manifest["base_candidate_membership"],
         "pending_local_split_membership": adjudication_manifest["pending_local_split_membership"],
         "n_pending_local_split": adjudication_manifest["n_pending_local_split"],
+        "n_observations": len(membership_ids),
         "unmodeled": artifact(unmodeled / "unmodeled_discovery_manifest.json"),
         "fine_candidate_proposals": artifact(
             adjudication / "fine_candidate_proposals.tsv"
@@ -1287,6 +1307,35 @@ def phase_local(args, contract: dict, paths: dict[str, Path]) -> dict:
         trigger, args.contract, "cluster_cohort_recluster"
     ):
         raise RuntimeError("local split trigger is not a bound second-round controller manifest")
+    workload = json.loads(args.workload_audit.read_text(encoding="utf-8"))
+    if (
+        workload.get("stage") != "pre_local_split_workload_audit"
+        or workload.get("status") != "PASS"
+    ):
+        raise RuntimeError(
+            "local split requires a PASS combined-cohort workload audit"
+        )
+    threshold_record = workload.get("threshold_registry", {})
+    if (
+        Path(str(threshold_record.get("path", ""))).resolve()
+        != paths["threshold_registry"].resolve()
+        or threshold_record.get("sha256")
+        != sha256(paths["threshold_registry"])
+    ):
+        raise RuntimeError("local split workload audit uses stale thresholds")
+    bound_triggers = {
+        (
+            Path(str(record.get("path", ""))).resolve(),
+            str(record.get("sha256", "")),
+        )
+        for record in workload.get("cohort_manifests", [])
+    }
+    if (
+        args.trigger_manifest.resolve(), sha256(args.trigger_manifest)
+    ) not in bound_triggers:
+        raise RuntimeError(
+            "local split trigger is absent from the combined-cohort workload audit"
+        )
     if trigger.get("cohort_id") != args.source_boundary:
         raise RuntimeError("local split source boundary differs from trigger cohort")
     selected_scoring = trigger.get("selected_scoring", {})
@@ -1340,6 +1389,7 @@ def phase_local(args, contract: dict, paths: dict[str, Path]) -> dict:
         "local_mixed_subcluster_split", args.contract, paths, output,
         cluster_evidence=evidence, trigger_manifest=args.trigger_manifest,
         trigger_membership=pending_path,
+        local_split_workload_audit=args.workload_audit,
         context_evidence=context_path,
     )
     subset_out = output / "00_candidate_subsets"
@@ -1379,6 +1429,7 @@ def phase_local(args, contract: dict, paths: dict[str, Path]) -> dict:
         "source_boundary": args.source_boundary,
         "source_cluster": args.source_cluster,
         "trigger_manifest": artifact(args.trigger_manifest),
+        "local_split_workload_audit": artifact(args.workload_audit),
         "trigger_membership": artifact(pending_path),
         "candidate_membership": manifest["candidate_membership"],
         "local_subset_validation": artifact(
@@ -1737,6 +1788,7 @@ def run_targeted_follicle_roi_iteration(
         run_scorer(
             args, paths, query_rds, grid_partitions, grid_scoring,
             grid_only=True, assay=raw_assay,
+            observation_unit=contract["observation_unit"],
         )
         evidence_out = roi_output / "02_resolution_evidence"
         run([
@@ -1768,7 +1820,7 @@ def run_targeted_follicle_roi_iteration(
         scoring = roi_output / "04_selected_scoring"
         run_scorer(
             args, paths, query_rds, selected_partitions, scoring,
-            assay=raw_assay,
+            assay=raw_assay, observation_unit=contract["observation_unit"],
         )
         repair_scores[roi_id] = (
             scoring / "tables/observation_lineage_scores.tsv.gz"
@@ -1814,12 +1866,15 @@ def run_targeted_follicle_roi_iteration(
     combined_scores = Path(
         repair_manifest["combined_observation_scores"]["path"]
     )
+    coordinate_membership = Path(
+        repair_manifest["coordinate_membership"]["path"]
+    )
     post_review = output_root / "post_repair_biological_quality"
     run([
         sys.executable,
         str(paths["validate_sheep_ovary_biological_quality.py"]),
         "--membership", str(repaired_membership),
-        "--coordinate-membership", str(repaired_membership),
+        "--coordinate-membership", str(coordinate_membership),
         "--catalog", str(paths["catalog"]),
         "--scores", str(combined_scores),
         "--expected-roi-review", str(expected_roi_path),
@@ -1837,6 +1892,7 @@ def run_targeted_follicle_roi_iteration(
         "scores": combined_scores,
         "quality_review": post_quality_path,
         "repair_manifest": repair_manifest_path,
+        "coordinate_membership": coordinate_membership,
         "target_rois": target_rois,
     }
 
@@ -2361,6 +2417,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
                     str(paths["audit_post_merge_completeness.py"]),
                     "--membership", str(post_membership),
                     "--catalog", str(paths["catalog"]),
+                    "--post-merge-review-manifest",
+                    str(unresolved_review_manifest_path),
+                    "--follicle-roi-repair-manifest",
+                    str(repair["repair_manifest"]),
                     "--out", str(completeness_out),
                 ]
                 for path in cluster_evidence_paths:
@@ -2420,6 +2480,11 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             "--post-merge-review-manifest", str(unresolved_review_manifest_path),
             "--out", str(completeness_out),
         ]
+        if follicle_repair_manifest:
+            command.extend([
+                "--follicle-roi-repair-manifest",
+                str(follicle_repair_manifest["path"]),
+            ])
         for path in cluster_evidence_paths:
             command.extend(["--cluster-evidence", str(path.resolve())])
         for path in fine_proposal_paths:
@@ -2585,11 +2650,18 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
     final_manifest = json.loads(
         (final_out / "final_release_manifest.json").read_text(encoding="utf-8")
     )
+    final_status = str(final_manifest.get("status", ""))
+    if final_status not in {"PASS", "PENDING_USER_REVIEW_HIGH_UNRESOLVED"}:
+        raise RuntimeError("final materializer returned an invalid status")
     return {
-        "status": "PASS", "phase": "materialize_final_release",
+        "status": final_status, "phase": "materialize_final_release",
         "stage_authority": artifact(authority),
         "prerequisite": artifact(args.prerequisite_manifest),
-        "formal_membership_written": True,
+        "formal_membership_written": bool(final_manifest["release_ready"]),
+        "review_candidate_membership_written": bool(
+            final_manifest["review_candidate_membership_written"]
+        ),
+        "required_next_action": final_manifest["required_next_action"],
         "membership": final_manifest["membership"],
         "broad_census": final_manifest["broad_census"],
         "fine_census": final_manifest["fine_census"],
@@ -2718,6 +2790,13 @@ def parse_args() -> argparse.Namespace:
     local = sub.add_parser("local_mixed_subcluster_split")
     add_common(local)
     local.add_argument("--trigger-manifest", required=True, type=Path)
+    local.add_argument(
+        "--workload-audit", required=True, type=Path,
+        help=(
+            "PASS audit_local_split_workload.py result built from every "
+            "second-round cohort manifest before any P41 job is submitted"
+        ),
+    )
     local.add_argument("--scoring-output", required=True, type=Path)
     local.add_argument("--source-boundary", required=True)
     local.add_argument("--source-cluster", required=True)

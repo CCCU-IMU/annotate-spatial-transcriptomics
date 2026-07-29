@@ -44,7 +44,7 @@ def main() -> int:
         "direct_return_registry": root / "state/direct_return_registry.tsv",
         "route_attempt_registry": root / "state/route_attempt_registry.tsv",
         "run_registry": root / "state/run_registry.tsv",
-        "final_annotation_census": root / "tables/final_annotation_census.tsv",
+        "final_cell_type_census": root / "tables/final_cell_type_census.tsv",
         "annotation_view_registry": root / "state/annotation_view_registry.tsv",
         "annotation_support_registry": root / "state/annotation_support_registry.tsv",
         "annotation_support_validation": root / "provenance/annotation_support_validation.json",
@@ -81,12 +81,13 @@ def main() -> int:
     views = read_tsv(paths["annotation_view_registry"])
     if not any(row.get("view") == "final" and row.get("status") == "validated" for row in views):
         errors.append("the single final annotation view is not validated")
-    if not read_tsv(paths["final_annotation_census"]):
-        errors.append("final annotation census is empty")
+    census_rows = read_tsv(paths["final_cell_type_census"])
+    if not census_rows or not {"final_cell_type", "n_observations"}.issubset(census_rows[0]):
+        errors.append("final_cell_type census is empty or malformed")
     if not any(row.get("status") == "validated" for row in read_tsv(paths["annotation_support_registry"])):
         errors.append("validated annotation support reasons are absent")
-    if asset_manifest.get("status") != "PASS" or asset_manifest.get("label_column") != "primary_broad_label":
-        errors.append("lightweight broad spatial/dotplot evidence assets are not PASS")
+    if asset_manifest.get("status") != "PASS" or asset_manifest.get("label_column") != "final_cell_type":
+        errors.append("lightweight final_cell_type spatial/dotplot evidence assets are not PASS")
     for key in ("spatial_png", "dotplot_png", "dotplot_source", "palette_tsv"):
         value = str(asset_manifest.get(key, ""))
         artifact = Path(value)

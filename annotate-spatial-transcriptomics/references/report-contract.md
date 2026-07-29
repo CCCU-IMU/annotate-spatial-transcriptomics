@@ -1,61 +1,57 @@
 # Final report contract
 
-## Required sections
+## Single public annotation
 
-1. Data/input audit and selected clustering rationale.
-2. Final broad spatial/UMAP overview.
-3. Expandable broad-to-subtype annotation tree with node highlights.
-4. Broad marker evidence.
-5. High-confidence subtype marker evidence when at least one fine label passes; otherwise an explicit zero-subtype audit.
-6. Broad DEG downloads and, when released, subtype DEG downloads.
-7. Spatial marker maps grouped by supported cell type.
-8. Unresolved, interface and QC policies with counts.
-9. Complete chronological workflow and state provenance.
-10. Software/session information, audit results and checksums.
-11. Biological context/profile/preset, open-world lineage discovery, iteration queue, every cohort/direct-return/run status, triggered Oocyte/context-specific object audits and completion-gate result.
-12. Full-feature audit plus label-level full-feature marker validation; clearly distinguish clustering/HVG evidence from final validation evidence and expose the manifest of the LogNormalize validation-only object when the Seurat raw container had `Spatial@data == counts`.
-13. One final census and map. Moderate-or-higher broad assignments supply broad DEG/markers; high-confidence real fine labels supply subtype DEG/markers.
-14. Workflow dashboard: whole-tissue provisional partition, every initial-cluster cohort and selected second-round resolution, parent/cross-lineage/missing-broad returns, triggered local splits, broad freeze, all-cell Atlas concordance, unlabeled rescue/rejects, OOD census and every closed discrepancy review.
-15. A detailed Chinese workflow at the bottom reconstructed from `workflow_event_registry.tsv`, starting from raw-object loading and including every cohort generation/direct return, scheduler failure/repair, biological review and atomic writeback. Link to it from the top navigation.
-16. Source ancestry/control board: `source_key → initial broad decision → cohort/run/resolution/subcluster → direct or assisted action → final label/confidence`.
-17. Two separately labeled top-level censuses: biological broad classes and retained anatomical-interface/QC/technical/pending states. Only the former enters the broad biological tree, DEG and marker dotplots.
-18. Continuous lineage-signal dashboard: whole-tissue watches, every second-round selected/nearest-neighbor resolution, full-catalog coverage, supported/refuted/not-evaluable signals, unmodeled programs and any missing broad reconstructed after cohort reclustering.
-19. In the pre-confirmation report, canonical marker-expression spatial panels for every broad class and released fine label across all analysis-set observations. These maps do not filter, fade or recolor by assigned cell type; they use fixed point size, a common background and documented per-gene expression scaling.
+Every released analysis observation has exactly one `final_cell_type`:
 
-The annotation tree must provide expand/collapse/search controls and a direct link from every broad/subtype node to its spatial highlight. Put the reviewed annotated spatial overview immediately above the tree. Keep the detailed Chinese raw-input-to-release workflow at the bottom, with a top navigation entry to it.
+- a high-confidence, parent-locked fine identity replaces its broad parent;
+- otherwise the frozen broad identity is used;
+- terminal unresolved biological/QC membership is shown as `QC/Unknown`.
 
-If the completion gate is absent or blocked, no master quality approval, confirmation or final report may be built. After it passes, generate one high-contrast broad spatial PNG, one canonical broad marker dotplot PNG and compact all-cell canonical-marker spatial panels, freeze the fully annotated snapshot, and obtain the main conversation Agent's concise biological quality approval. Only then build `review/confirmation/index.html` from the approved result and `state/annotation_support_registry.tsv`. This lightweight, self-contained HTML is the only pre-user-approval report and must not run final DEG or full release assets. Then freeze `provenance/final_annotation_confirmation_request.json`; its hashes bind the current cell/cluster/support ledgers, completion/taxonomy/master-quality records and lightweight review. A biologically complete release report is built only after explicit user approval and every cohort/assisted route is terminal with rationale.
+`final_broad_label`, `final_fine_label`, candidate IDs, confidence and assignment source remain internal audit provenance. They must not be presented as parallel public annotation systems. Public census, overview, spatial highlights, DEG, canonical/data-specific dotplots and the main downloadable annotation table all use `final_cell_type`.
 
-## Mandatory dotplots
+## Required report sections
 
-Always produce broad-class tree dotplots. Produce subtype tree dotplots only when at least one high-confidence fine label is released; zero subtypes is a valid outcome and must not trigger synthetic labels. For every released level produce canonical and data-specific versions when data-specific markers are available.
+1. Input/context audit and selected clustering rationale.
+2. One high-contrast whole-tissue `final_cell_type` spatial/UMAP overview.
+3. One final-cell-type census, including `QC/Unknown` separately from biological identities.
+4. One switchable normalized/absolute canonical marker dotplot grouped by `final_cell_type`.
+5. One data-specific marker/DEG result grouped by `final_cell_type`.
+6. A fixed-point-size high-contrast spatial highlight and support record for every final cell type.
+7. All-cell canonical-marker spatial panels; marker maps never filter observations by assigned identity.
+8. Independent state summaries that do not replace cell identity.
+9. Atlas, missing-lineage, Oocyte and follicle-ROI biological review summaries.
+10. Internal broad/fine/state provenance, cohort routes, checksums and complete workflow in collapsed audit sections.
 
-After all report assets are stable, run `scripts/build_release_session_info.py`, then `scripts/build_release_manifest.py`, followed by `scripts/audit_release.py --profile full`. The checksum list must cover the report, review package, ledgers, DEG tables, dotplot sources and rendered figures. The manifest, checksum file and release-audit output are intentionally excluded from their own hash set to avoid a circular release dependency.
+If formal completion is absent or blocked, do not build a user-approval or final report. A controller result with `PENDING_USER_REVIEW_HIGH_UNRESOLVED` may build an explicitly diagnostic `pending_user_review` report so the unresolved regions and typed reasons can be inspected; that report has no approval or release authority and must not trigger another global residual/QC-anchor loop. For a PASS membership, use `pending_user_review` before user confirmation and `approved_final` after explicit confirmation without changing membership.
 
-Completion, confirmation/review assets, final HTML and release assets write a sibling `.deps.json` content-hash manifest. The controller may inspect mtime as a cheap scheduling hint for lightweight state, but it must decide whether an expensive asset is stale from the recorded target/dependency hashes. A touched-but-identical dependency does not trigger recomputation; a content change does, even when mtime is preserved.
+## Assets and rendering
 
-Each source TSV must include `gene`, `label`, `avg_expression`, `pct_expressed_absolute`, `n_observations`, `marker_group`, `avg_expression_scaled_within_gene`, `pct_expressed_scaled_within_gene`, `analysis_view` and `evidence_cohort`.
+Use `scripts/prepare_report_metadata.py` first. Its `primary_final_cell_type` is the only public label column. `primary_broad_label` and `primary_subtype_label` are internal audit columns only.
 
-Point size uses within-gene normalized detection from 0 to 100. Color uses within-gene scaled average expression with a documented clip. The same report card must switch between this view and an absolute detection/average-expression view built from the same source table; the release audit requires both PNG/PDF pairs.
+Use `scripts/build_annotation_maps.R --final-cell-type-col final_cell_type` to generate one final-cell-type UMAP/spatial overview and one per-type highlight. Spatial maps use fixed point diameter, black background and saturated colours; rare groups are never enlarged automatically. Endothelial and Pericyte/mural must use visibly distinct colours. Single-cell projects omit spatial sections rather than fabricating coordinates.
 
-Render the label dendrogram on the left. Put marker genes on the x axis and facet/group them by the current cell type or program they support. Every final broad label and every high-confidence final fine label must occur as both a dotplot label and a marker group in canonical and data-specific panels.
+Use `scripts/run_final_label_deg.R --final-cell-type-col final_cell_type` for the public one-vs-rest DEG. Optional broad/fine DEG may be produced only under an explicitly marked internal-audit flag and must not feed the public report.
 
-The broad-class DEG and both dotplots use the final non-QC/non-interface biological cohort: every cellbin formally returned to a broad class participates. Subtype DEG/dotplots use only high-confidence cells with a real fine label; broad-only rescue is excluded and never receives a synthetic subtype. Every source table declares `analysis_view=final` and its evidence cohort.
+Use `scripts/build_marker_dotplots.R --final-cell-type-col final_cell_type`. Every non-QC final cell type must appear as both a dotplot label and marker group. Source TSVs contain `gene`, `label`, `avg_expression`, `pct_expressed_absolute`, `n_observations`, `marker_group`, `avg_expression_scaled_within_gene`, `pct_expressed_scaled_within_gene`, `analysis_view` and `evidence_cohort`.
 
-A cohort identifier is provenance, not a cell type. Show it in ancestry/route tables, never as a biological tree node unless an independently gated biological label happens to use different, approved wording.
+Point size uses within-gene normalized detection from 0 to 100. Colour uses within-gene scaled average expression with a documented clip. The same card switches to absolute detection/mean expression derived from the identical source table. Render PNG and PDF pairs.
 
-## Asset formats
+Use `scripts/build_spatial_gene_maps.R` for all-cell marker projections. Pass the expected observation count so partial intersections fail. Missing sheep gene symbols remain explicit as unavailable and are not interpreted as biological absence.
 
-All scientific figures require PNG and PDF. Every report link must resolve. Per-node and per-gene assets require an index TSV. The report must state whether observations are cells, nuclei, spots or cellbins.
+Use `scripts/write_frozen_annotations_to_seurat.R`; analysis membership plus optional excluded-initial-QC membership must exactly cover the object. The writer stores `spanno_v2_2_cell_type` and retains broad/fine provenance separately.
 
-Use `scripts/build_annotation_maps.R` to generate broad/subtype UMAPs and, when coordinates exist, broad/subtype spatial maps plus per-node highlights. Spatial maps use a fixed point diameter with a black background and high-saturation colours; per-node highlights use red members over a neutral grey tissue context. Never enlarge rare groups automatically. Single-cell projects omit spatial sections explicitly rather than fabricating coordinates.
+Use `scripts/build_frozen_review_report.py` for the sample-agnostic HTML. Every final-cell-type highlight shows route/definition, count, canonical markers, top DEG, competing/anti-program review and spatial support. Internal fine-candidate audits may be available in a collapsed provenance section but are not a second public taxonomy.
 
-For a Seurat release, use `scripts/write_frozen_annotations_to_seurat.R`. The final biological membership and optional excluded-initial-QC ledger must exactly cover the input object; the writer never fills missing biological identities from historical metadata. Use `scripts/build_frozen_review_report.py --sample-id ... --release-status pending_user_review|approved_final` for the single sample-agnostic HTML. Report titles, sample context and approval state are arguments, never hard-coded case names.
+## Release audit
 
-First run `scripts/prepare_report_metadata.py` with the exact Python runtime that passed a `pandas` preflight; the base login-node Python is not assumed to provide report dependencies. Pass its `primary_broad_label` to every broad DEG/dotplot/map command and `primary_subtype_label` to every subtype command. Use `retained_state_display` only for the separate QC/interface/technical census. Never use `broad_display` or a retained-state fallback as subtype input, and never manufacture a `Broad only: ...` subtype for broad-only rescue cells.
+Run `scripts/build_release_session_info.py`, `scripts/build_release_manifest.py` and `scripts/audit_release.py --profile full`. The release audit must prove:
 
-Use `scripts/build_spatial_gene_maps.R` for spatial projects. It generates one PNG/PDF pair per marker and compact per-marker-group panels, all using every analysis-set observation rather than label-filtered cells. Its indexes record the exact `all_analysis_set_observations` scope, denominator, requested and available markers; pass `--expected-observations` so a partial coordinate/object intersection fails before plotting. Missing markers remain explicit rather than silently disappearing.
+- exactly one `final_cell_type` per analysis observation;
+- no releasable `Vascular-associated` label;
+- no second strict/inclusive/display taxonomy;
+- complete final-cell-type census, map, DEG and marker dotplot;
+- valid report links and PNG/PDF/source assets;
+- content hashes for membership, report, RDS, tables and figures.
 
-Every broad/fine spatial highlight in the final HTML must show its validated support record beside the image: route/definition, observation count and confidence, positive evidence, competing/anti-marker review, spatial review and evidence artifact. Also show at least five current-data top DEGs per released label when available. These are report surfaces backed by existing registries/tables, not additional completion gates.
-
-Use `scripts/run_final_label_deg.R` after label writeback to generate separate broad and subtype one-vs-rest DEG tables. For SCE it records aggregate normalized mean/detection and fold change; for Seurat it runs sampled Wilcoxon markers. State the method and its limitations in the report.
+A cohort identifier is provenance, never a public cell type.

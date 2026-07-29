@@ -65,15 +65,17 @@ def main() -> int:
 
     state_counts: Counter[str] = Counter()
     final_state_counts: Counter[str] = Counter()
-    final_broad_counts: Counter[str] = Counter()
-    final_fine_counts: Counter[str] = Counter()
+    final_cell_type_counts: Counter[str] = Counter()
     retained_state_counts: Counter[str] = Counter()
     analysis_n = 0
     excluded_n = 0
     final_unresolved_n = 0
     with gzip.open(cell_ledger, "rt", newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
-        required = {"analysis_scope", "state", "final_state", "final_broad_label", "final_fine_label"}
+        required = {
+            "analysis_scope", "state", "final_state", "final_broad_label",
+            "final_fine_label", "final_cell_type",
+        }
         if not required.issubset(reader.fieldnames or []):
             raise SystemExit("cell ledger lacks single-final-annotation fields")
         for row in reader:
@@ -81,9 +83,8 @@ def main() -> int:
                 analysis_n += 1
                 state_counts[row["state"] or "blank"] += 1
                 final_state_counts[row["final_state"] or "blank"] += 1
-                final_broad_counts[row["final_broad_label"] or "unresolved"] += 1
-                if row["final_fine_label"]:
-                    final_fine_counts[row["final_fine_label"]] += 1
+                final_cell_type = row["final_cell_type"] or "QC/Unknown"
+                final_cell_type_counts[final_cell_type] += 1
                 if not row["final_broad_label"]:
                     final_unresolved_n += 1
                     retained_state_counts[row["final_state"] or "blank"] += 1
@@ -120,16 +121,16 @@ def main() -> int:
         "final_unresolved_fraction": final_unresolved_n / analysis_n if analysis_n else None,
         "analysis_set_state_counts": dict(state_counts),
         "final_state_counts": dict(final_state_counts),
-        "final_broad_counts": dict(final_broad_counts),
-        "final_fine_counts": dict(final_fine_counts),
+        "public_annotation_column": "final_cell_type",
+        "final_cell_type_counts": dict(final_cell_type_counts),
         "retained_state_counts": dict(retained_state_counts),
         "user_must_review": [
-            "broad-class census and unresolved/QC/interface counts",
+            "final_cell_type census and unresolved/QC/interface counts",
             "rare-cell and context-sensitive calls",
             "atlas/RCTD broad-only returns and retained rejects",
-            "one final annotation: moderate-or-higher broad labels and high-confidence fine labels",
+            "one public final_cell_type annotation; broad/fine remain internal provenance",
             "separate biological broad-class and retained anatomical/QC/technical-state censuses",
-            "lightweight review HTML: support/anti-marker reasons, distinguishable broad spatial colors and canonical broad marker dotplot",
+            "lightweight review HTML: support/anti-marker reasons, distinguishable final-cell-type spatial colors and canonical marker dotplot",
             "main-Agent quality approval performed only after all annotation routes, final writeback and completion gate passed",
         ],
         "release_rule": "Only the lightweight confirmation HTML/assets are allowed before approval. Do not compute final DEG, full tree dotplots, per-node/per-gene spatial assets or the release HTML until the user confirms this frozen snapshot.",

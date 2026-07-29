@@ -78,6 +78,28 @@ def load_controller_thresholds(path: Path | None = None) -> dict:
         and int(local_subset.get("minimum_component_members", -1)) >= 2
     ):
         raise ValueError("invalid local-subset policy")
+    local_split = _fraction_map(
+        document.get("local_split_trigger_policy"),
+        "local_split_trigger_policy",
+    )
+    required_local_split = {
+        "minority_min_identity_core_fraction",
+        "minority_min_direct_core_fraction",
+        "minority_min_release_family_fraction",
+        "minority_min_seed_fraction",
+        "minority_min_deg_contrast",
+        "rare_watch_min_fraction",
+        "cross_resolution_stability_minimum",
+        "combined_analysis_split_fraction_review_trigger",
+    }
+    if set(local_split) != required_local_split:
+        raise ValueError("local-split trigger policy keys differ from the controller contract")
+    if not (
+        local_split["rare_watch_min_fraction"]
+        < local_split["minority_min_identity_core_fraction"]
+        <= local_split["minority_min_release_family_fraction"]
+    ):
+        raise ValueError("local-split watch/material thresholds are inconsistent")
     _fraction_map(document.get("fine_release_policy"), "fine_release_policy")
     _fraction_map(document.get("state_release_policy"), "state_release_policy")
 
@@ -137,6 +159,10 @@ def load_controller_thresholds(path: Path | None = None) -> dict:
 
 def observation_writeback_defaults(path: Path | None = None) -> dict[str, float]:
     return dict(load_controller_thresholds(path)["observation_writeback_policy"])
+
+
+def local_split_trigger_defaults(path: Path | None = None) -> dict[str, float]:
+    return dict(load_controller_thresholds(path)["local_split_trigger_policy"])
 
 
 def scoring_defaults(path: Path | None = None) -> dict[str, float]:

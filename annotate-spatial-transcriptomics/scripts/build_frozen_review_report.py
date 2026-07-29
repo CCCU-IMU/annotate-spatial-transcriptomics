@@ -99,8 +99,7 @@ def main() -> int:
     ap.add_argument("--state-dotplots", type=Path)
     ap.add_argument("--canonical-gene-panels", action="append", type=Path, default=[])
     ap.add_argument("--state-gene-panels", type=Path)
-    ap.add_argument("--broad-deg", type=Path)
-    ap.add_argument("--fine-deg", type=Path)
+    ap.add_argument("--cell-type-deg", required=True, type=Path)
     ap.add_argument("--fine-audit", type=Path)
     ap.add_argument("--atlas-review", type=Path)
     ap.add_argument("--zero-census", type=Path)
@@ -115,10 +114,17 @@ def main() -> int:
     total = int(release.get("n_analysis_set", release.get("n_observations", len(membership_rows))))
     qc_n = int(release.get("residual_qc_n", 0))
     qc_fraction = float(release.get("residual_qc_fraction", release.get("residual_unresolved_or_qc_fraction", qc_n / max(total, 1))))
-    broad_census = {str(k): int(v) for k, v in release.get("broad_census", {}).items()}
-    if qc_n:
-        broad_census["QC/Unknown"] = qc_n
-    fine_census = {str(k): int(v) for k, v in release.get("fine_census", {}).items()}
+    cell_type_census = {
+        str(k): int(v)
+        for k, v in release.get("final_cell_type_census", {}).items()
+    }
+    if not cell_type_census:
+        cell_type_census = dict(Counter(
+            row.get("final_cell_type", "") for row in membership_rows
+            if row.get("final_cell_type", "")
+        ))
+    if not cell_type_census or sum(cell_type_census.values()) != total:
+        raise SystemExit("release lacks a complete final_cell_type census")
     state_census = {str(k): int(v) for k, v in release.get("state_census", {}).items()}
     membership_record = release.get("membership", {})
     semantic_hash = str(membership_record.get("semantic_sha256", release.get("semantic_hash", "")))
@@ -133,15 +139,17 @@ def main() -> int:
         for path in args.canonical_gene_panels for row in read_tsv(path)
     }
     state_panels = {row.get("marker_group", ""): row for row in read_tsv(args.state_gene_panels)}
-    broad_deg = top_deg(read_tsv(args.broad_deg))
-    fine_deg = top_deg(read_tsv(args.fine_deg))
+    cell_type_deg = top_deg(read_tsv(args.cell_type_deg))
     source_counts: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     for row in membership_rows:
-        broad = row.get("final_broad_label", "") or "QC/Unknown"
-        source_counts[("broad", broad)][row.get("broad_freeze_source", "") or row.get("assignment_origin", "") or row.get("final_state", "") or "unresolved"] += 1
+        cell_type = row.get("final_cell_type", "") or "QC/Unknown"
         fine = row.get("final_fine_label", "")
-        if fine:
-            source_counts[("subtype", fine)][row.get("final_fine_assignment_source", "") or "second-round fine evidence"] += 1
+        source_counts[("cell_type", cell_type)][
+            row.get("final_fine_assignment_source", "") if fine else ""
+            or row.get("broad_freeze_source", "")
+            or row.get("assignment_origin", "")
+            or row.get("final_state", "") or "unresolved"
+        ] += 1
         for state in (row.get("state_annotations", "") or row.get("final_state_annotation", "")).split(";"):
             if state:
                 source_counts[("state", state)]["second-round state program"] += 1
@@ -172,7 +180,7 @@ def main() -> int:
             node = node_by_key.get((level, label), {})
             panel = panels.get(label, {})
             parent = info.get("parent_label", "") or node.get("parent_label", "")
-            title = f"{parent} → {label}" if parent and level != "broad" else label
+            title = label
             markers = info.get("canonical_markers", "") or panel.get("available_genes", "")
             blocks.append(
                 '<article class="annotation-card">'
@@ -182,6 +190,8 @@ def main() -> int:
                 f'<p><b>成员来源</b><br>{html.escape(source_text(level, label) or "未单独登记")}</p>'
                 f'<p><b>典型 marker</b><br>{html.escape(markers or "见 marker dotplot")}</p>'
                 f'<p><b>Top DEG</b><br>{html.escape(";".join(degs.get(label, [])) or "未单独计算/未达到阈值")}</p>'
+                f'<p><b>竞争谱系</b><br>{html.escape(info.get("competing_lineages", "见完整候选目录审计"))}</p>'
+                f'<p><b>anti-program 复核</b><br>{html.escape(info.get("anti_marker_review", "见来源亚簇的多基因反证审计"))}</p>'
                 f'<p><b>空间支撑</b><br>{html.escape(info.get("spatial_support", "见完整成员空间高亮与生物学复核"))}</p>'
                 f'<p><b>结论</b><br>{html.escape(info.get("release_interpretation", "保留当前最具体且可靠的身份层级"))}</p></div></div>'
                 + (f'<details><summary>所有 {args.observation_unit} 的 marker 空间投影</summary>{image(panel.get("png", ""), args.out, title, True)}</details>' if panel.get("png") else "")
@@ -193,24 +203,21 @@ def main() -> int:
     endpoints = quality.get("quality_endpoints", {})
     follicle = endpoints.get("follicle_roi_histology", {})
     status_text = "已同意审阅 · 最终注释" if args.release_status == "approved_final" else "待用户审阅 · 冻结候选"
-    broad_overview = args.maps_dir / "figures/final_broad_spatial.png"
-    fine_overview = args.maps_dir / "figures/final_subtype_spatial.png"
-    state_overview = args.maps_dir / "figures/final_state_spatial.png"
+    cell_type_overview = args.maps_dir / "figures/final_cell_type_spatial.png"
     css = """
     :root{--ink:#18212b;--muted:#66717d;--line:#dfe5eb;--accent:#a51c30;--bg:#f4f6f8;--card:#fff}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,"Noto Sans SC","Microsoft YaHei",Arial,sans-serif;line-height:1.55}main{max-width:1500px;margin:auto;padding:28px}.hero{background:linear-gradient(135deg,#17202b,#313d4c);color:white;padding:32px;border-radius:18px}.hero h1{margin:0 0 8px;font-size:30px}.hero p{margin:4px 0;color:#dce4ec}.status{display:inline-block;background:#f4b942;color:#17202b;padding:4px 10px;border-radius:999px;font-weight:700}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0}.metric,.panel,.annotation-card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 3px 12px #15202b0d}.metric{padding:16px}.metric b{display:block;font-size:24px;color:var(--accent)}section{margin:30px 0}.panel{padding:20px;margin:14px 0}.overview-grid,.card-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr);gap:18px;align-items:start}.annotation-card{padding:18px;margin:16px 0}.annotation-card h3{margin-top:0}.n{font-size:14px;color:var(--muted);font-weight:500}.figure{width:100%;max-height:760px;object-fit:contain;background:white}.wide-figure{display:block;width:100%;max-height:1000px;object-fit:contain;background:white}.evidence p{margin:0 0 12px}.muted{color:var(--muted)}.toggle{display:flex;gap:8px;margin:8px 0}.toggle button{border:1px solid var(--line);background:#fff;padding:7px 12px;border-radius:7px;cursor:pointer}.toggle button.active{background:var(--accent);border-color:var(--accent);color:#fff}.plot-block{margin:18px 0}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:#eef2f5}.hash{font-family:ui-monospace,monospace;word-break:break-all;font-size:12px}@media(max-width:900px){main{padding:12px}.overview-grid,.card-grid{grid-template-columns:1fr}}
     """
     script = "function swapPlot(id,src,button){const img=document.getElementById(id);img.src=src;document.getElementById(id+'_link').href=src;button.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));button.classList.add('active')}"
-    report = f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(args.sample_id)} v2.2.0 注释报告</title><style>{css}</style></head><body><main>
-    <header class="hero"><span class="status">{status_text}</span><h1>{html.escape(args.sample_id)} · annotate-spatial-transcriptomics v2.2.0</h1><p>{html.escape(args.biological_context)}</p><p>结果来自当前样本 query-only 第二轮重聚类；历史标签与同批样本注释未参与 membership 冻结。</p><p class="hash">semantic hash: {html.escape(semantic_hash)}</p></header>
-    <div class="metrics"><div class="metric"><b>{total:,}</b>分析 {html.escape(args.observation_unit)}</div><div class="metric"><b>{len([x for x in broad_census if x!='QC/Unknown'])}</b>生物学 broad</div><div class="metric"><b>{len(fine_census)}</b>可靠 fine</div><div class="metric"><b>{len(state_census)}</b>独立状态</div><div class="metric"><b>{qc_fraction*100:.2f}%</b>QC/Unknown</div><div class="metric"><b>{broad_census.get('Oocyte',0):,}</b>canonical Oocyte</div></div>
-    <section><h2>1. 全组织空间结果</h2><div class="overview-grid"><div class="panel"><h3>Broad + QC/Unknown</h3>{image(broad_overview,args.out,'broad spatial',True)}</div><div class="panel"><h3>可靠 fine</h3>{image(fine_overview,args.out,'fine spatial',True)}</div></div>{('<div class="panel"><h3>状态</h3>'+image(state_overview,args.out,'state spatial',True)+'</div>') if state_overview.is_file() else ''}</section>
-    <section><h2>2. 典型 marker dotplot</h2><p class="muted">同一位置切换基因内归一化与绝对表达/检出率，两者来自同一数值表。</p>{dotplot_toggle('broad','canonical','Broad 典型 marker（每类 5 个）')}{dotplot_toggle('subtype','canonical','可靠 fine 典型 marker（每类 5 个）')}{dotplot_toggle('broad','state','状态 marker')}</section>
-    <section><h2>3. Broad 注释与逐类支撑</h2>{cards('broad',broad_census,gene_panels,broad_deg)}</section>
-    <section><h2>4. 可靠 fine 注释</h2><p class="muted">证据不足时保留 broad 背景，不强求亚型。</p>{cards('subtype',fine_census,gene_panels,fine_deg)}</section>
-    <section><h2>5. 独立状态</h2>{cards('state',state_census,state_panels,{})}</section>
-    <section><h2>6. Fine 候选完整审计</h2>{table(read_tsv(args.fine_audit),[('parent_broad_label','Broad parent'),('release_label','候选'),('status','结论'),('supported_subcluster_n','支持亚簇'),('rationale','理由')])}</section>
-    <section><h2>7. Atlas、缺失谱系与卵泡组织学复核</h2><div class="panel"><p><b>生物学复核：</b>{html.escape(str(quality.get('status','未提供')))}</p><p><b>Oocyte：</b>{html.escape(str(endpoints.get('oocyte_annotation_quality',{}).get('status','未提供')))}</p><p><b>卵泡 ROI：</b>{html.escape(str(follicle.get('status','未提供')))}；antral ROI {html.escape(str(follicle.get('antral_roi_n','NA')))}；腔体 {html.escape(str(follicle.get('antral_cavity_status','NA')))}</p><p><b>层次：</b>{html.escape(str(follicle.get('histological_sequence','未评估')))}</p></div>{table(read_tsv(args.zero_census),[('release_broad_label','候选谱系'),('decision','复核结论'),('rationale','解释')])}</section>
-    <section><h2>8. 交付物</h2><div class="panel"><p><b>冻结 membership：</b><span class="hash">{html.escape(str(args.membership.resolve()))}</span></p><p><b>写回注释 RDS：</b><a href="{rel_url(args.annotated_rds,args.out)}">{html.escape(args.annotated_rds.name)}</a></p><p><b>membership SHA256：</b><span class="hash">{html.escape(membership_sha)}</span></p></div></section>
+    report = f'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(args.sample_id)} v2.5.0 注释报告</title><style>{css}</style></head><body><main>
+    <header class="hero"><span class="status">{status_text}</span><h1>{html.escape(args.sample_id)} · annotate-spatial-transcriptomics v2.5.0</h1><p>{html.escape(args.biological_context)}</p><p>结果来自当前样本 query-only 第二轮重聚类；历史标签与同批样本注释未参与 membership 冻结。</p><p class="hash">semantic hash: {html.escape(semantic_hash)}</p></header>
+    <div class="metrics"><div class="metric"><b>{total:,}</b>分析 {html.escape(args.observation_unit)}</div><div class="metric"><b>{len([x for x in cell_type_census if x!='QC/Unknown'])}</b>最终细胞类型</div><div class="metric"><b>{len(state_census)}</b>独立状态</div><div class="metric"><b>{qc_fraction*100:.2f}%</b>QC/Unknown</div><div class="metric"><b>{cell_type_census.get('Oocyte',0):,}</b>canonical Oocyte</div></div>
+    <section><h2>1. 全组织最终注释</h2><div class="panel"><h3>final_cell_type</h3>{image(cell_type_overview,args.out,'final cell type spatial',True)}</div></section>
+    <section><h2>2. 典型 marker dotplot</h2><p class="muted">同一位置切换基因内归一化与绝对表达/检出率，两者来自同一数值表。</p>{dotplot_toggle('cell_type','canonical','最终细胞类型典型 marker（每类 5 个）')}</section>
+    <section><h2>3. 最终细胞类型与逐类支撑</h2>{cards('cell_type',cell_type_census,gene_panels,cell_type_deg)}</section>
+    <section><h2>4. 独立状态</h2>{cards('state',state_census,state_panels,{})}</section>
+    <section><h2>5. 内部亚型候选审计</h2><details><summary>查看 broad-parent 锁定的亚型审计</summary>{table(read_tsv(args.fine_audit),[('parent_broad_label','内部 parent'),('release_label','候选'),('status','结论'),('supported_subcluster_n','支持亚簇'),('rationale','理由')])}</details></section>
+    <section><h2>6. Atlas、缺失谱系与卵泡组织学复核</h2><div class="panel"><p><b>生物学复核：</b>{html.escape(str(quality.get('status','未提供')))}</p><p><b>Oocyte：</b>{html.escape(str(endpoints.get('oocyte_annotation_quality',{}).get('status','未提供')))}</p><p><b>卵泡 ROI：</b>{html.escape(str(follicle.get('status','未提供')))}；antral ROI {html.escape(str(follicle.get('antral_roi_n','NA')))}；腔体 {html.escape(str(follicle.get('antral_cavity_status','NA')))}</p><p><b>层次：</b>{html.escape(str(follicle.get('histological_sequence','未评估')))}</p></div>{table(read_tsv(args.zero_census),[('release_broad_label','候选谱系'),('decision','复核结论'),('rationale','解释')])}</section>
+    <section><h2>7. 交付物</h2><div class="panel"><p><b>公开注释列：</b>final_cell_type</p><p><b>冻结 membership：</b><span class="hash">{html.escape(str(args.membership.resolve()))}</span></p><p><b>写回注释 RDS：</b><a href="{rel_url(args.annotated_rds,args.out)}">{html.escape(args.annotated_rds.name)}</a></p><p><b>membership SHA256：</b><span class="hash">{html.escape(membership_sha)}</span></p></div></section>
     </main><script>{script}</script></body></html>'''
     args.out.write_text(report, encoding="utf-8")
     print(json.dumps({"status": "PASS", "report": str(args.out.resolve()), "sample_id": args.sample_id, "n_observations": total}, ensure_ascii=False))

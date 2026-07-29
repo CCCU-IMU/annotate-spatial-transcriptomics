@@ -1,7 +1,10 @@
 # Changelog
 
-## 2.2.0 — development target (unreleased)
+## 2.5.0 — 2026-07-29
 
+- 修复长流程反复救援问题：Atlas 的 moderate/high 类别校准分别按 90%/95% 精度并独立检查 ECE；中高置信、非 OOD 的无标签/QC observation 可一次性 broad-only 回归。0.5%–1% 稳定痕迹只记为 watch，超过全 analysis set 50% 的局部拆分工作量在投递前强制返回二级分辨率/触发条件复核。完成有界 Atlas、unresolved、ROI 与最多两轮逐大类复核后，超阈值 remainder 物化为 `PENDING_USER_REVIEW_HIGH_UNRESOLVED`，不得再启动全局 residual/QC-anchor 重聚类。
+- 加固修订证据链：逐大类 exact patch 必须绑定控制器生成的 broad evidence packet 或项目自身 raw-count 的 bounded source-cohort review；ROI 修订保留完整切片坐标、写回实际 `candidate_id` 并把 canonical repair manifest 传入 completeness。项目本地补丁、行序写回或无来源 membership 不能通过正式验证。
+- 将旧 `Vascular-associated` 伞形大类迁移为相互独立竞争的 `Endothelial`、`Pericyte/mural` 与 `Smooth muscle`；`Lymphatic endothelial` 仅作为 Endothelial 下的高置信 fine identity。旧 broad-only 血管标签必须回到当前 query 的来源亚簇重新判定，不能盲拆；公开 census、DEG、dotplot、空间图和报告统一只使用 `final_cell_type`。Theca 在 cellbin/spot 中不因少量邻接血管 RNA 被硬否决，但完整直接血管身份仍作为竞争谱系进入局部拆分或 unresolved。
 - 修复 D05521A1/D05521C3 暴露的逐大类复核形式通过漏洞：每个 broad 现在必须绑定同一 membership 上的当前成员精度、全 query 召回、raw-count/全转录组 pseudobulk 与空间证据包；自由文本关键词和项目本地硬编码 PASS 不再构成证据，有未解决 challenger 时必须 exact cell-ID patch 或 targeted review，任一 patch 后全部 broad 重新开审。
 - 羊卵巢 Oocyte canonical 与 follicle-ROI 状态进入相应 broad 的 evidence packet；对话阶段名固定为“逐大类全样本复核”，不再以“目录复核/来源组复核/强制重放”等近义词替代。
 - 修复运行与产物边界：正式阶段增加 exact Python/R compile/import/reader 预检；大 cohort 强制单 resolution worker 并生成经验内存计划；R entrypoint 不再 `chdir=TRUE`；Atlas 可选字段在 disjoint union 后标准化，非空 review queue 返回可恢复的 `REVIEW_REQUIRED`；cache 使用 membership semantic hash；incident validation 与 membership transform ledger 均绑定当前来源。
@@ -28,7 +31,7 @@
 - Oocyte 在常规二级扫描零 census、但全 analysis set 多模块 starting gate 非零时，允许一次标签不可见的 query-only canonical targeted cohort；通过簇完整写回，仅排除客观输入 QC 或直接多家族体细胞硬矛盾，strict seed、ZP、空间焦点和 object ID 均不是逐 cellbin 入选门。
 - 允许可靠 broad-only 作为正式终点；没有独立、稳定、可重复的 child discriminator 时，fine census 可以为空，不为目录完整性制造亚型。
 - A08/A09 全对象逐 cellbin 路线登记为 `failed_diagnostic`，禁止进入运行时 membership、Atlas、fixture truth 或盲回归输入；A10 取消。
-- 当前版本仍需通过五类 raw-count integration fixture、两次独立盲回归、参数扰动和用户审阅；验收前不推送 `main`、不创建 tag。
+- 本次稳定发布保留内部 controller/artifact protocol `2.2.0`，对外 Skill 与 annotation contract release version 升为 `2.5.0`；已冻结的二级分区可按输入、membership、参数和脚本哈希继续复用。
 
 ## 2.1.0 — 2026-07-23
 

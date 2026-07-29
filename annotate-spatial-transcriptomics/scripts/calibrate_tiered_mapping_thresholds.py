@@ -85,6 +85,39 @@ def passes(frame: pd.DataFrame, threshold: dict | None) -> pd.Series:
     ].ge(threshold["margin_threshold"])
 
 
+def expected_calibration_error(
+    frame: pd.DataFrame, truth_col: str, n_bins: int = 10,
+) -> float:
+    """Return empirical confidence calibration error for one released tier.
+
+    Atlas class precision and calibration error are deliberately independent:
+    precision measures label correctness, whereas ECE measures whether the
+    supplied confidence is numerically calibrated. Empty tiers are never
+    emitted by the caller.
+    """
+    if frame.empty:
+        return float("nan")
+    confidence = pd.to_numeric(frame["confidence"], errors="coerce")
+    if confidence.isna().any() or not confidence.between(0, 1).all():
+        raise SystemExit("Atlas confidence must be finite and within [0,1]")
+    correct = frame["predicted_label"].eq(frame[truth_col]).astype(float)
+    bins = pd.cut(
+        confidence,
+        bins=np.linspace(0.0, 1.0, n_bins + 1),
+        include_lowest=True,
+        labels=False,
+    )
+    total = float(len(frame))
+    error = 0.0
+    for bin_id in sorted(value for value in bins.dropna().unique()):
+        mask = bins.eq(bin_id)
+        error += float(mask.sum()) / total * abs(
+            float(correct.loc[mask].mean())
+            - float(confidence.loc[mask].mean())
+        )
+    return float(error)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--predictions", required=True, type=Path)
@@ -303,6 +336,9 @@ def main() -> None:
                     "validation_n": int(len(selected)),
                     "validation_precision": float(
                         selected["predicted_label"].eq(selected[args.truth_col]).mean()
+                    ),
+                    "expected_calibration_error": expected_calibration_error(
+                        selected, args.truth_col
                     ),
                     "target_precision": target,
                 }

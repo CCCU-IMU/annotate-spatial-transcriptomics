@@ -28,6 +28,7 @@ from lineage_controller_lib import (  # noqa: E402
     hard_contradiction,
     independent_group_program,
     local_split_worthy_group_program,
+    rare_group_program_watch,
     index_scores,
     rank_supported,
     supported_seed,
@@ -64,10 +65,24 @@ CANDIDATES = {
     },
     "pericyte_mural": {
         "candidate_id": "pericyte_mural",
-        "candidate_role": "fine",
-        "release_broad_label": "Vascular-associated",
-        "release_fine_label": "Pericyte/mural",
+        "candidate_role": "broad",
+        "release_broad_label": "Pericyte/mural",
+        "release_fine_label": "",
         "specificity_priority": 90,
+    },
+    "vascular_endothelial": {
+        "candidate_id": "vascular_endothelial",
+        "candidate_role": "broad",
+        "release_broad_label": "Endothelial",
+        "specificity_priority": 90,
+    },
+    "lymphatic_endothelial": {
+        "candidate_id": "lymphatic_endothelial",
+        "candidate_role": "fine",
+        "release_broad_label": "Endothelial",
+        "release_fine_label": "Lymphatic endothelial",
+        "parent_broad_label": "Endothelial",
+        "specificity_priority": 95,
     },
     "epithelial_mesothelial": {
         "candidate_id": "epithelial_mesothelial",
@@ -367,6 +382,35 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
             "cross_resolution_stable_fraction": "0.90",
             "hard_contradiction_fraction": "0.30",
         }
+        self.assertFalse(local_split_worthy_group_program(
+            aggregate, CANDIDATES["smooth_muscle"]
+        ))
+
+    def test_subpercent_reproducible_program_is_watch_not_local_split(self) -> None:
+        aggregate = {
+            "candidate_id": "smooth_muscle",
+            "available_positive_family_count": "2",
+            "group_positive_family_supported_count": "2",
+            "group_required_positive_families_pass": "true",
+            "observation_seed_fraction": "0.006",
+            "observation_identity_core_fraction": "0.006",
+            "observation_identity_core_direct_fraction": "0.006",
+            "observation_release_family_coherent_fraction": "0.006",
+            "positive_marker_detection_fraction": "0.10",
+            "mean_program_score": "0.05",
+            "marker_deg_log2fc_mean": "0.80",
+            "anti_marker_deg_log2fc_mean": "0.10",
+            "positive_marker_pseudobulk_sum": "20",
+            "anti_marker_pseudobulk_sum": "1",
+            "cross_resolution_stable_fraction": "0.80",
+            "hard_contradiction_fraction": "0",
+        }
+        self.assertTrue(group_candidate_detected(
+            aggregate, CANDIDATES["smooth_muscle"]
+        ))
+        self.assertTrue(rare_group_program_watch(
+            aggregate, CANDIDATES["smooth_muscle"]
+        ))
         self.assertFalse(local_split_worthy_group_program(
             aggregate, CANDIDATES["smooth_muscle"]
         ))
@@ -870,15 +914,15 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
 
         fine_cells = [f"f{i}" for i in range(5)]
         _, fine_index, fine_universe = score_fixture(
-            {cell: "pericyte_mural" for cell in fine_cells},
-            ["pericyte_mural"],
+            {cell: "lymphatic_endothelial" for cell in fine_cells},
+            ["lymphatic_endothelial"],
         )
         parent, evidence = choose_group_parent(
             fine_cells,
             fine_universe,
             fine_index,
-            {"pericyte_mural": CANDIDATES["pericyte_mural"]},
-            parent_candidate_ids={"pericyte_mural"},
+            {"lymphatic_endothelial": CANDIDATES["lymphatic_endothelial"]},
+            parent_candidate_ids={"lymphatic_endothelial"},
         )
         self.assertEqual(parent, "")
         self.assertEqual(evidence["reason"], "no_releasable_positive_program")
@@ -1323,35 +1367,35 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
     def test_empty_fine_census_requires_complete_parent_candidate_audit(self) -> None:
         catalog = {
             "machine_actionable_fine_candidate_catalog": {
-                "vascular": [
+                "granulosa": [
                     {
-                        "candidate_id": "blood",
-                        "parent_release_label": "Vascular-associated",
+                        "candidate_id": "cumulus",
+                        "parent_release_label": "Granulosa",
                     },
                     {
-                        "candidate_id": "mural",
-                        "parent_release_label": "Vascular-associated",
+                        "candidate_id": "mural_granulosa",
+                        "parent_release_label": "Granulosa",
                     },
                 ]
             }
         }
         complete, expected, observed = fine_audit_complete(
             catalog,
-            {"Vascular-associated"},
-            [{"parent_broad_label": "Vascular-associated",
-              "candidate_id": "blood", "status": "refuted"}],
+            {"Granulosa"},
+            [{"parent_broad_label": "Granulosa",
+              "candidate_id": "cumulus", "status": "refuted"}],
         )
         self.assertFalse(complete)
         self.assertEqual(len(expected), 2)
         self.assertEqual(len(observed), 1)
         complete, _, _ = fine_audit_complete(
             catalog,
-            {"Vascular-associated"},
+            {"Granulosa"},
             [
-                {"parent_broad_label": "Vascular-associated",
-                 "candidate_id": "blood", "status": "refuted"},
-                {"parent_broad_label": "Vascular-associated",
-                 "candidate_id": "mural", "status": "not_evaluable"},
+                {"parent_broad_label": "Granulosa",
+                 "candidate_id": "cumulus", "status": "refuted"},
+                {"parent_broad_label": "Granulosa",
+                 "candidate_id": "mural_granulosa", "status": "not_evaluable"},
                 {"parent_broad_label": "Immune",
                  "candidate_id": "extra", "status": "not_evaluable"},
             ],
@@ -1636,6 +1680,7 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
             contract = root / "contract.json"
             contract.write_text(json.dumps({
                 "schema_version": "2.0",
+                "observation_unit": "cellbin",
                 "selected_input_snapshot": {
                     "path": str(dummy), "sha256": "0" * 64,
                     "artifact_role": "runtime_input",
@@ -1648,6 +1693,14 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
                 "workflow_profile": artifact(dummy),
                 "biological_profile": artifact(dummy),
                 "candidate_catalog": artifact(dummy),
+                "release_taxonomy": {
+                    "independent_vascular_lineages": [
+                        "Endothelial", "Pericyte/mural", "Smooth muscle",
+                    ],
+                    "lymphatic_parent": "Endothelial",
+                    "legacy_vascular_associated_release_forbidden": True,
+                    "single_public_annotation_column": "final_cell_type",
+                },
                 "canonical_lineage_controller": {
                     "controller_version": "2.2.0",
                     "phase_order": [

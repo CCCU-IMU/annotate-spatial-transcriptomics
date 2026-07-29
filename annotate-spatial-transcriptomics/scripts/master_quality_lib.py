@@ -24,7 +24,7 @@ BOUND_ARTIFACTS = (
     "direct_return_registry",
     "route_attempt_registry",
     "run_registry",
-    "final_annotation_census",
+    "final_cell_type_census",
     "annotation_view_registry",
     "annotation_support_registry",
     "annotation_support_validation",

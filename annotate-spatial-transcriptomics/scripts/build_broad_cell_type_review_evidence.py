@@ -44,7 +44,8 @@ PALETTE = {
     "Glial/Schwann-like": "#64D2FF", "Immune": "#30D158",
     "Luteal": "#FF3B30", "Oocyte": "#FFFFFF",
     "Smooth muscle": "#BF5AF2", "Stromal/mesenchymal": "#58A6FF",
-    "Theca": "#FF9F0A", "Vascular-associated": "#00E5D4",
+    "Theca": "#FF9F0A", "Endothelial": "#00E5D4",
+    "Pericyte/mural": "#B46CFF",
 }
 
 

@@ -23,7 +23,7 @@ Use this contract when a user requests more than one sample, parallel sample ann
 
 The sample worker completes every initial-cluster cohort, triggered local split, broad merge/freeze, Atlas/completeness review, final typed closure and completion audit before `READY_FOR_MASTER_QUALITY_GATE`. It sends concise label-support reasons, broad spatial/marker evidence, census, unresolved/QC counts, context-gated calls, Atlas returns, negative audits and route history. Only then does the main conversation Agent judge whether the annotation is biologically reasonable; exact label/count agreement with a reference is not required. `PASS` may retain concerns, while a blocking problem returns the same worker to the contributing cohort/local/post-merge review. Any later bound membership/review change invalidates approval.
 
-After confirmation, the same sample worker may generate the single-final-annotation DEG, broad and subtype dotplots, maps and audited HTML. Each sample must independently reach `autopilot_status=COMPLETE` and `audit_release=PASS`.
+After confirmation, the same sample worker may generate the single `final_cell_type` DEG, dotplots, maps and audited HTML. Broad/fine remain internal provenance rather than parallel public reports. Each sample must independently obtain a PASS canonical final-release manifest and `audit_release=PASS`; `autopilot_status.py` is only a scheduling aid.
 
 ## Cohort control files
 

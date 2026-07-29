@@ -81,7 +81,7 @@ def main():
         else:
             record=json.loads(contract_gate.read_text())
             if record.get("status")!="PASS" or not contract.is_file() or record.get("contract_sha256")!=sha256(contract):errors.append("v2 annotation contract validation is failed or stale")
-        if project.get("global_atlas_concordance_required_when_reference_applicable",False) is True and contract_payload.get("skill_release_version")!="2.2.0":
+        if project.get("global_atlas_concordance_required_when_reference_applicable",False) is True and contract_payload.get("skill_release_version") not in {"2.2.0","2.5.0"}:
             atlas_gate=r/"provenance/atlas_state_routing_validation.json"
             if not atlas_gate.is_file():errors.append("v2 authoritative all-cell Atlas routing has not been validated")
             else:
@@ -97,7 +97,7 @@ def main():
                 controller_validation=json.loads(controller_gate.read_text())
                 if controller_validation.get("status")!="PASS":errors.append("v2.2 canonical lineage-controller release validation is blocked")
                 if contract.is_file() and controller_validation.get("annotation_contract_sha256")!=sha256(contract):errors.append("v2.2 lineage-controller release validation is stale for the annotation contract")
-        if contract_payload.get("skill_release_version")=="2.2.0":
+        if contract_payload.get("skill_release_version") in {"2.2.0","2.5.0"}:
             controller_gate=r/"provenance/lineage_controller_release_validation.json"
             final_record={}
             if controller_gate.is_file():

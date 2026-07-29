@@ -38,7 +38,7 @@ Audit every present and zero-census broad, embedded/unmodeled programs and every
 
 ## 6. Ovary-specific boundaries
 
-- `Vascular-associated` contains endothelial and pericyte/mural children.
+- Endothelial, Pericyte/mural and Smooth muscle are independent broad identities; only Lymphatic endothelial is parent-locked under Endothelial.
 - Mature nonvascular Smooth muscle requires MYH11/CNN1/ACTG2-centered identity and mural exclusion; ACTA2/TAGLN alone is insufficient.
 - Epithelial/mesothelial cannot expand from one keratin, one component or an aggregate mixed-cluster score.
 - Oocyte uses a complete canonical-cluster rule and excludes zona/ambient expansion.

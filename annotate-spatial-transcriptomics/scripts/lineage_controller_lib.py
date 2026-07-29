@@ -18,7 +18,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Iterable
 
-from controller_thresholds import observation_writeback_defaults
+from controller_thresholds import (
+    local_split_trigger_defaults, observation_writeback_defaults,
+)
 
 
 RELEASE_ROLES = {"broad", "fine"}
@@ -29,6 +31,7 @@ CONTEXT_ALLOWED_STATUSES = CONTEXT_SUPPORTED_STATUSES | {
     "not_evaluable", "refuted",
 }
 _WRITEBACK_DEFAULTS = observation_writeback_defaults()
+_LOCAL_SPLIT_DEFAULTS = local_split_trigger_defaults()
 
 
 def clamp(value: float) -> float:
@@ -132,6 +135,9 @@ def catalog_candidates(catalog: dict) -> dict[str, dict]:
                 ),
                 "specificity_priority": int(item.get("specificity_priority", 70)),
                 "hard_anti_families": item.get("hard_anti_families", []),
+                "hard_anti_families_by_observation_unit": item.get(
+                    "hard_anti_families_by_observation_unit", {}
+                ),
                 "soft_anti_families": item.get("soft_anti_families", []),
                 "context_requirements": item.get("context_requirements", context),
                 # A fine identity must be generated from its own discriminator,
@@ -203,7 +209,7 @@ def candidate_can_support_broad_review(candidate: dict) -> bool:
     Ordinary fine/state programs are parent-locked and cannot become broad
     recall evidence.  A fine identity participates only when the catalog
     explicitly declares a valid route to the broad parent, such as
-    Pericyte/mural to Vascular-associated.
+    Lymphatic endothelial to Endothelial.
     """
     return (
         str(candidate.get("candidate_role", "")).lower() == "broad"
@@ -493,7 +499,9 @@ def local_split_worthy_group_program(
     direct = group_identity_core_direct_fraction(row)
     seed = clamp(number(row.get("observation_seed_fraction")))
     release = clamp(number(row.get("observation_release_family_coherent_fraction")))
-    stable = number(row.get("cross_resolution_stable_fraction")) >= 0.50
+    stable = number(row.get("cross_resolution_stable_fraction")) >= _LOCAL_SPLIT_DEFAULTS[
+        "cross_resolution_stability_minimum"
+    ]
     required_families = [
         str(value) for value in candidate.get("required_positive_families", [])
         if str(value)
@@ -513,16 +521,49 @@ def local_split_worthy_group_program(
         and (len(required_families) >= 2 or identity_prevalent)
         and stable
     )
-    rare_but_contrasted = (
+    material_minority = (
         group_supported_family_count(row) >= 2
-        and core >= 0.005
-        and direct >= 0.005
-        and release >= 0.005
-        and seed >= 0.005
-        and marker_deg - anti_deg >= 0.75
+        and core >= _LOCAL_SPLIT_DEFAULTS[
+            "minority_min_identity_core_fraction"
+        ]
+        and direct >= _LOCAL_SPLIT_DEFAULTS[
+            "minority_min_direct_core_fraction"
+        ]
+        and release >= _LOCAL_SPLIT_DEFAULTS[
+            "minority_min_release_family_fraction"
+        ]
+        and seed >= _LOCAL_SPLIT_DEFAULTS["minority_min_seed_fraction"]
+        and marker_deg - anti_deg >= _LOCAL_SPLIT_DEFAULTS[
+            "minority_min_deg_contrast"
+        ]
         and stable
     )
-    return ordinary or rare_but_contrasted
+    return ordinary or material_minority
+
+
+def rare_group_program_watch(
+    row: dict[str, str], candidate: dict | None = None,
+) -> bool:
+    """Record a reproducible sub-material program without opening P41.
+
+    The watch remains available to zero-census and per-broad recall review,
+    but a 0.5%-level aggregate trace can no longer route the entire second-
+    round subcluster through an expensive observation split.
+    """
+    candidate = candidate or {}
+    if str(candidate.get("candidate_id", "")) in GENERIC_REMAINDER_IDS:
+        return False
+    core = group_identity_core_fraction(row)
+    return (
+        group_candidate_detected(row, candidate)
+        and group_supported_family_count(row) >= 2
+        and core >= _LOCAL_SPLIT_DEFAULTS["rare_watch_min_fraction"]
+        and core < _LOCAL_SPLIT_DEFAULTS["minority_min_identity_core_fraction"]
+        and group_identity_core_direct_fraction(row)
+        >= _LOCAL_SPLIT_DEFAULTS["rare_watch_min_fraction"]
+        and number(row.get("cross_resolution_stable_fraction"))
+        >= _LOCAL_SPLIT_DEFAULTS["cross_resolution_stability_minimum"]
+    )
 
 
 def dominant_generic_remainder_group(
@@ -1343,6 +1384,7 @@ def deterministic_membership_hash(rows: list[dict[str, object]]) -> str:
     keys = [
         "cell_id", "source_boundary", "source_cluster", "candidate_id",
         "final_state", "final_broad_label", "final_fine_label",
+        "final_cell_type",
         "state_annotations", "confidence", "assignment_origin", "qc_reason",
         "unresolved_reason",
     ]

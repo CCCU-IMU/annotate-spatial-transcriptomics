@@ -19,7 +19,7 @@ parse_args <- function(x) {
   out
 }
 arg <- parse_args(commandArgs(trailingOnly = TRUE))
-required <- c("rds", "metadata", "markers", "out", "cell-id-col", "broad-col", "subtype-col")
+required <- c("rds", "metadata", "markers", "out", "cell-id-col", "final-cell-type-col")
 missing <- required[!required %in% names(arg)]
 if (length(missing)) stop("Missing arguments: ", paste(missing, collapse = ", "))
 
@@ -65,7 +65,7 @@ message("Reading object and metadata")
 obj <- readRDS(arg$rds)
 meta <- read_any(arg$metadata)
 cell_col <- arg$`cell-id-col`
-stopifnot(cell_col %in% names(meta), arg$`broad-col` %in% names(meta), arg$`subtype-col` %in% names(meta))
+stopifnot(cell_col %in% names(meta), arg$`final-cell-type-col` %in% names(meta))
 meta[[cell_col]] <- as.character(meta[[cell_col]])
 stopifnot(uniqueN(meta[[cell_col]]) == nrow(meta))
 if(!is.null(arg$`include-col`)){
@@ -98,7 +98,7 @@ markers <- read_any(arg$markers)
 stopifnot(all(c("gene", "marker_group") %in% names(markers)))
 if (!"panel" %in% names(markers)) markers[, panel := "canonical"]
 if (!"level" %in% names(markers)) markers[, level := "both"]
-if (any(!markers$level %in% c("broad", "subtype", "both"))) stop("marker level must be broad, subtype or both")
+if (any(!markers$level %in% c("cell_type", "state"))) stop("marker level must be cell_type or state")
 markers <- unique(markers[gene %in% rownames(data_mat), .(gene, marker_group, panel, level)])
 setorder(markers, panel, level, marker_group, gene)
 # A marker may legitimately support more than one current label group. Keep the
@@ -109,7 +109,7 @@ if (!nrow(markers)) stop("No marker genes overlap expression features")
 make_source <- function(label_col, level_name, panel_name) {
   level_view <- if (!is.null(arg[[paste0(level_name, "-analysis-view")]])) arg[[paste0(level_name, "-analysis-view")]] else analysis_view
   level_cohort <- if (!is.null(arg[[paste0(level_name, "-evidence-cohort")]])) arg[[paste0(level_name, "-evidence-cohort")]] else evidence_cohort
-  panel_dt <- markers[panel == panel_name & level %in% c(level_name, "both")]
+  panel_dt <- markers[panel == panel_name & level == level_name]
   if (!nrow(panel_dt)) return(NULL)
   labels <- as.character(meta[[label_col]])
   valid <- !is.na(labels) & nzchar(labels)
@@ -117,7 +117,6 @@ make_source <- function(label_col, level_name, panel_name) {
   valid <- valid & labels %in% keep_labels
   labels <- labels[valid]; cells <- common[valid]
   if (!length(cells)) {
-    if (level_name == "subtype") return(NULL)
     stop(level_name, " has no eligible labels")
   }
   genes <- unique(panel_dt[["gene"]])
@@ -215,9 +214,9 @@ make_source <- function(label_col, level_name, panel_name) {
 }
 
 assets <- list(); z <- 1L
-levels_to_render <- c("broad", if (is.null(arg$`skip-subtype`)) "subtype")
+levels_to_render <- "cell_type"
 for (lev in levels_to_render) {
-  col <- if (lev == "broad") arg$`broad-col` else arg$`subtype-col`
+  col <- arg$`final-cell-type-col`
   for (panel_name in unique(markers$panel)) {
     message("Rendering ", lev, " / ", panel_name)
     ans <- make_source(col, lev, panel_name)
@@ -227,5 +226,5 @@ for (lev in levels_to_render) {
 asset_dt <- rbindlist(assets, fill = TRUE)
 fwrite(asset_dt, file.path(arg$out, "marker_dotplot_asset_index.tsv"), sep = "\t", quote = FALSE)
 required_levels <- levels_to_render
-if (!all(required_levels %in% asset_dt$level)) stop("Required broad/high-confidence subtype dotplots are missing")
+if (!all(required_levels %in% asset_dt$level)) stop("Required final_cell_type dotplots are missing")
 message("Completed marker dotplots: ", nrow(asset_dt), " assets")

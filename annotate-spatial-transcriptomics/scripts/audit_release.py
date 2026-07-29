@@ -58,10 +58,6 @@ def main() -> int:
         "annotation_workflow_completion_required",
         config.get("multi_route_completion_required", False),
     )
-    final_census_path = root / "tables/final_annotation_census.tsv"
-    final_census = read_tsv(final_census_path) if final_census_path.exists() else []
-    has_final_fine = any(row.get("fine_label", "") and int(float(row.get("n_observations", 0) or 0)) > 0 for row in final_census)
-    subtype_required = has_final_fine if workflow_required else True
     def req(ok, msg):
         if not ok: errors.append(msg)
     report = root / "report/index.html"
@@ -69,11 +65,11 @@ def main() -> int:
     index = root / "figures/marker_dotplots/marker_dotplot_asset_index.tsv"
     req(index.exists(), "missing dotplot asset index")
     assets = read_tsv(index) if index.exists() else []
-    required_levels = {"broad"} | ({"subtype"} if subtype_required else set())
-    req(required_levels.issubset({r.get("level") for r in assets}), "required broad/high-confidence subtype dotplots are missing")
+    required_levels = {"cell_type"}
+    req(required_levels.issubset({r.get("level") for r in assets}), "required final_cell_type dotplots are missing")
     combos = {(r.get("level"), r.get("panel")) for r in assets}
-    required_canonical = {("broad", "canonical")} | ({("subtype", "canonical")} if subtype_required else set())
-    req(required_canonical.issubset(combos), "required canonical broad/high-confidence subtype dotplots are missing")
+    required_canonical = {("cell_type", "canonical")}
+    req(required_canonical.issubset(combos), "required canonical final_cell_type dotplot is missing")
     for r in assets:
         for key in ["png", "pdf", "absolute_png", "absolute_pdf", "source"]:
             p = Path(r.get(key, "")); p = p if p.is_absolute() else root / p
@@ -95,6 +91,22 @@ def main() -> int:
         req(config_path.exists(), "missing project config")
         def any_file(pattern, min_bytes=100):
             return any(p.is_file() and p.stat().st_size >= min_bytes for p in root.glob(pattern))
+        final_census_path = root / "tables/final_cell_type_census.tsv"
+        final_census = read_tsv(final_census_path) if final_census_path.exists() else []
+        subtype_required = any(
+            row.get("level") == "subtype"
+            and int(float(row.get("n_observations", row.get("n", 0)) or 0)) > 0
+            for row in final_census
+        )
+        membership_candidates = [
+            root / "final_release_membership.tsv.gz",
+            root / "tables/final_release_membership.tsv.gz",
+            root / "state/final_release_membership.tsv.gz",
+        ]
+        final_membership_path = next(
+            (path for path in membership_candidates if path.is_file()), None
+        )
+        final_membership = read_tsv(final_membership_path) if final_membership_path else []
         context_path = resolve_context_path(root)
         context_validation = root / "provenance/biological_context_validation.json"
         completion_path = root / "provenance/completion_gate.json"
@@ -131,7 +143,26 @@ def main() -> int:
                 if target.is_file():
                     req(sha256(target) == confirmation.get(hash_key), f"confirmed snapshot is stale: {key}")
         if workflow_required:
-            req(final_census_path.exists() and bool(final_census), "missing or empty single-final-annotation census")
+            req(bool(final_membership), "missing or empty final release membership")
+            if final_membership:
+                req(
+                    "final_cell_type" in final_membership[0],
+                    "final release membership lacks final_cell_type",
+                )
+                final_types = [row.get("final_cell_type", "") for row in final_membership]
+                req(all(final_types), "final release contains an empty final_cell_type")
+                req(
+                    "Vascular-associated" not in final_types,
+                    "final release contains forbidden Vascular-associated",
+                )
+                forbidden_parallel = {
+                    "strict_cell_type", "inclusive_cell_type", "display_cell_type",
+                    "final_cell_type_strict", "final_cell_type_inclusive",
+                }
+                req(
+                    not forbidden_parallel.intersection(final_membership[0]),
+                    "release exposes a second public annotation taxonomy",
+                )
             workflow_path = root / "provenance/direct_lineage_workflow_audit.json"
             req(workflow_path.exists(), "missing direct-lineage workflow audit")
             if workflow_path.exists(): req(json.loads(workflow_path.read_text()).get("status") == "PASS", "direct-lineage workflow audit did not pass")
@@ -162,30 +193,24 @@ def main() -> int:
                 req(membership.is_file(), "analysis-scope membership artifact is missing")
                 if membership.is_file():
                     req(sha256(membership) == scope.get("membership_sha256"), "analysis-scope membership hash is stale")
-            for level in ["broad"] + (["subtype"] if subtype_required else []):
-                stem=f"final_{level}_UMAP";req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(),f"missing final annotation overview: {stem}")
-                if config.get("modality")=="spatial":
-                    stem=f"final_{level}_spatial";req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(),f"missing final annotation spatial overview: {stem}")
-            for level in ["broad"] + (["subtype"] if subtype_required else []):
-                named=any_file(f"tables/final_{level}_DEG_one_vs_rest_all.tsv*")
-                generic=list(root.glob(f"tables/{level}_DEG_one_vs_rest_all.tsv*"))
-                generic_final=False
-                for candidate in generic:
-                    if not candidate.is_file() or candidate.stat().st_size < 100: continue
-                    try:
-                        rows=read_tsv(candidate)
-                        generic_final=bool(rows) and all(row.get("analysis_view")=="final" for row in rows[:min(100,len(rows))])
-                    except (OSError, UnicodeDecodeError):
-                        generic_final=False
-                    if generic_final: break
-                req(named or generic_final,f"missing final {level} DEG with explicit analysis_view provenance")
+            stem = "final_cell_type_UMAP"
+            req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(), f"missing final annotation overview: {stem}")
+            if config.get("modality") == "spatial":
+                stem = "final_cell_type_spatial"
+                req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(), f"missing final annotation spatial overview: {stem}")
+            deg_candidates = [
+                root / "tables/final_cell_type_DEG_one_vs_rest_all.tsv",
+                root / "tables/cell_type_DEG_one_vs_rest_all.tsv",
+            ]
+            deg_path = next((path for path in deg_candidates if path.is_file()), None)
+            req(deg_path is not None, "missing final_cell_type DEG")
             expected_labels = {}
-            for level in ["broad", "subtype"]:
-                candidates = [root/f"tables/final_{level}_DEG_one_vs_rest_all.tsv", root/f"tables/{level}_DEG_one_vs_rest_all.tsv"]
-                deg_path = next((path for path in candidates if path.is_file()), None)
-                if deg_path:
-                    deg_rows = read_tsv(deg_path)
-                    expected_labels[level] = {row.get("label", "") for row in deg_rows if row.get("label", "") and row.get("analysis_view") == "final"}
+            if deg_path:
+                deg_rows = read_tsv(deg_path)
+                expected_labels["cell_type"] = {
+                    row.get("label", "") for row in deg_rows
+                    if row.get("label", "") and row.get("analysis_view") == "final"
+                }
             for asset in assets:
                 level = asset.get("level", "")
                 expected = expected_labels.get(level, set())
@@ -201,10 +226,14 @@ def main() -> int:
                     req(int(asset.get("n_labels", 0)) == len(expected), f"{level}/{asset.get('panel')} n_labels disagrees with final DEG")
                 except (TypeError, ValueError):
                     req(False, f"{level}/{asset.get('panel')} n_labels is invalid")
-        required_combos = {("broad", "canonical"), ("broad", "data_specific")}
-        if subtype_required:
+        required_combos = (
+            {("cell_type", "canonical"), ("cell_type", "data_specific")}
+            if workflow_required
+            else {("broad", "canonical"), ("broad", "data_specific")}
+        )
+        if subtype_required and not workflow_required:
             required_combos.update({("subtype", "canonical"), ("subtype", "data_specific")})
-        req(required_combos.issubset(combos), "full release requires canonical and data-specific dotplots for broad and every released high-confidence subtype level")
+        req(required_combos.issubset(combos), "full release lacks required canonical/data-specific marker dotplots")
         if not workflow_required:
             req(any_file("tables/broad_DEG_one_vs_rest_all.tsv*"), "missing broad one-vs-rest DEG")
             req(any_file("tables/subtype_DEG_one_vs_rest_all.tsv*"), "missing subtype one-vs-rest DEG")
@@ -240,8 +269,8 @@ def main() -> int:
             req("state/annotation_support_registry.tsv" in checksum_set, "checksums do not cover annotation support reasons")
             req("review/confirmation/index.html" in checksum_set, "checksums do not cover the pre-confirmation review")
             req(any(x.startswith("state/cell_ledger.tsv") for x in checksum_set), "checksums do not cover the cell ledger")
-            broad_deg_prefixes=["tables/final_broad_DEG_one_vs_rest_all.tsv","tables/broad_DEG_one_vs_rest_all.tsv"] if workflow_required else ["tables/broad_DEG_one_vs_rest_all.tsv"]
-            subtype_deg_prefixes=["tables/final_subtype_DEG_one_vs_rest_all.tsv","tables/subtype_DEG_one_vs_rest_all.tsv"] if workflow_required else ["tables/subtype_DEG_one_vs_rest_all.tsv"]
+            broad_deg_prefixes=["tables/final_cell_type_DEG_one_vs_rest_all.tsv","tables/cell_type_DEG_one_vs_rest_all.tsv"] if workflow_required else ["tables/broad_DEG_one_vs_rest_all.tsv"]
+            subtype_deg_prefixes=["tables/subtype_DEG_one_vs_rest_all.tsv"]
             req(any(any(x.startswith(prefix) for prefix in broad_deg_prefixes) for x in checksum_set), "checksums do not cover broad DEG")
             if subtype_required:
                 req(any(any(x.startswith(prefix) for prefix in subtype_deg_prefixes) for x in checksum_set), "checksums do not cover subtype DEG")
@@ -257,10 +286,10 @@ def main() -> int:
                 if target.is_file():
                     req(str(target.stat().st_size) == str(size), f"release manifest size mismatch: {relative}")
                     req(sha256(target).lower() == value.lower(), f"release manifest SHA256 mismatch: {relative}")
-        for stem in ["final_broad_UMAP"] + (["final_subtype_UMAP"] if subtype_required else []):
+        for stem in (["final_cell_type_UMAP"] if workflow_required else ["final_broad_UMAP"] + (["final_subtype_UMAP"] if subtype_required else [])):
             req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(), f"missing overview pair: {stem}")
         if config.get("modality") == "spatial":
-            for stem in ["final_broad_spatial"] + (["final_subtype_spatial"] if subtype_required else []):
+            for stem in (["final_cell_type_spatial"] if workflow_required else ["final_broad_spatial"] + (["final_subtype_spatial"] if subtype_required else [])):
                 req((root/"figures"/f"{stem}.png").exists() and (root/"figures"/f"{stem}.pdf").exists(), f"missing spatial overview pair: {stem}")
             req((root/"tables/spatial_node_asset_index.tsv").exists(), "missing spatial node index")
             req((root/"tables/spatial_gene_asset_index.tsv").exists(), "missing spatial gene index")

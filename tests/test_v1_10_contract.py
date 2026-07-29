@@ -171,14 +171,16 @@ class V110ContractTests(unittest.TestCase):
                          "--out", root / "passed.json")
             self.assertEqual(passed.returncode, 0, passed.stdout + passed.stderr)
 
-    def test_vascular_release_parent_contains_endothelial_and_pericyte_children(self) -> None:
+    def test_endothelial_pericyte_and_smooth_muscle_are_independent_broads(self) -> None:
         profile = json.loads(PROFILE.read_text())
         taxonomy = profile["release_taxonomy"]
-        self.assertIn("Vascular-associated", taxonomy["default_biological_broad_classes"])
-        self.assertNotIn("Pericyte/mural", taxonomy["evidence_dependent_standalone_classes"])
+        self.assertNotIn("Vascular-associated", taxonomy["default_biological_broad_classes"])
+        self.assertIn("Endothelial", taxonomy["default_biological_broad_classes"])
+        self.assertIn("Pericyte/mural", taxonomy["default_biological_broad_classes"])
+        self.assertIn("Smooth muscle", taxonomy["default_biological_broad_classes"])
         self.assertEqual(
-            set(taxonomy["vascular_hierarchy"]["fine_children"]),
-            {"Blood endothelial", "Lymphatic endothelial", "Pericyte/mural"},
+            set(taxonomy["vascular_hierarchy"]["endothelial_fine_children"]),
+            {"Lymphatic endothelial"},
         )
 
 

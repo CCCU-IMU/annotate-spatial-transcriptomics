@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a portable static HTML report from framework assets and state."""
+"""Legacy report builder retained for old projects; v2.2 fails closed here."""
 
 from __future__ import annotations
 
@@ -118,6 +118,11 @@ def top_deg_by_label(rows, limit=5):
 def main() -> int:
     ap = argparse.ArgumentParser(); ap.add_argument("project_root", type=Path); ap.add_argument("--language", default="zh"); args = ap.parse_args()
     root = args.project_root.resolve(); cfg = json.loads((root / "config/project.json").read_text())
+    if cfg.get("canonical_lineage_controller_version") == "2.2.0":
+        raise SystemExit(
+            "build_report.py is retired for v2.2; use build_frozen_review_report.py "
+            "with the canonical final_release membership and final_cell_type assets"
+        )
     confirmation = load_valid_confirmation(root)
     report_dir = root / "report"; report_dir.mkdir(parents=True, exist_ok=True)
     dot = read_tsv(root / "figures/marker_dotplots/marker_dotplot_asset_index.tsv")

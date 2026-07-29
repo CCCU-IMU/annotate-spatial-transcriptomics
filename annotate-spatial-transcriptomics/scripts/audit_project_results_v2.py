@@ -16,7 +16,9 @@ from evidence_schema_lib import sha256
 
 BIOLOGICAL = {"defined_broad_only", "defined_fine"}
 QC = {"qc_holdout", "low_information_qc_holdout", "pending_qc", "unknown_candidate"}
-DEFAULT_ALIASES = {"Vascular/endothelial", "Vascular/perivascular", "Pericyte/mural"}
+DEFAULT_ALIASES = {
+    "Vascular-associated", "Vascular/endothelial", "Vascular/perivascular",
+}
 DEFAULT_FORBIDDEN_FINE = [
     "low-information", "low information", "qc", "holdout", "pending", "unknown",
     "unresolved", "candidate", "review", "technical", "ambient-only",

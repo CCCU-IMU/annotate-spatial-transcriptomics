@@ -58,7 +58,7 @@ def main() -> int:
         ) if annotation_contract_path.is_file() else {}
     except json.JSONDecodeError:
         annotation_contract = {}
-    if annotation_contract.get("skill_release_version") == "2.2.0":
+    if annotation_contract.get("skill_release_version") in {"2.2.0", "2.5.0"}:
         errors: list[str] = []
         validation_path = args.project_root / "provenance/lineage_controller_release_validation.json"
         try:

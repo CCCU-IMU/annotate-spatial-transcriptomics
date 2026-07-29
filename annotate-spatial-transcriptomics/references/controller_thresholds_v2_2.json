@@ -29,6 +29,16 @@
     "maximum_second_subset_rounds": 1,
     "minimum_component_members": 5
   },
+  "local_split_trigger_policy": {
+    "minority_min_identity_core_fraction": 0.01,
+    "minority_min_direct_core_fraction": 0.01,
+    "minority_min_release_family_fraction": 0.03,
+    "minority_min_seed_fraction": 0.01,
+    "minority_min_deg_contrast": 0.75,
+    "rare_watch_min_fraction": 0.005,
+    "cross_resolution_stability_minimum": 0.50,
+    "combined_analysis_split_fraction_review_trigger": 0.50
+  },
   "fine_release_policy": {
     "minimum_lineage_supported_fraction": 0.40,
     "minimum_purity_margin": 0.20

@@ -57,7 +57,7 @@ def audit(root: Path) -> dict:
             )
         except json.JSONDecodeError:
             annotation_contract = {}
-        if annotation_contract.get("skill_release_version") == "2.2.0":
+        if annotation_contract.get("skill_release_version") in {"2.2.0", "2.5.0"}:
             validation_path = root / "provenance/lineage_controller_release_validation.json"
             gaps: list[dict] = []
             try:

@@ -97,18 +97,22 @@
     "defined_label_atlas_policy": "concordance_challenge_only_until_orthogonal_query_evidence_review",
     "open_set_ood_required": true,
     "reusable_fixed_reference_index_required": true,
-    "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Vascular-associated", "Immune"],
-    "primary_public_atlas_exclusions": ["Oocyte", "Theca", "Epithelial/mesothelial"],
+    "primary_public_atlas_scope": ["Granulosa", "Stromal/mesenchymal", "Endothelial", "Pericyte/mural", "Immune"],
+    "primary_public_atlas_exclusions": ["Oocyte", "Theca", "Epithelial/mesothelial", "Vascular-associated"],
+    "legacy_low_resolution_labels_not_directly_transferable": ["Vascular-associated"],
     "primary_public_atlas_label_crosswalk": {
       "Granulosa": "Granulosa",
       "Stromal/mesenchymal": "Stromal/mesenchymal",
       "Stromal": "Stromal/mesenchymal",
       "Immune": "Immune",
       "Immune/plasma": "Immune",
-      "Vascular-associated": "Vascular-associated",
-      "Vascular/endothelial": "Vascular-associated",
-      "Vascular/perivascular": "Vascular-associated",
-      "Pericyte/mural": "Vascular-associated"
+      "Endothelial": "Endothelial",
+      "Vascular/endothelial": "Endothelial",
+      "Pericyte": "Pericyte/mural",
+      "Mural": "Pericyte/mural",
+      "Perivascular": "Pericyte/mural",
+      "Vascular/perivascular": "Pericyte/mural",
+      "Pericyte/mural": "Pericyte/mural"
     },
     "atlas_rescue_ceiling": "broad_only",
     "accepted_calibrated_tiers": ["high", "moderate_only"],
@@ -133,7 +137,7 @@
     "quality_reference_semantics": "compare biological evidence quality with the validated deidentified R-first case; do not require matching labels or subtype depth",
     "broad_only_rescues_enter_fine_marker_discovery": false,
     "oocyte_rule": "send the complete multi-module starting candidate cohort to adaptive query-only reclustering; use strict marker/anti-program seeds and spatial foci to adjudicate clusters, never as a per-cell membership filter; after a cluster passes non-ZP/maternal, somatic-clearance and object-ensemble morphology review, release every canonical member except explicit hard-exclusion cells and return somatic neighbours directly to supported lineages with ambient tags",
-    "vascular_release_rule": "use Vascular-associated as the shared broad parent of blood endothelial, lymphatic endothelial and pericyte/mural cells; keep mature Smooth muscle separate",
+    "vascular_release_rule": "Endothelial, Pericyte/mural and Smooth muscle are independent broad lineages; Lymphatic endothelial is a high-confidence Endothelial child; legacy Vascular-associated is challenge-only and cannot be released",
     "large_residual_qc_rule": "10% or 50000 final residual observations returns to the contributing second-round cohort or post-merge unresolved review; it never triggers first-pass whole-object per-cell threshold tuning",
     "neural_candidate_rule": "SOX10/S100B/PLP1/MPZ-like glial backbone or a coherent neuronal program plus track-like morphology; DLG2 or another single neuronal gene is insufficient. Candidate discovery is required even when the reference case lacked this class."
   }

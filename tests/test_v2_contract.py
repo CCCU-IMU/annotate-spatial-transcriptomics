@@ -41,7 +41,8 @@ class V2ContractTests(unittest.TestCase):
             root = Path(temp)
             (root / "config").mkdir(); (root / "state").mkdir(); (root / "provenance").mkdir()
             (root / "config/project.json").write_text(json.dumps({
-                "framework_version": "2.0.0", "project_id": "p", "sample_id": "s"
+                "framework_version": "2.0.0", "project_id": "p", "sample_id": "s",
+                "observation_unit": "cellbin",
             }))
             failed_root = root / "failed_A08"
             failed_root.mkdir()
@@ -91,7 +92,8 @@ class V2ContractTests(unittest.TestCase):
             root = Path(temp)
             (root / "config").mkdir(); (root / "state").mkdir(); (root / "provenance").mkdir()
             (root / "config/project.json").write_text(json.dumps({
-                "framework_version": "2.0.0", "project_id": "p", "sample_id": "s"
+                "framework_version": "2.0.0", "project_id": "p", "sample_id": "s",
+                "observation_unit": "cellbin",
             }))
             source = root / "input.rds"
             source.write_text("fixture")
@@ -132,7 +134,7 @@ class V2ContractTests(unittest.TestCase):
                 sha(partitions),
             )
             self.assertEqual(contract["query_reclustering"]["candidate_resolutions"], [0.1, 0.2, 0.3, 0.4, 0.6])
-            self.assertEqual(contract["skill_release_version"], "2.2.0")
+            self.assertEqual(contract["skill_release_version"], "2.5.0")
             controller = contract["canonical_lineage_controller"]
             self.assertEqual(controller["controller_version"], "2.2.0")
             self.assertFalse(controller["subset_policy"]["aggregate_winner_can_veto"])
@@ -204,7 +206,7 @@ class V2ContractTests(unittest.TestCase):
             (root / "config/project.json").write_text(json.dumps({"framework_version": "1.9.2", "project_id": "p"}))
             ledger = root / "results/x/final_candidate_cell_ledger.tsv.gz"
             write_tsv(ledger, ["cell_id", "analysis_scope", "final_state", "final_broad_label", "final_fine_label"], [
-                {"cell_id": "a", "analysis_scope": "analysis_set", "final_state": "defined", "final_broad_label": "Pericyte/mural", "final_fine_label": "RGS5 mural"},
+                {"cell_id": "a", "analysis_scope": "analysis_set", "final_state": "defined", "final_broad_label": "Vascular/perivascular", "final_fine_label": "RGS5 mural"},
                 {"cell_id": "b", "analysis_scope": "analysis_set", "final_state": "qc_holdout", "final_broad_label": "", "final_fine_label": ""},
             ])
             result = run(SCRIPTS / "audit_project_results_v2.py", root, "--out", root / "audit.json")
@@ -245,16 +247,16 @@ class V2ContractTests(unittest.TestCase):
             mapping = root / "mapping.tsv.gz"
             write_tsv(mapping, ["cell_id", "predicted_label", "mapping_tier", "out_of_distribution", "ontology_conflict"], [
                 {"cell_id": "a", "predicted_label": "Stromal", "mapping_tier": "moderate_only", "out_of_distribution": "false", "ontology_conflict": "false"},
-                {"cell_id": "b", "predicted_label": "Immune", "mapping_tier": "high", "out_of_distribution": "false", "ontology_conflict": "false"},
+                {"cell_id": "b", "predicted_label": "Immune", "mapping_tier": "moderate_only", "out_of_distribution": "false", "ontology_conflict": "false"},
             ])
             origin = root / "origin.json"; origin.write_text(json.dumps({
                 "status": "PASS", "heldout_origin": "query_like_heldout_current_query_anchors",
                 "reference_self_classification": False, "anchor_target_overlap": 0,
             }))
             cumulative = root / "heldout.tsv"
-            write_tsv(cumulative, ["predicted_label", "cumulative_tier", "validation_n", "validation_precision", "target_precision"], [
-                {"predicted_label": "Stromal", "cumulative_tier": "moderate_or_higher", "validation_n": 40, "validation_precision": 0.95, "target_precision": 0.9},
-                {"predicted_label": "Immune", "cumulative_tier": "moderate_or_higher", "validation_n": 10, "validation_precision": 1.0, "target_precision": 0.9},
+            write_tsv(cumulative, ["predicted_label", "cumulative_tier", "validation_n", "validation_precision", "expected_calibration_error", "target_precision"], [
+                {"predicted_label": "Stromal", "cumulative_tier": "moderate_or_higher", "validation_n": 40, "validation_precision": 0.9003, "expected_calibration_error": 0.04, "target_precision": 0.9},
+                {"predicted_label": "Immune", "cumulative_tier": "moderate_or_higher", "validation_n": 40, "validation_precision": 0.899, "expected_calibration_error": 0.04, "target_precision": 0.9},
             ])
             target_mapping = root / "target_mapping.tsv.gz"
             write_tsv(target_mapping, ["cell_id", "predicted_label", "mapping_tier", "out_of_distribution", "ontology_conflict"], [])
@@ -281,6 +283,7 @@ class V2ContractTests(unittest.TestCase):
             self.assertEqual(rows["a"]["atlas_state_route"], "direct_qc_broad_return")
             self.assertEqual(rows["a"]["proposed_broad_label"], "Stromal/mesenchymal")
             self.assertEqual(rows["b"]["atlas_state_route"], "retain_qc")
+            self.assertEqual(rows["a"]["atlas_class_ece_status"], "PASS")
 
     def test_atlas_material_review_uses_current_broad_group_and_has_review_ids(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

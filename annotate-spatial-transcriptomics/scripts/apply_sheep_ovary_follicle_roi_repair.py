@@ -25,13 +25,13 @@ from lineage_controller_lib import (
 
 CANDIDATE_TO_BROAD = {
     "theca_steroidogenic": "Theca",
-    "vascular_endothelial": "Vascular-associated",
-    "pericyte_mural": "Vascular-associated",
-    "lymphatic_endothelial": "Vascular-associated",
+    "vascular_endothelial": "Endothelial",
+    "pericyte_mural": "Pericyte/mural",
+    "lymphatic_endothelial": "Endothelial",
     "smooth_muscle": "Smooth muscle",
     "stromal_mesenchymal": "Stromal/mesenchymal",
 }
-SPECIFIC_BROADS = ("Theca", "Vascular-associated", "Smooth muscle")
+SPECIFIC_BROADS = ("Theca", "Endothelial", "Pericyte/mural", "Smooth muscle")
 WALL_BROADS = set(SPECIFIC_BROADS) | {"Stromal/mesenchymal"}
 BOOL_COLUMNS = (
     "family_coherent", "identity_core_direct", "release_family_coherent",
@@ -40,7 +40,7 @@ BOOL_COLUMNS = (
 REQUIRED_SCORE_COLUMNS = {
     "cell_id", "candidate_id", "normalized_evidence", "family_coherent",
     "identity_core_direct", "release_family_coherent", "hard_contradiction",
-    "technical_flag", "positive_families",
+    "technical_flag", "positive_families", "x", "y",
 }
 
 
@@ -80,8 +80,9 @@ def authorized_broads(issue_rows: pd.DataFrame, layer_rows: pd.DataFrame, roi: s
         return set(WALL_BROADS)
     allowed: set[str] = set()
     mapping = {
-        "theca": "Theca", "vascular": "Vascular-associated",
-        "pericyte": "Vascular-associated", "lymphatic": "Vascular-associated",
+        "theca": "Theca", "endothelial": "Endothelial",
+        "vascular": "Endothelial", "pericyte": "Pericyte/mural",
+        "mural": "Pericyte/mural", "lymphatic": "Endothelial",
         "smooth": "Smooth muscle", "contractile": "Smooth muscle",
         "stromal": "Stromal/mesenchymal",
     }
@@ -95,7 +96,9 @@ def authorized_broads(issue_rows: pd.DataFrame, layer_rows: pd.DataFrame, roi: s
             & (layer_rows.status.astype(str) == "ITERATION_REQUIRED")
         ]
         layer_to_broad = {
-            "theca_interna": "Theca", "vascular_interna": "Vascular-associated",
+            "theca_interna": "Theca",
+            "endothelial_interna": "Endothelial",
+            "pericyte_mural_interna": "Pericyte/mural",
             "outer_nonvascular_contractile": "Smooth muscle",
             "outer_stromal_background": "Stromal/mesenchymal",
         }
@@ -112,7 +115,10 @@ def read_score(path: Path) -> pd.DataFrame:
     for column in BOOL_COLUMNS:
         frame[column] = as_bool(frame[column])
     frame["normalized_evidence"] = pd.to_numeric(frame.normalized_evidence, errors="coerce")
-    if frame.normalized_evidence.isna().any():
+    frame[["x", "y"]] = frame[["x", "y"]].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    if frame[["normalized_evidence", "x", "y"]].isna().any().any():
         raise SystemExit(f"repair score has invalid evidence: {path}")
     if frame.duplicated(["cell_id", "candidate_id"]).any():
         raise SystemExit(f"repair score duplicates cell_id x candidate_id: {path}")
@@ -288,6 +294,11 @@ def main() -> int:
                 continue
             revised.at[cell, "pre_follicle_repair_broad_label"] = old_broad
             revised.at[cell, "final_broad_label"] = new_broad
+            # The frozen membership must carry the identity that justified the
+            # repaired broad label.  Keeping the pre-repair candidate here makes
+            # the downstream completeness audit report a false missing-source
+            # failure even though the bounded ROI evidence is valid.
+            revised.at[cell, "candidate_id"] = candidate_id
             if "confidence" in revised:
                 revised.at[cell, "confidence"] = "high"
             if "final_broad_confidence" in revised:
@@ -340,24 +351,39 @@ def main() -> int:
         raise SystemExit("combined post-repair scores duplicate cell_id x candidate_id")
     if set(combined.cell_id) != set(revised.index):
         raise SystemExit("combined post-repair scores do not cover full membership")
+    coordinate_rows = combined[["cell_id", "x", "y"]].drop_duplicates()
+    if coordinate_rows.cell_id.duplicated().any():
+        raise SystemExit("combined post-repair scores contain inconsistent coordinates")
+    if set(coordinate_rows.cell_id) != set(revised.index):
+        raise SystemExit("post-repair coordinate ledger does not cover full membership")
 
     args.out.mkdir(parents=True, exist_ok=True)
     membership_path = args.out / "post_follicle_roi_repair_membership.tsv.gz"
     score_path = args.out / "post_follicle_roi_repair_observation_scores.tsv.gz"
+    coordinate_path = args.out / "post_follicle_roi_repair_coordinates.tsv.gz"
     change_path = args.out / "follicle_roi_repair_changes.tsv"
     revised.reset_index(drop=True).to_csv(membership_path, sep="\t", index=False, compression="gzip")
     combined.to_csv(score_path, sep="\t", index=False, compression="gzip")
+    coordinate_rows.sort_values("cell_id", kind="mergesort").to_csv(
+        coordinate_path, sep="\t", index=False, compression="gzip"
+    )
     pd.DataFrame(changes).to_csv(change_path, sep="\t", index=False)
     before = Counter(original.final_broad_label)
     after = Counter(revised.final_broad_label)
     transitions = Counter((row["old_broad_label"], row["new_broad_label"]) for row in changes)
     manifest = {
         "status": "PENDING_POST_REPAIR_BIOLOGICAL_REVIEW",
-        "schema_version": "2.2", "artifact_role": "review_candidate",
+        "schema_version": "2.2", "stage": "follicle_roi_repair_apply",
+        "artifact_role": "review_candidate",
+        "stage_authority": artifact(args.stage_authority),
         "pre_repair_membership": artifact(args.membership),
         "repaired_membership": artifact(membership_path),
         "combined_observation_scores": artifact(score_path),
+        "coordinate_membership": artifact(coordinate_path),
         "changes": artifact(change_path),
+        "repair_ancestry": [
+            artifact(path) for _, path in sorted(repair_ancestry.items())
+        ],
         "candidate_catalog": artifact(args.catalog),
         "context_evidence": artifact(args.context_evidence) if args.context_evidence else None,
         "context_release_eligibility": context_summary,

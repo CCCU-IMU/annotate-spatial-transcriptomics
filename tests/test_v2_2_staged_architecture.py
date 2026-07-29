@@ -45,7 +45,9 @@ CATALOG = {
         {"candidate_id": "granulosa", "candidate_role": "broad", "release_broad_label": "Granulosa", "release_fine_label": ""},
         {"candidate_id": "stromal", "candidate_role": "broad", "release_broad_label": "Stromal/mesenchymal", "release_fine_label": ""},
         {"candidate_id": "smooth", "candidate_role": "broad", "release_broad_label": "Smooth muscle", "release_fine_label": ""},
-        {"candidate_id": "pericyte", "candidate_role": "fine", "release_broad_label": "Vascular-associated", "release_fine_label": "Pericyte/mural"},
+        {"candidate_id": "endothelial", "candidate_role": "broad", "release_broad_label": "Endothelial", "release_fine_label": ""},
+        {"candidate_id": "pericyte", "candidate_role": "broad", "release_broad_label": "Pericyte/mural", "release_fine_label": ""},
+        {"candidate_id": "lymphatic", "candidate_role": "fine", "release_broad_label": "Endothelial", "release_fine_label": "Lymphatic endothelial", "parent_broad_label": "Endothelial"},
         {"candidate_id": "epithelial", "candidate_role": "broad", "release_broad_label": "Epithelial/mesothelial", "release_fine_label": ""},
         {"candidate_id": "oocyte", "candidate_role": "broad", "release_broad_label": "Oocyte", "release_fine_label": "", "writeback_strategy": "canonical_cluster_membership"},
         {"candidate_id": "granulosa_hypoxia", "candidate_role": "state", "release_broad_label": "", "release_fine_label": "", "release_state_label": "Hypoxia", "parent_broad_label": "Granulosa"},
@@ -82,6 +84,80 @@ def evidence(candidate: str, coherent: float = 0.0, seed: float = 0.0, deg: floa
 
 
 class V22StagedArchitectureTests(unittest.TestCase):
+    def test_new_project_uses_canonical_v22_completion_interface(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            project = root / "project"
+            result = run(
+                "init_annotation_project.py",
+                "--sample", "s1", "--input-root", root,
+                "--project-root", project, "--modality", "spatial",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            config = json.loads((project / "config/project.json").read_text())
+            self.assertEqual(
+                config["public_completion_gate"],
+                "run_lineage_controller.py materialize_final_release",
+            )
+            self.assertEqual(
+                config["completion_gate_phases"][-1],
+                "materialize_final_release",
+            )
+
+            status = run("autopilot_status.py", project)
+            self.assertEqual(status.returncode, 2, status.stdout + status.stderr)
+            autopilot = json.loads(status.stdout)
+            self.assertEqual(autopilot["controller_mode"], "canonical_v2_2")
+            commands = "\n".join(
+                row["command"] for row in autopilot["next_actions"]
+            )
+            self.assertIn("run_lineage_controller.py whole_tissue_partition", commands)
+            self.assertNotIn("check_completion_gate.py", commands)
+            self.assertNotIn("qc_anchor", commands.lower())
+
+    def test_excessive_local_split_workload_requires_resolution_review(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            base = root / "base.tsv.gz"
+            pending = root / "pending.tsv.gz"
+            write_tsv(base, [{"cell_id": f"c{i}"} for i in range(4)])
+            write_tsv(pending, [{"cell_id": f"c{i}"} for i in range(4, 10)])
+            manifest = root / "cohort_manifest.json"
+            manifest.write_text(json.dumps({
+                "stage": "cluster_cohort_recluster",
+                "status": "LOCAL_SPLIT_REQUIRED",
+                "cohort_id": "cohort_1",
+                "n_observations": 10,
+                "base_candidate_membership": {
+                    "path": str(base),
+                    "sha256": hashlib.sha256(base.read_bytes()).hexdigest(),
+                },
+                "pending_local_split_membership": {
+                    "path": str(pending),
+                    "sha256": hashlib.sha256(pending.read_bytes()).hexdigest(),
+                },
+            }), encoding="utf-8")
+            out = root / "audit"
+            result = run(
+                "audit_local_split_workload.py",
+                "--cohort-manifest", manifest,
+                "--threshold-registry",
+                ROOT / "annotate-spatial-transcriptomics/references/controller_thresholds_v2_2.json",
+                "--out", out,
+            )
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            audit = json.loads((out / "local_split_workload_audit.json").read_text())
+            self.assertEqual(audit["status"], "REVIEW_REQUIRED")
+            self.assertEqual(audit["pending_local_split_fraction"], 0.6)
+            self.assertEqual(
+                audit["threshold_registry"]["path"],
+                str((ROOT / "annotate-spatial-transcriptomics/references/controller_thresholds_v2_2.json").resolve()),
+            )
+            self.assertEqual(
+                audit["required_action"],
+                "revisit_second_round_resolution_or_split_trigger_before_P41_submission",
+            )
+
     def test_interestrus_context_enables_evaluation_without_label_authority(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             out = Path(temp) / "context.tsv"
@@ -717,8 +793,8 @@ class V22StagedArchitectureTests(unittest.TestCase):
             ])
             fine = root / "fine.tsv"
             write_tsv(fine, [{
-                "parent_broad_label": "Vascular-associated",
-                "candidate_id": "pericyte", "status": "not_evaluable",
+                "parent_broad_label": "Endothelial",
+                "candidate_id": "lymphatic", "status": "not_evaluable",
             }])
             accepted = root / "accepted.tsv"
             write_tsv(accepted, [], ["program_id", "status"])
@@ -944,9 +1020,7 @@ class V22StagedArchitectureTests(unittest.TestCase):
         self.assertFalse(base)
         self.assertEqual(len(pending), 20)
         self.assertEqual(manifest["status"], "LOCAL_SPLIT_REQUIRED")
-        pericyte = next(row for row in fine if row["candidate_id"] == "pericyte")
-        self.assertEqual(pericyte["status"], "not_evaluable")
-        self.assertEqual(pericyte["release_candidate"], "false")
+        self.assertFalse(any(row["candidate_id"] == "pericyte" for row in fine))
         self.assertFalse(state)
 
     def test_low_fraction_epithelial_program_is_not_silently_diluted(self) -> None:
@@ -1076,10 +1150,15 @@ class V22StagedArchitectureTests(unittest.TestCase):
                 "sha256": hashlib.sha256(thresholds.read_bytes()).hexdigest(),
             }
             catalog = root / "catalog.json"
-            catalog.write_text(json.dumps({"candidate_boundaries": [{
-                "candidate_id": "granulosa", "candidate_role": "broad",
-                "release_broad_label": "Granulosa", "release_fine_label": "",
-            }]}))
+            catalog.write_text(json.dumps({
+                "taxonomy_policy": {
+                    "forbidden_runtime_release_labels": ["Vascular-associated"],
+                },
+                "candidate_boundaries": [{
+                    "candidate_id": "granulosa", "candidate_role": "broad",
+                    "release_broad_label": "Granulosa", "release_fine_label": "",
+                }],
+            }))
             catalog_record = {
                 "path": str(catalog),
                 "sha256": hashlib.sha256(catalog.read_bytes()).hexdigest(),
@@ -1153,12 +1232,90 @@ class V22StagedArchitectureTests(unittest.TestCase):
             final = read_tsv(out / "final_release_membership.tsv.gz")
             self.assertEqual(final[0]["final_state"], "qc_holdout")
             self.assertEqual(final[0]["qc_reason"], "ambiguous_biological_program")
+            self.assertEqual(final[0]["final_cell_type"], "QC/Unknown")
+            self.assertTrue(all(row["final_cell_type"] for row in final))
+            self.assertNotIn(
+                "Vascular-associated",
+                {row["final_cell_type"] for row in final},
+            )
+
+            # A poor-quality query is allowed to stop as a non-release review
+            # candidate instead of being forced into repeated residual/anchor
+            # reclustering merely to cross the 10% completion threshold.
+            for index, row in enumerate(rows):
+                if index < 3:
+                    row.update({
+                        "candidate_id": "", "final_state": "unresolved_biological",
+                        "final_broad_label": "", "confidence": "low",
+                        "unresolved_reason": "low_information_ambiguous_program",
+                    })
+            write_tsv(membership, rows)
+            completeness.write_text(json.dumps({
+                "status": "PASS",
+                "membership": {
+                    "path": str(membership),
+                    "sha256": hashlib.sha256(membership.read_bytes()).hexdigest(),
+                },
+            }))
+            review.write_text(json.dumps({
+                "status": "PASS", "phase": "atlas_and_completeness_review",
+                "membership": {
+                    "path": str(membership),
+                    "sha256": hashlib.sha256(membership.read_bytes()).hexdigest(),
+                },
+                "completeness": {
+                    "path": str(completeness),
+                    "sha256": hashlib.sha256(completeness.read_bytes()).hexdigest(),
+                },
+                "atlas_validation": {
+                    "path": str(atlas_validation),
+                    "sha256": hashlib.sha256(atlas_validation.read_bytes()).hexdigest(),
+                },
+            }))
+            authority.write_text(json.dumps({
+                "mode": "stage_authority", "phase": "materialize_final_release",
+                "annotation_contract_sha256": hashlib.sha256(contract.read_bytes()).hexdigest(),
+                "post_atlas_membership": {
+                    "path": str(membership),
+                    "sha256": hashlib.sha256(membership.read_bytes()).hexdigest(),
+                },
+                "prerequisite_manifest": {
+                    "path": str(review),
+                    "sha256": hashlib.sha256(review.read_bytes()).hexdigest(),
+                },
+                "threshold_registry": threshold_record,
+                "state_annotation_proposals": [],
+            }))
+            pending_out = root / "pending"
+            result = run(
+                "materialize_final_release_v2_2.py", "--contract", contract,
+                "--stage-authority", authority,
+                "--post-atlas-membership", membership,
+                "--atlas-completeness-manifest", review, "--catalog", catalog,
+                "--out", pending_out,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            pending = json.loads(
+                (pending_out / "final_release_manifest.json").read_text()
+            )
+            self.assertEqual(
+                pending["status"], "PENDING_USER_REVIEW_HIGH_UNRESOLVED"
+            )
+            self.assertFalse(pending["release_ready"])
+            self.assertTrue(pending["automatic_recovery_exhausted"])
+            self.assertTrue(
+                (pending_out / "pending_high_unresolved_membership.tsv.gz").is_file()
+            )
 
     def test_completeness_requires_source_linked_candidate_support(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             catalog = root / "catalog.json"
-            catalog.write_text(json.dumps({"candidate_boundaries": [{
+            catalog.write_text(json.dumps({
+                "taxonomy_policy": {
+                    "forbidden_runtime_release_labels": ["Vascular-associated"],
+                },
+                "candidate_boundaries": [{
                 "candidate_id": "granulosa", "candidate_role": "broad",
                 "release_broad_label": "Granulosa",
                 "release_fine_label": "", "required_positive_families": [],
@@ -1209,6 +1366,98 @@ class V22StagedArchitectureTests(unittest.TestCase):
             self.assertEqual(manifest["status"], "BLOCKED")
             audit = read_tsv(root / "out/broad_completeness_audit.tsv")
             self.assertEqual(audit[0]["unsupported_release_observation_n"], "1")
+
+    def test_completeness_accepts_canonical_follicle_roi_repair_support(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            catalog = root / "catalog.json"
+            catalog.write_text(json.dumps({
+                "candidate_boundaries": [{
+                    "candidate_id": "granulosa", "candidate_role": "broad",
+                    "release_broad_label": "Granulosa",
+                    "release_fine_label": "", "required_positive_families": [],
+                }],
+            }))
+            source = root / "source.tsv"
+            write_tsv(source, [{
+                "cell_id": "c0", "source_boundary": "cohort_a",
+                "source_cluster": "0", "candidate_id": "",
+                "final_broad_label": "", "assignment_origin": "",
+            }])
+            repaired = root / "repaired.tsv"
+            write_tsv(repaired, [{
+                "cell_id": "c0", "source_boundary": "cohort_a",
+                "source_cluster": "0", "candidate_id": "granulosa",
+                "final_broad_label": "Granulosa",
+                "assignment_origin": "follicle_roi_raw_count_direct_identity_repair",
+            }])
+            changes = root / "changes.tsv"
+            write_tsv(changes, [{
+                "cell_id": "c0", "follicle_roi_id": "F001",
+                "candidate_id": "granulosa", "old_broad_label": "",
+                "new_broad_label": "Granulosa",
+            }])
+            writer = SCRIPTS / "apply_sheep_ovary_follicle_roi_repair.py"
+            authority = root / "authority.json"
+            authority.write_text(json.dumps({
+                "mode": "stage_authority",
+                "phase": "atlas_and_completeness_review",
+                "scripts": {writer.name: {
+                    "path": str(writer.resolve()),
+                    "sha256": hashlib.sha256(writer.read_bytes()).hexdigest(),
+                }},
+            }))
+            repair_manifest = root / "repair.json"
+            repair_manifest.write_text(json.dumps({
+                "status": "PENDING_POST_REPAIR_BIOLOGICAL_REVIEW",
+                "stage": "follicle_roi_repair_apply",
+                "stage_authority": {
+                    "path": str(authority),
+                    "sha256": hashlib.sha256(authority.read_bytes()).hexdigest(),
+                },
+                "pre_repair_membership": {
+                    "path": str(source),
+                    "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                },
+                "repaired_membership": {
+                    "path": str(repaired),
+                    "sha256": hashlib.sha256(repaired.read_bytes()).hexdigest(),
+                },
+                "changes": {
+                    "path": str(changes),
+                    "sha256": hashlib.sha256(changes.read_bytes()).hexdigest(),
+                },
+            }))
+            evidence_path = root / "evidence.tsv"
+            write_tsv(evidence_path, [{
+                "resolution_role": "selected",
+                "source_boundary": "cohort_a", "source_cluster": "0",
+                "candidate_id": "granulosa",
+                "available_positive_family_count": "2",
+                "group_positive_family_supported_count": "0",
+                "observation_identity_core_fraction": "0",
+                "observation_identity_core_direct_fraction": "0",
+                "positive_marker_detection_fraction": "0",
+                "mean_program_score": "0", "marker_deg_log2fc_mean": "0",
+                "anti_marker_deg_log2fc_mean": "0",
+                "positive_marker_pseudobulk_sum": "0",
+                "anti_marker_pseudobulk_sum": "0",
+                "cross_resolution_stable_fraction": "0",
+            }])
+            result = run(
+                "audit_post_merge_completeness.py",
+                "--membership", repaired, "--catalog", catalog,
+                "--cluster-evidence", evidence_path,
+                "--follicle-roi-repair-manifest", repair_manifest,
+                "--out", root / "out",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            manifest = json.loads(
+                (root / "out/post_merge_completeness_manifest.json").read_text()
+            )
+            self.assertEqual(
+                manifest["supported_follicle_roi_repair_observation_n"], 1
+            )
 
     def test_completeness_accepts_bound_local_subset_support(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

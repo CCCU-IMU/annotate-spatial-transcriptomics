@@ -34,9 +34,9 @@ class FollicleRoiRepairTest(unittest.TestCase):
         catalog = root / "catalog.json"
         release = {
             "theca_steroidogenic": "Theca",
-            "vascular_endothelial": "Vascular-associated",
-            "pericyte_mural": "Vascular-associated",
-            "lymphatic_endothelial": "Vascular-associated",
+            "vascular_endothelial": "Endothelial",
+            "pericyte_mural": "Pericyte/mural",
+            "lymphatic_endothelial": "Endothelial",
             "smooth_muscle": "Smooth muscle",
             "stromal_mesenchymal": "Stromal/mesenchymal",
         }
@@ -73,7 +73,7 @@ class FollicleRoiRepairTest(unittest.TestCase):
         write_tsv(layers, [
             {"follicle_roi_id": "F001", "layer_name": name, "status": "ITERATION_REQUIRED"}
             for name in (
-                "theca_interna", "vascular_interna",
+                "theca_interna", "endothelial_interna", "pericyte_mural_interna",
                 "outer_nonvascular_contractile", "outer_stromal_background",
             )
         ])
@@ -122,6 +122,7 @@ class FollicleRoiRepairTest(unittest.TestCase):
                         eligible = True
                     result.append({
                         "cell_id": cell, "candidate_id": candidate,
+                        "x": float(ord(cell) - ord("a")), "y": 0.0,
                         "normalized_evidence": evidence,
                         "family_coherent": eligible,
                         "identity_core_direct": eligible,
@@ -165,11 +166,28 @@ class FollicleRoiRepairTest(unittest.TestCase):
             subprocess.run(self.build_fixture(root), check=True, capture_output=True, text=True)
             result = pd.read_csv(root / "out/post_follicle_roi_repair_membership.tsv.gz", sep="\t", dtype=str).fillna("").set_index("cell_id")
             self.assertEqual(result.at["a", "final_broad_label"], "Smooth muscle")
-            self.assertEqual(result.at["b", "final_broad_label"], "Vascular-associated")
+            self.assertEqual(result.at["a", "candidate_id"], "smooth_muscle")
+            self.assertEqual(result.at["b", "final_broad_label"], "Endothelial")
+            self.assertEqual(result.at["b", "candidate_id"], "vascular_endothelial")
             self.assertEqual(result.at["c", "final_broad_label"], "Theca")
+            self.assertEqual(result.at["c", "candidate_id"], "theca_steroidogenic")
             self.assertEqual(result.at["d", "final_broad_label"], "Stromal/mesenchymal")
+            self.assertEqual(result.at["d", "candidate_id"], "stromal_mesenchymal")
             self.assertEqual(result.at["e", "final_broad_label"], "Oocyte")
             self.assertEqual(result.at["f", "final_broad_label"], "Stromal/mesenchymal")
+            coordinates = pd.read_csv(
+                root / "out/post_follicle_roi_repair_coordinates.tsv.gz",
+                sep="\t", dtype={"cell_id": str},
+            )
+            self.assertEqual(set(coordinates.cell_id), set("abcdef"))
+            manifest = json.loads(
+                (root / "out/follicle_roi_repair_manifest.json").read_text()
+            )
+            self.assertEqual(manifest["stage"], "follicle_roi_repair_apply")
+            self.assertEqual(
+                Path(manifest["coordinate_membership"]["path"]),
+                root / "out/post_follicle_roi_repair_coordinates.tsv.gz",
+            )
 
     def test_specific_specific_tie_preserves_existing_identity(self):
         with tempfile.TemporaryDirectory() as tmp:

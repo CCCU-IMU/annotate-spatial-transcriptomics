@@ -103,7 +103,7 @@ Every released broad member must trace to a second-round whole-subcluster return
 ## Transferable ovarian safeguards
 
 - Keep the candidate catalog open. A sample may contain stage-, breed-, or region-specific luteal, neural, glial, epithelial, vascular, or other lineages absent from another sheep ovary.
-- Keep blood endothelial, lymphatic endothelial, and pericyte/mural identities under `Vascular-associated`.
+- Keep Endothelial and Pericyte/mural as independent broad identities; Lymphatic endothelial is parent-locked to Endothelial, and legacy Vascular-associated cannot be released.
 - Reserve `Smooth muscle` for a mature nonvascular contractile program. `ACTA2` or `TAGLN` alone does not separate it from vascular-wall or contractile stromal cells.
 - Use the canonical Oocyte-cluster route: establish identity with independent maternal and non-zona programs plus somatic contradiction review, then retain compatible canonical-cluster members despite sparse detection. If ordinary second-round scanning is negative but a label-blind full-analysis-set multi-module starting gate is nonzero, run one query-only targeted cohort containing every starting-gate observation before calling absence.
 - Never expand Epithelial/mesothelial from one keratin, one surface marker, or one spatial component to an entire mixed subcluster.

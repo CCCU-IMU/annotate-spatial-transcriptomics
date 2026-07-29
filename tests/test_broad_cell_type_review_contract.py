@@ -169,6 +169,86 @@ class BroadCellTypeReviewContractTests(unittest.TestCase):
                 for error in validation["errors"]
             ))
 
+    def test_patch_without_canonical_targeted_review_manifest_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            membership = root / "membership.tsv"
+            write_tsv(membership, [{
+                "cell_id": "c1", "final_broad_label": "",
+            }])
+            patch = root / "patch.tsv"
+            write_tsv(patch, [{
+                "cell_id": "c1", "new_broad_label": "Granulosa",
+                "candidate_id": "granulosa",
+            }])
+            queue = root / "queue.tsv"
+            write_tsv(queue, [{
+                "review_id": "r1", "review_mode": "missing_broad_review",
+                "target_broad_label": "Granulosa", "unit_signature": "u1",
+            }])
+            review = root / "review.json"
+            review.write_text(json.dumps({
+                "stage": "post_atlas_catalog_wide_lineage_review",
+                "status": "ITERATION_REQUIRED",
+                "catalog_wide_double_sided_review": True,
+                "review_round": 1,
+                "membership": {"path": str(membership), "sha256": sha(membership)},
+                "artifacts": {"review_queue": {
+                    "path": str(queue), "sha256": sha(queue),
+                }},
+            }))
+            packet_index = root / "packet.tsv"
+            packet_sha = "c" * 64
+            write_tsv(packet_index, [{
+                "review_id": "r1", "review_mode": "missing_broad_review",
+                "target_broad_label": "Granulosa", "unit_signature": "u1",
+                "evidence_packet_sha256": packet_sha, "current_n": 0,
+                "current_precision_question_n": 0,
+                "outside_recall_question_n": 1,
+                "precision_evaluable": "false", "recall_evaluable": "true",
+                "molecular_evaluable": "true", "spatial_evaluable": "true",
+            }])
+            packet_manifest = root / "packet.json"
+            packet_manifest.write_text(json.dumps({
+                "status": "PASS",
+                "artifact_role": "broad_cell_type_review_evidence_packet_index",
+                "review_manifest": {"path": str(review), "sha256": sha(review)},
+                "packet_index": {
+                    "path": str(packet_index), "sha256": sha(packet_index),
+                },
+            }))
+            decisions = root / "decisions.tsv"
+            write_tsv(decisions, [{
+                "review_id": "r1", "review_mode": "missing_broad_review",
+                "outcome": "apply_cell_type_membership_patch",
+                "evidence_packet_sha256": packet_sha,
+                "current_member_precision": "not_applicable",
+                "whole_query_recall": "under_recall_detected",
+                "molecular_support": "supported",
+                "spatial_consistency": "localized_issue",
+                "rationale": "A bounded query-derived component supports this exact recall patch.",
+                "proposed_broad_label": "",
+                "membership_path": str(patch),
+                "membership_sha256": sha(patch),
+                "targeted_review_manifest_path": "",
+                "targeted_review_manifest_sha256": "",
+            }])
+            result = subprocess.run([
+                sys.executable,
+                str(SCRIPTS / "validate_catalog_wide_lineage_review_decisions.py"),
+                "--review-manifest", str(review),
+                "--evidence-packet-manifest", str(packet_manifest),
+                "--decisions", str(decisions), "--out", str(root / "out"),
+            ], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            validation = json.loads(
+                (root / "out/catalog_wide_lineage_decision_validation.json").read_text()
+            )
+            self.assertTrue(any(
+                "targeted review manifest" in error
+                for error in validation["errors"]
+            ))
+
 
 if __name__ == "__main__":
     unittest.main()

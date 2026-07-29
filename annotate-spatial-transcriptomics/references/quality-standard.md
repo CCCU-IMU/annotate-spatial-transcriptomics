@@ -39,12 +39,12 @@ A fine label additionally requires a matching frozen broad parent and an indepen
 - A mixed subcluster is assigned wholesale from its aggregate winner despite an independent competitor.
 - Epithelial is inferred from one keratin/surface marker or a single spatial component.
 - Smooth muscle is inferred from `ACTA2/TAGLN` without mature nonvascular contractile identity or mural exclusion.
-- Vascular wall cells are released as Smooth muscle rather than `Vascular-associated`.
+- Endothelial, Pericyte/mural and mature nonvascular Smooth muscle are independently adjudicated; ACTA2/TAGLN-only or irreducibly mixed vascular-wall observations are not forced into any of them.
 - Oocyte is expanded by zona/ambient signal instead of a coherent canonical cluster.
 - A common ovarian lineage is declared absent despite a repeatable multigene spatial program.
 - A stable catalog-external program is silently forced into the nearest known label.
 - First-pass provisional labels, failed diagnostics or a historical annotation contribute runtime membership.
-- Final QC is at least 10% or 50,000 observations without returning to the contributing second-round/post-merge biological problem.
+- Final QC is at least 10% or 50,000 observations. Before the bounded recovery budget is exhausted this returns only to the contributing second-round/post-merge biological problem; afterward it stops as a non-release high-unresolved review candidate rather than opening another global residual or QC-anchor cycle.
 
 ## Stability
 

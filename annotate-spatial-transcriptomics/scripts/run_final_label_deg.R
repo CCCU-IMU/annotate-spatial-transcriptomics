@@ -30,7 +30,7 @@ read_any <- function(path) {
 }
 
 a <- parse_args(commandArgs(trailingOnly = TRUE))
-required <- c("rds", "metadata", "out", "cell-id-col", "broad-col", "subtype-col")
+required <- c("rds", "metadata", "out", "cell-id-col", "final-cell-type-col")
 missing <- required[!required %in% names(a)]
 if (length(missing)) stop("Missing: ", paste(missing, collapse = ", "))
 
@@ -49,7 +49,7 @@ set.seed(seed)
 
 prefix <- ifelse(is.null(a$prefix), "", paste0(a$prefix, "_"))
 analysis_view <- ifelse(is.null(a$`analysis-view`), "final", a$`analysis-view`)
-evidence_cohort <- ifelse(is.null(a$`evidence-cohort`), "all_accepted_final_broad", a$`evidence-cohort`)
+evidence_cohort <- ifelse(is.null(a$`evidence-cohort`), "all_accepted_final_cell_type", a$`evidence-cohort`)
 
 if (inherits(obj, "Seurat")) {
   assay <- ifelse(is.null(a$assay), DefaultAssay(obj), a$assay)
@@ -126,7 +126,7 @@ write_level <- function(level, column) {
   fwrite(top, file.path(a$out, "tables", paste0(prefix, level, "_DEG_top100.tsv")), sep = "\t")
 }
 
-write_level("broad", a$`broad-col`)
+write_level("cell_type", a$`final-cell-type-col`)
 
 write_subtype_level <- function(column, broad_column) {
   fine <- as.character(meta[[column]])
@@ -196,5 +196,11 @@ write_subtype_level <- function(column, broad_column) {
   fwrite(top, file.path(a$out, "tables", paste0(prefix, "subtype_DEG_top100.tsv")), sep = "\t")
 }
 
-write_subtype_level(a$`subtype-col`, a$`broad-col`)
+if (!is.null(a$`emit-internal-audit-levels`)) {
+  if (is.null(a$`broad-col`) || is.null(a$`subtype-col`)) {
+    stop("internal audit levels require --broad-col and --subtype-col")
+  }
+  write_level("broad_audit", a$`broad-col`)
+  write_subtype_level(a$`subtype-col`, a$`broad-col`)
+}
 capture.output(sessionInfo(), file = file.path(a$out, "provenance", "DEG_sessionInfo.txt"))

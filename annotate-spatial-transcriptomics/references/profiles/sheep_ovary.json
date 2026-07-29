@@ -52,9 +52,9 @@
     "theca_steroidogenic": {
       "positive_families": {
         "steroidogenic_core": ["CYP17A1", "CYP11A1", "STAR", "HSD3B1"],
-        "theca_androgenic_support": ["INSL3", "ANPEP", "NR5A1", "FDX1", "DHCR24"]
+        "theca_androgenic_support": ["INSL3", "ANPEP", "NR5A1", "FDX1", "FDXR", "POR", "CYB5A", "DHCR24"]
       },
-      "required_program": ["CYP17A1", "CYP11A1", "STAR", "HSD3B1", "INSL3", "ANPEP", "NR5A1", "FDX1", "DHCR24"],
+      "required_program": ["CYP17A1", "CYP11A1", "STAR", "HSD3B1", "INSL3", "ANPEP", "NR5A1", "FDX1", "FDXR", "POR", "CYB5A", "DHCR24"],
       "support_only": ["LHCGR"],
       "spatial_expectation": "post hoc anatomy audit only: often perifollicular and vascular-associated, but molecularly supported Theca is not required to lie inside a preselected follicle ROI",
       "safety": "ECM, LHCGR, follicle distance or ROI membership alone cannot define, shrink or expand Theca"
@@ -91,10 +91,10 @@
     },
     "pericyte_mural": {
       "positive_families": {
-        "mural_identity_backbone": ["RGS5", "MCAM", "PDGFRB", "CSPG4", "NOTCH3", "RERGL"],
+        "mural_identity_backbone": ["RGS5", "MCAM", "PDGFRB", "CSPG4", "NOTCH3", "RERGL", "ABCC9", "KCNJ8", "COX4I2"],
         "mural_contractile_support": ["DES", "ACTA2", "TAGLN", "MYL9"]
       },
-      "core": ["RGS5", "MCAM", "PDGFRB", "CSPG4", "NOTCH3", "RERGL"],
+      "core": ["RGS5", "MCAM", "PDGFRB", "CSPG4", "NOTCH3", "RERGL", "ABCC9", "KCNJ8", "COX4I2"],
       "support": ["DES", "ACTA2", "TAGLN", "MYL9"],
       "anti_programs": ["PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
       "spatial_expectation": "adjacent to or wrapping endothelial branches",
@@ -102,22 +102,22 @@
     },
     "smooth_muscle": {
       "positive_families": {
-        "mature_contractile_core": ["MYH11", "CNN1", "ACTG2"],
+        "mature_contractile_core": ["MYH11", "CNN1", "ACTG2", "SMTN", "LMOD1"],
         "contractile_structure_support": ["TAGLN", "ACTA2", "MYL9", "MYL6", "DES", "TPM2", "FHL1"]
       },
-      "mature_contractile_core": ["MYH11", "CNN1", "ACTG2"],
+      "mature_contractile_core": ["MYH11", "CNN1", "ACTG2", "SMTN", "LMOD1"],
       "contractile_support": ["TAGLN", "ACTA2", "MYL9", "MYL6", "DES", "TPM2", "FHL1"],
       "mural_exclusion_program": ["RGS5", "PDGFRB", "NOTCH3", "MCAM", "CSPG4", "RERGL"],
       "anti_programs": ["RGS5", "PDGFRB", "NOTCH3", "MCAM", "CSPG4", "RERGL", "PECAM1", "CDH5", "VWF", "CYP17A1", "CYP11A1", "FSHR", "FOXL2", "PTPRC", "EPCAM"],
       "spatial_expectation": "coherent hilar, structural follicular-wall or nonvascular contractile tracks rather than diffuse ECM background or endothelial-associated mural branches",
-      "safety": "ACTA2/TAGLN-only ECM-rich cells remain contractile stroma. Require a coherent MYH11/CNN1/ACTG2-centered mature program plus additional contractile support. A coherent RGS5/PDGFRB/NOTCH3/MCAM/CSPG4 mural program or clear endothelial-associated vascular-wall topology routes the broad label to Vascular-associated, with optional Pericyte/mural fine identity."
+      "safety": "ACTA2/TAGLN-only ECM-rich cells remain contractile stroma. Require a coherent MYH11/CNN1/ACTG2/SMTN/LMOD1-centered mature program plus additional contractile support. A coherent mural backbone routes members to Pericyte/mural; a coherent endothelial backbone routes members to Endothelial."
     },
     "blood_endothelial": {
       "positive_families": {
-        "endothelial_junction_backbone": ["PECAM1", "CDH5", "VWF", "CLDN5"],
-        "angiovascular_support": ["KDR", "FLT1", "EMCN", "KLF2", "CD34", "CYYR1", "FLI1"]
+        "endothelial_junction_backbone": ["PECAM1", "CDH5", "VWF", "CLDN5", "ESAM"],
+        "angiovascular_support": ["KDR", "FLT1", "EMCN", "EGFL7", "RAMP2", "PLVAP", "KLF2", "CD34", "CYYR1", "FLI1"]
       },
-      "program": ["PECAM1", "CDH5", "VWF", "CLDN5", "KDR", "FLT1", "EMCN", "KLF2", "CD34", "CYYR1", "FLI1"],
+      "program": ["PECAM1", "CDH5", "VWF", "CLDN5", "ESAM", "KDR", "FLT1", "EMCN", "EGFL7", "RAMP2", "PLVAP", "KLF2", "CD34", "CYYR1", "FLI1"],
       "spatial_expectation": "branching vascular network"
     },
     "lymphatic_endothelial": {
@@ -238,13 +238,15 @@
   },
   "release_taxonomy": {
     "principle": "publish the least specific biologically honest label supported by the current full-feature query; the catalog is open and every boundary is scanned, while the listed vocabulary controls release permissions rather than presence quotas",
-    "default_biological_broad_classes": ["Granulosa", "Stromal/mesenchymal", "Vascular-associated", "Immune", "Epithelial/mesothelial", "Oocyte"],
+    "default_biological_broad_classes": ["Granulosa", "Stromal/mesenchymal", "Endothelial", "Pericyte/mural", "Smooth muscle", "Immune", "Epithelial/mesothelial", "Oocyte"],
     "default_biological_broad_classes_role": "baseline zero-census review candidates only; not a required or exhaustive sheep-ovary label list",
     "context_gated_default": {
       "Oocyte": "full multi-module targeted-cohort query-only reclustering followed by non-ZP/maternal positive, somatic anti-program and cluster/object-ensemble adjudication; strict seeds support cluster identity, then all canonical members of a passing cluster enter the census unless explicitly hard-excluded"
     },
     "evidence_dependent_standalone_classes": {
       "Theca": "coherent steroidogenic/androgenic Theca program discovered without a spatial gate; anatomy is a post hoc challenger and validation layer",
+      "Endothelial": "endothelial junction backbone plus an independent angiovascular support family",
+      "Pericyte/mural": "mural identity backbone plus an independent mural contractile/support family",
       "Smooth muscle": "mature contractile backbone, stable separation and coherent nonvascular follicular, hilar or structural tracks",
       "Luteal": "stage support plus an independent corpus-luteum identity family, coherent steroidogenesis and corpus-luteum-like morphology",
       "Glial/Schwann-like": "coherent glial program plus nerve-track morphology"
@@ -254,33 +256,28 @@
       "Neuroendocrine-like": "retain as exploratory unless a future catalog revision defines an independently validated sheep ovarian identity",
       "Structural/perifollicular Theca": "retain as a topology/state candidate without steroidogenic Theca identity"
     },
-    "forbidden_release_broad_labels": ["Theca/follicular wall", "Stromal/perivascular", "follicular_somatic_granulosa_theca", "anatomical_interface_review", "postcluster_qc_holdout"],
+    "forbidden_release_broad_labels": ["Vascular-associated", "Vascular/endothelial", "Stromal/perivascular", "Theca/follicular wall", "follicular_somatic_granulosa_theca", "anatomical_interface_review", "postcluster_qc_holdout"],
     "fallback_names": {
       "generic_ovarian_stroma": "Stromal/mesenchymal",
-      "ambiguous_blood_lymphatic_endothelium": "Vascular-associated",
-      "legacy_vascular_endothelial": "Vascular-associated",
-      "legacy_pericyte_mural_broad": "Vascular-associated",
+      "ambiguous_blood_lymphatic_endothelium": "Endothelial",
       "shallow_immune_signal": "Immune",
       "ambiguous_surface_epithelium_mesothelium": "Epithelial/mesothelial"
     },
     "non_biological_retained_states": ["Anatomical interface", "Low-information/QC holdout", "Technical state", "Pending review"],
     "vascular_hierarchy": {
-      "broad_parent": "Vascular-associated",
-      "fine_children": ["Blood endothelial", "Lymphatic endothelial", "Pericyte/mural"],
-      "smooth_muscle_policy": "Smooth muscle remains a separate evidence-dependent broad class only for a mature MYH11/CNN1/ACTG2-centered program after mural exclusion; RGS5/PDGFRB/NOTCH3/MCAM/CSPG4-supported vascular-wall cells belong to Vascular-associated",
-      "legacy_alias_policy": "Vascular/endothelial and standalone Pericyte/mural broad labels must be migrated to Vascular-associated while preserving their supported fine identity"
+      "independent_broad_classes": ["Endothelial", "Pericyte/mural", "Smooth muscle"],
+      "endothelial_fine_children": ["Lymphatic endothelial"],
+      "smooth_muscle_policy": "Smooth muscle requires a mature MYH11/CNN1/ACTG2/SMTN/LMOD1-centered program after mural and endothelial exclusion",
+      "legacy_alias_policy": "Legacy broad-only Vascular-associated is never auto-split; reopen its frozen second-round source subcluster for current-query re-adjudication or retain unresolved_biological"
     },
     "broad_aliases": {
-      "Vascular/endothelial": "Vascular-associated",
-      "Vascular/perivascular": "Vascular-associated",
-      "Pericyte/mural": "Vascular-associated",
+      "Vascular/endothelial": "Endothelial",
+      "Vascular/perivascular": "Pericyte/mural",
       "Stromal": "Stromal/mesenchymal",
       "Immune/plasma": "Immune"
     },
     "fine_parent_allowlist": {
-      "Blood endothelial": ["Vascular-associated"],
-      "Lymphatic endothelial": ["Vascular-associated"],
-      "Pericyte/mural": ["Vascular-associated"],
+      "Lymphatic endothelial": ["Endothelial"],
       "Oocyte": ["Oocyte"],
       "Cumulus-like granulosa": ["Granulosa"],
       "Mural/estrogenic granulosa": ["Granulosa"],
@@ -326,8 +323,9 @@
   "evidence_gates": {
     "broad_defined": "at least two explicit independent positive marker families, low major anti-program, spatial plausibility when available and adjacent-resolution stability; absolute full-feature detection/prevalence and pseudobulk establish broad presence, while centered module scores and one-vs-rest DEG cannot alone reject an abundant shared parent program; atlas alone cannot pass",
     "mesenchymal_defined": "stable progenitor/fibroblast-like core plus support, low mature-contractile/endothelial/steroidogenic/immune/epithelial/granulosa programs and reproducible morphology; DCN/PDGFRA alone cannot pass",
-    "smooth_muscle_defined": "a coherent MYH11/CNN1/ACTG2-centered mature-contractile program plus multiple contractile-support genes, low mural/endothelial/steroidogenic/immune/epithelial/granulosa programs, stable second-round cohort resolution and coherent nonvascular structural morphology; mural-supported vascular-wall cells route to Vascular-associated",
-    "pericyte_defined": "RGS5/PDGFRB/CSPG4/NOTCH3/MCAM backbone plus vascular adjacency and separation from endothelial and generic contractile stroma; release as a fine child of Vascular-associated rather than a separate broad class",
+    "smooth_muscle_defined": "a coherent MYH11/CNN1/ACTG2/SMTN/LMOD1-centered mature-contractile program plus multiple contractile-support genes, low mural/endothelial/steroidogenic/immune/epithelial/granulosa programs, stable second-round cohort resolution and coherent nonvascular structural morphology",
+    "endothelial_defined": "a coherent PECAM1/CDH5/VWF/CLDN5/ESAM junction backbone plus an independent angiovascular support family; branching morphology supports but cannot assign identity",
+    "pericyte_defined": "RGS5/PDGFRB/CSPG4/NOTCH3/MCAM/RERGL/ABCC9/KCNJ8/COX4I2 backbone plus independent contractile support and separation from endothelial, mature smooth muscle and generic contractile stroma; release as independent broad Pericyte/mural",
     "fine_defined": "broad locked first; subtype program, morphology and resolution stability require at least two supporting channels without strong contradiction",
     "broad_only": "broad supported but subtype evidence insufficient; fine_anchor_eligible=false",
     "interface_review": "real mixed programs cannot be reliably separated after targeted review; retain rather than force",
@@ -396,14 +394,15 @@
     "qc_holdout_recluster_forbidden": true,
     "atlas_scope": "map the complete analysis set once after all second-round outcomes merge and formal broad membership freezes",
     "atlas_acceptance": "an unlabeled post-merge observation with calibrated moderate-or-higher Atlas tier returns broad-only when non-OOD, ontology-compatible and within Atlas scope. Defined labels are challenge-only until orthogonal review; Atlas never writes fine labels.",
-    "large_residual_qc_policy": "residual QC at least 10% of analysis observations or 50000 observations returns to the contributing second-round cohort or the bounded post-merge unresolved-component review; never tune a first-pass whole-object cellbin gate and never lower component evidence merely to cross the completion threshold",
+    "large_residual_qc_policy": "residual QC at least 10% of analysis observations or 50000 observations may return only to the contributing second-round cohort or bounded post-merge biological problem while the fixed recovery budget remains. After one Atlas route, one bounded unresolved review, optional one ROI repair and at most two per-broad rounds, stop as PENDING_USER_REVIEW_HIGH_UNRESOLVED; never launch a global residual/QC-anchor loop or lower evidence merely to cross the threshold",
     "atlas_open_set_policy": "coherent OOD groups trigger unknown-lineage review and are never forced to the nearest known class",
     "atlas_fine_labels_forbidden": true,
     "legacy_pool_registries": "migration provenance only; the active controller uses initial-cluster cohorts, conditional local mixed-subcluster splitting, post-merge broad freeze and terminal typed QC",
     "completion_interface": {
-      "public_gate": "check_completion_gate.py",
-      "phases": ["INPUT_INTEGRITY", "BIOLOGICAL_EVIDENCE", "WORKFLOW_CLOSURE", "RELEASE_AUDIT"],
-      "policy": "individual validators are internal checks of one public completion interface; conditional audits run only when their trigger is present and warnings do not become new blocking gates"
+      "public_gate": "run_lineage_controller.py materialize_final_release",
+      "legacy_gate": "check_completion_gate.py is retained only for pre-v2.2 project migration",
+      "phases": ["whole_tissue_partition", "cluster_cohort_recluster", "local_mixed_subcluster_split", "merge_and_freeze_broad", "atlas_and_completeness_review", "materialize_final_release"],
+      "policy": "the canonical v2.2 controller is the only formal completion interface; a high-unresolved terminal candidate is reviewable but not release-ready"
     }
   },
   "context_questions": ["animal age and reproductive stage", "cycle, pregnancy or disease state", "section anatomy and follicle-size distribution", "cell, nucleus, spot or cellbin observation unit", "primary biological questions and priority lineages"]

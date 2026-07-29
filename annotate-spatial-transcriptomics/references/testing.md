@@ -27,7 +27,7 @@ Run Python compilation, R parsing, JSON parsing, schema validation, repository v
 Build fixtures directly from allowed raw input and never from A08/A09 membership or the designated blind-regression sample's historical labels.
 
 1. **Granulosa-rich:** a pure second-round subcluster returns wholesale; sparse tails inherit broad identity; no diffuse stromal expansion.
-2. **Stromal/Smooth muscle/Vascular mixed:** local splitting produces mature nonvascular Smooth muscle, Vascular-associated mural/endothelial cells and Stromal remainder.
+2. **Stromal/Smooth muscle/Endothelial/Pericyte mixed:** local splitting independently produces mature nonvascular Smooth muscle, Endothelial and Pericyte/mural subsets plus a Stromal remainder; an inseparable complete endothelial–mural mixed cellbin remains unresolved_biological.
 3. **Rare Oocyte:** a coherent canonical cluster returns all noncontradictory members; zona/ambient cells and neighboring granulosa stay outside.
 4. **Low-fraction Epithelial:** a 3%-5% coherent program is reconstructed without expanding the enclosing stromal population.
 5. **Unmodeled program:** a nonstress/noncycle/non-ECM program repeated across neighboring resolutions and space is recorded without automatic naming.
@@ -54,7 +54,7 @@ Rare lineages are reviewed by multigene identity and anatomy rather than prevale
 
 After all fixtures pass, create a new project from the fixed SCT+BANKSY input. Do not read v2.1.0 labels, repair membership, A08/A09 outputs or same-batch Atlas before freeze. Run the complete pipeline twice for determinism and run perturbation variants for biological robustness. Only after freeze load v2.1.0 for external comparison.
 
-Acceptance requires biologically equivalent major broad types and follicular/vascular/surface structures, no diffuse Granulosa, correct Smooth muscle/Vascular-associated separation, no whole-cluster Epithelial expansion or complete epithelial loss, canonical Oocyte recall, missing-broad reconstruction, multichannel support for every broad and final QC below both 10% and 50,000. Exact cellbin equality is not required.
+Acceptance requires biologically equivalent major broad types and follicular/vascular/surface structures, no diffuse Granulosa, correct Endothelial/Pericyte/mural/Smooth-muscle separation, no whole-cluster Epithelial expansion or complete epithelial loss, canonical Oocyte recall, missing-broad reconstruction, multichannel support for every broad and final QC below both 10% and 50,000. Exact cellbin equality is not required.
 
 ## Forward test
 

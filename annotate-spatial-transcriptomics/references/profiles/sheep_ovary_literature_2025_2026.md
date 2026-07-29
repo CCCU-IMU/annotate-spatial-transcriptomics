@@ -6,7 +6,7 @@ Use this reference only after the biological context resolves to sheep ovary. It
 
 1. Current-query full-feature marker, anti-marker, stability and spatial evidence remains authoritative.
 2. A matched count-level sheep single-cell object is the strongest external channel after auditing its labels and provenance.
-3. Without such an object, GSE233801 is the primary public adult-sheep somatic atlas. Its scope is mainly Granulosa, Stromal/mesenchymal, Vascular-associated candidates and Immune; it is not a sufficient source for Oocyte, steroidogenic Theca or surface Epithelium.
+3. Without such an object, GSE233801 is the primary public adult-sheep somatic atlas. Its scope is mainly Granulosa, Stromal/mesenchymal, endothelial/perivascular candidates and Immune; its low-resolution vascular labels cannot directly release Endothelial or Pericyte/mural, and it is not a sufficient source for Oocyte, steroidogenic Theca or surface Epithelium.
 4. Sheep developmental atlases and the 2026 sheep-human atlas provide complementary lineage and state evidence.
 5. Human/mouse ovary studies provide conserved boundary, anti-marker and morphology hypotheses only. They cannot transfer cells or require the sheep section to contain the same classes or subtypes.
 
@@ -15,7 +15,7 @@ Use this reference only after the biological context resolves to sheep ovary. It
 Gaylord et al., *Comparative analysis of human and mouse ovaries across age*, Science (2025), DOI `10.1126/science.adx0659`.
 
 - The whole-ovary broad taxonomy contains Oocyte, Granulosa, Theca, Fibroblast, Smooth muscle, Pericyte, Epithelia, Endothelia, Immune and Glia; mouse additionally contains Luteal cells in the sampled state.
-- The paper explicitly treats endothelial cells and pericytes together as forming the ovarian vasculature, then resolves endothelial, lymphatic-endothelial and pericyte subtypes. The sheep release hierarchy therefore uses `Vascular-associated` as their shared broad parent and preserves `Blood endothelial`, `Lymphatic endothelial` and `Pericyte/mural` as evidence-supported fine children. Mature Smooth muscle remains a separate broad lineage.
+- The paper treats endothelial cells and pericytes as neighboring members of the ovarian vasculature while keeping Endothelia and Pericyte as separate broad identities and resolving lymphatic endothelium under Endothelia. The sheep release hierarchy therefore keeps Endothelial, Pericyte/mural and mature Smooth muscle independent; only Lymphatic endothelial is parent-locked under Endothelial.
 - Cross-species broad identities are more conserved than fine identities. Granulosa, fibroblast and endothelial subtypes were relatively conserved, whereas theca, pericyte and epithelial subtypes showed stronger species specificity.
 - Ovarian glia are biologically plausible but rare and were supported by a coherent `S100B/SOX10`-like glial program and nerve-associated morphology. A neuronal-looking single gene is not sufficient.
 - Theca requires a steroidogenic program such as `CYP17A1`, not follicular-wall location or ECM alone. Pericytes require a mural program and neurovascular/vascular adjacency.
@@ -48,4 +48,4 @@ Rooda et al., *The adult ovary at single cell resolution: an expert review*, Ame
 - `RGS5/PDGFRB/CSPG4/NOTCH3/MCAM` plus vascular adjacency is required for Pericyte/mural.
 - `DLG2`, `RBFOX1`, `TENM3` or another isolated neural gene cannot establish Neural/Schwann or Neuroendocrine. Require a multi-gene resident program, anti-program clearance and track-like morphology; neuroendocrine additionally requires a secretory-neuroendocrine backbone.
 - Zona transcripts in Granulosa do not establish Oocyte. Require multiple non-ZP oocyte identity/maternal-ooplasm modules and object-level morphology.
-- The primary broad DEG and dotplots use the complete accepted final biological membership, including every calibrated moderate-or-higher broad rescue. High-confidence fine labels alone supply subtype evidence.
+- Public DEG and dotplots use the complete accepted `final_cell_type` membership. High-confidence fine identities override their parent only in that single public column; internal broad/fine fields remain provenance.

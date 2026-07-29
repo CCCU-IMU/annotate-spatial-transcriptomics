@@ -55,10 +55,11 @@ def main() -> int:
         "modality": args.modality, "observation_unit": args.observation_unit,
         "decision_version": "v001", "status": "initialized", "created_at_utc": now,
         "strategy_preset_requested": "" if args.strategy_preset == "none" else args.strategy_preset,
-        "required_dotplot_levels": ["broad"],
-        "subtype_assets_required_if_final_fine_present": True,
+        "required_dotplot_levels": ["cell_type"],
+        "subtype_assets_required_if_final_fine_present": False,
         "required_dotplot_panels": ["canonical", "data_specific"],
         "required_annotation_views": ["final"],
+        "public_annotation_column": "final_cell_type",
         "final_broad_minimum_confidence": "moderate",
         "final_fine_minimum_confidence": "high",
         "confidence_enum": ["low", "moderate", "high"],
@@ -116,8 +117,13 @@ def main() -> int:
             ).resolve()
         ),
         "observation_writeback_policy": writeback_policy,
-        "public_completion_gate": "check_completion_gate.py",
-        "completion_gate_phases": ["INPUT_INTEGRITY", "BIOLOGICAL_EVIDENCE", "WORKFLOW_CLOSURE", "RELEASE_AUDIT"],
+        "public_completion_gate": "run_lineage_controller.py materialize_final_release",
+        "legacy_completion_gate": "check_completion_gate.py",
+        "completion_gate_phases": [
+            "whole_tissue_partition", "cluster_cohort_recluster",
+            "local_mixed_subcluster_split", "merge_and_freeze_broad",
+            "atlas_and_completeness_review", "materialize_final_release",
+        ],
     }
     (root / "config/project.json").write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     for filename, fields in REGISTRIES.items():

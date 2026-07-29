@@ -318,11 +318,12 @@ class V202ContractTests(unittest.TestCase):
             self.assertEqual(result["status"], "BLOCKED")
             self.assertTrue(any("competing program" in error for error in result["errors"]), result["errors"])
 
-    def test_profile_routes_mural_contractile_cells_to_vascular_parent(self) -> None:
+    def test_profile_routes_mural_contractile_cells_to_pericyte_broad(self) -> None:
         profile = json.loads(PROFILE.read_text())
         smooth = profile["lineages"]["smooth_muscle"]
         self.assertTrue({"RGS5", "PDGFRB", "NOTCH3"} <= set(smooth["mural_exclusion_program"]))
-        self.assertIn("Vascular-associated", smooth["safety"])
+        self.assertIn("Pericyte/mural", smooth["safety"])
+        self.assertIn("Endothelial", smooth["safety"])
         epithelial = profile["lineages"]["epithelial_mesothelial"]
         self.assertIn("never permission to expand", epithelial["broad_recall_rule"])
 

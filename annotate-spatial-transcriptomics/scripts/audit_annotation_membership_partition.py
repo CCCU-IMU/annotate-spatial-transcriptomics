@@ -65,7 +65,7 @@ def audit(root: Path) -> dict:
             contract = json.loads(contract_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             contract = {}
-        if contract.get("skill_release_version") == "2.2.0":
+        if contract.get("skill_release_version") in {"2.2.0", "2.5.0"}:
             errors: list[str] = []
             validation_path = root / "provenance/lineage_controller_release_validation.json"
             try:

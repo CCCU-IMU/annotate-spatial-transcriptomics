@@ -59,12 +59,14 @@ class V203RuntimeContractTests(unittest.TestCase):
             self.assertEqual(result["residual_qc_n"], 1)
 
     def test_report_and_spatial_assets_expose_existing_evidence(self) -> None:
-        report = (SCRIPTS / "build_report.py").read_text(encoding="utf-8")
+        report = (SCRIPTS / "build_frozen_review_report.py").read_text(encoding="utf-8")
         for token in [
-            "annotation_support_registry.tsv", "final_broad_DEG_top100.tsv",
-            "final_subtype_DEG_top100.tsv", "positive_marker_evidence", "anti_marker_evidence",
+            "final_cell_type", "cell-type-deg", "canonical-dotplots",
+            "competing_lineages", "anti_marker_review",
         ]:
             self.assertIn(token, report)
+        legacy_report = (SCRIPTS / "build_report.py").read_text(encoding="utf-8")
+        self.assertIn("build_report.py is retired for v2.2", legacy_report)
         spatial = (SCRIPTS / "build_spatial_gene_maps.R").read_text(encoding="utf-8")
         self.assertIn('scope!="all_analysis_set_observations"', spatial)
         self.assertIn("expected-observations", spatial)

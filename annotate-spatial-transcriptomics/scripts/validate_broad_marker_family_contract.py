@@ -58,11 +58,41 @@ def main() -> int:
             candidate.get("release_broad_label") or candidate.get("release_fine_label")
         ):
             errors.append(f"{candidate_id}: non-release role carries a release label")
-        if candidate_id in {"pericyte_mural", "lymphatic_endothelial"} and (
-            candidate.get("release_broad_label") != "Vascular-associated"
-            or candidate.get("parent_broad_label") != "Vascular-associated"
+        if candidate_id == "pericyte_mural" and (
+            role != "broad"
+            or candidate.get("release_broad_label") != "Pericyte/mural"
+            or candidate.get("release_fine_label")
+            or candidate.get("parent_broad_label")
         ):
-            errors.append(f"{candidate_id}: vascular fine identity is outside Vascular-associated")
+            errors.append("pericyte_mural: must be an independent broad lineage")
+        if candidate_id == "vascular_endothelial" and (
+            role != "broad"
+            or candidate.get("release_broad_label") != "Endothelial"
+            or candidate.get("release_fine_label")
+            or candidate.get("parent_broad_label")
+        ):
+            errors.append("vascular_endothelial: must release independent broad Endothelial")
+        if candidate_id == "lymphatic_endothelial" and (
+            role != "fine"
+            or candidate.get("release_broad_label") != "Endothelial"
+            or candidate.get("parent_broad_label") != "Endothelial"
+            or candidate.get("release_fine_label") != "Lymphatic endothelial"
+            or candidate.get("parent_broad_reconstruction_allowed") is not True
+        ):
+            errors.append("lymphatic_endothelial: must be parent-locked to Endothelial")
+        forbidden = set(catalog.get("taxonomy_policy", {}).get(
+            "forbidden_runtime_release_labels", []
+        ))
+        if "Vascular-associated" not in forbidden:
+            errors.append("catalog does not forbid legacy Vascular-associated release")
+        if candidate.get("release_broad_label") == "Vascular-associated":
+            errors.append(f"{candidate_id}: releases forbidden Vascular-associated")
+        unit_anti = candidate.get("hard_anti_families_by_observation_unit", {})
+        if unit_anti:
+            if set(unit_anti) != {"cell", "nucleus", "cellbin", "spot"}:
+                errors.append(f"{candidate_id}: incomplete observation-unit anti policy")
+            if not all(isinstance(value, list) for value in unit_anti.values()):
+                errors.append(f"{candidate_id}: invalid observation-unit anti policy")
         path = candidate.get("profile_program", "")
         try:
             program = resolve(profile, path)

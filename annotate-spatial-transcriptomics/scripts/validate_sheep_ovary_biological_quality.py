@@ -33,8 +33,8 @@ TARGET_CANDIDATES = {
 }
 FOLLICLE_CANDIDATES = {
     "theca_steroidogenic": "Theca",
-    "vascular_endothelial": "Vascular-associated",
-    "pericyte_mural": "Vascular-associated",
+    "vascular_endothelial": "Endothelial",
+    "pericyte_mural": "Pericyte/mural",
     "smooth_muscle": "Smooth muscle",
     "stromal_mesenchymal": "Stromal/mesenchymal",
 }
@@ -52,9 +52,14 @@ FOLLICLE_LAYERS = {
         "target_labels": ("Theca",),
         "minimum_angular_sectors": 4,
     },
-    "vascular_interna": {
-        "candidates": ("vascular_endothelial", "pericyte_mural", "lymphatic_endothelial"),
-        "target_labels": ("Vascular-associated",),
+    "endothelial_interna": {
+        "candidates": ("vascular_endothelial", "lymphatic_endothelial"),
+        "target_labels": ("Endothelial",),
+        "minimum_angular_sectors": 2,
+    },
+    "pericyte_mural_interna": {
+        "candidates": ("pericyte_mural",),
+        "target_labels": ("Pericyte/mural",),
         "minimum_angular_sectors": 2,
     },
     "outer_nonvascular_contractile": {
@@ -341,7 +346,7 @@ def discriminated_direct_layer_ids(
 ) -> dict[str, set[str]]:
     """Resolve only directly supported identities inside one follicle ROI.
 
-    The three specific wall identities compete before the generic Stromal
+    The four specific wall identities compete before the generic Stromal
     remainder.  Local-only signal is useful for detecting a coherent layer,
     but it is deliberately excluded from the denominator used to demand a
     formal label.  This prevents one mixed cellbin from being required to
@@ -349,7 +354,7 @@ def discriminated_direct_layer_ids(
     """
     layer_views: dict[str, pd.DataFrame] = {}
     for layer_name in (
-        "theca_interna", "vascular_interna",
+        "theca_interna", "endothelial_interna", "pericyte_mural_interna",
         "outer_nonvascular_contractile", "outer_stromal_background",
     ):
         spec = FOLLICLE_LAYERS[layer_name]
@@ -364,7 +369,7 @@ def discriminated_direct_layer_ids(
         layer_views[layer_name] = frame
     result = {name: set() for name in layer_views}
     specific = (
-        "theca_interna", "vascular_interna",
+        "theca_interna", "endothelial_interna", "pericyte_mural_interna",
         "outer_nonvascular_contractile",
     )
     all_ids = sorted(set().union(*(
@@ -724,7 +729,7 @@ def follicle_review(
             roi.signed_distance_to_granulosa,
             bins=[-np.inf, -eps * 2, eps * 2, eps * 5, eps * 8, np.inf],
             labels=[
-                "cavity_side", "granulosa_boundary", "theca_vascular_interna",
+                "cavity_side", "granulosa_boundary", "follicle_wall_interna",
                 "outer_contractile", "outer_stroma",
             ],
         ).astype(str)
@@ -845,7 +850,9 @@ def follicle_review(
                 ).astype(int).tolist()
             ) if len(hit_roi) else set()
             minimum_hits = max(
-                5 if layer_name == "vascular_interna" else 10,
+                5 if layer_name in {
+                    "endothelial_interna", "pericyte_mural_interna"
+                } else 10,
                 int(math.ceil(len(roi) * 0.002)),
             )
             if layer_name == "granulosa_boundary":
@@ -878,7 +885,7 @@ def follicle_review(
             identity_labels = membership_lookup.reindex(identity_roi.cell_id).fillna("")
             if layer_name != "granulosa_boundary" and len(identity_roi):
                 wall_mutable = identity_labels.isin({
-                    "", "Theca", "Vascular-associated", "Smooth muscle",
+                    "", "Theca", "Endothelial", "Pericyte/mural", "Smooth muscle",
                     "Stromal/mesenchymal",
                 })
                 identity_roi = identity_roi.loc[wall_mutable.to_numpy()].copy()
@@ -915,9 +922,17 @@ def follicle_review(
                 )
             )
             layer_issue_codes: list[str] = []
-            if antral_expected and not coherent:
-                layer_issue_codes.append(f"{layer_name}_program_not_resolved")
-            if antral_expected and coherent and not shell_supported:
+            published_target_n = int(
+                membership_lookup.reindex(roi.cell_id).fillna("").isin(target_labels).sum()
+            )
+            # A missing layer is a valid negative/NOT_EVALUABLE audit.  It is
+            # actionable only when a coherent direct identity is under-recalled,
+            # or when a published label lacks its corresponding molecular core.
+            if published_target_n >= minimum_hits and not coherent:
+                layer_issue_codes.append(
+                    f"{layer_name}_published_label_lacks_corresponding_program"
+                )
+            if antral_expected and coherent and assigned_fraction >= 0.30 and not shell_supported:
                 layer_issue_codes.append(f"{layer_name}_spatial_shell_mismatch")
             if (
                 antral_expected and coherent and layer_name != "outer_stromal_background"
@@ -973,9 +988,15 @@ def follicle_review(
         if large_unclear:
             hierarchy_codes.append("large_follicle_cavity_not_clear")
         theca_distance = layer_medians.get("theca_interna", math.nan)
-        vascular_distance = layer_medians.get("vascular_interna", math.nan)
+        endothelial_distance = layer_medians.get("endothelial_interna", math.nan)
+        pericyte_distance = layer_medians.get("pericyte_mural_interna", math.nan)
         theca_program_distance = layer_program_medians.get("theca_interna", math.nan)
-        vascular_program_distance = layer_program_medians.get("vascular_interna", math.nan)
+        endothelial_program_distance = layer_program_medians.get(
+            "endothelial_interna", math.nan,
+        )
+        pericyte_program_distance = layer_program_medians.get(
+            "pericyte_mural_interna", math.nan,
+        )
         smooth_distance = layer_medians.get("outer_nonvascular_contractile", math.nan)
         stromal_distance = layer_medians.get("outer_stromal_background", math.nan)
         stromal_outer_extent = layer_released_outer_quantiles.get(
@@ -983,17 +1004,33 @@ def follicle_review(
         )
         if antral_expected and (
             layer_coherent.get("theca_interna")
-            and layer_coherent.get("vascular_interna")
+            and layer_coherent.get("endothelial_interna")
             and (
-                abs(theca_program_distance - vascular_program_distance) > eps * 4
-                or not (layer_sectors["theca_interna"] & layer_sectors["vascular_interna"])
+                abs(theca_program_distance - endothelial_program_distance) > eps * 4
+                or not (
+                    layer_sectors["theca_interna"]
+                    & layer_sectors["endothelial_interna"]
+                )
             )
         ):
-            hierarchy_codes.append("theca_vascular_interna_not_interleaved")
+            hierarchy_codes.append("theca_endothelial_interna_not_interleaved")
+        if antral_expected and (
+            layer_coherent.get("endothelial_interna")
+            and layer_coherent.get("pericyte_mural_interna")
+            and (
+                abs(endothelial_program_distance - pericyte_program_distance) > eps * 4
+                or not (
+                    layer_sectors["endothelial_interna"]
+                    & layer_sectors["pericyte_mural_interna"]
+                )
+            )
+        ):
+            hierarchy_codes.append("pericyte_mural_not_adjoining_endothelial_branches")
         inner_distances = [
             value for name, value in (
                 ("theca_interna", theca_distance),
-                ("vascular_interna", vascular_distance),
+                ("endothelial_interna", endothelial_distance),
+                ("pericyte_mural_interna", pericyte_distance),
             )
             if layer_coherent.get(name) and np.isfinite(value)
         ]
@@ -1039,7 +1076,8 @@ def follicle_review(
                 "detail": (
                     f"cavity_density_ratio={cavity_density_ratio:.3f}; "
                     f"granulosa={layer_medians.get('granulosa_boundary')}; "
-                    f"theca={theca_distance}; vascular={vascular_distance}; "
+                    f"theca={theca_distance}; endothelial={endothelial_distance}; "
+                    f"pericyte_mural={pericyte_distance}; "
                     f"smooth={smooth_distance}; stromal={stromal_distance}; "
                     f"stromal_outer_extent_q90={stromal_outer_extent}; "
                     f"granulosa_theca_direct_overlap={direct_overlap_fraction:.3f}"
@@ -1092,7 +1130,8 @@ def follicle_review(
         ),
         "large_cavity_unclear_n": large_unclear_n,
         "histological_sequence": (
-            "Granulosa boundary -> Theca interna with interleaved vasculature -> "
+            "Granulosa boundary -> steroidogenic Theca interleaved with Endothelial "
+            "branches -> Pericyte/mural adjoining endothelial branches -> optional "
             "outer nonvascular mature contractile layer -> Stromal background"
         ),
     }, roi_membership

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build one final annotation: moderate+ broad labels and high-confidence fine labels."""
+"""Legacy v1/v2.1 final-view builder; canonical v2.2 releases fail closed here."""
 
 from __future__ import annotations
 
@@ -56,6 +56,11 @@ def main() -> int:
     parser.add_argument("--biological-profile", type=Path)
     args = parser.parse_args()
     project = json.loads((args.project_root / "config/project.json").read_text(encoding="utf-8"))
+    if project.get("canonical_lineage_controller_version") == "2.2.0":
+        raise SystemExit(
+            "build_final_annotation.py has no v2.2 release authority; use "
+            "run_lineage_controller.py materialize_final_release"
+        )
     v2 = str(project.get("framework_version", "")).startswith("2.")
     profile = {}
     if v2:

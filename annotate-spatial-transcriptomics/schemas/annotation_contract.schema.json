@@ -5,6 +5,7 @@
   "type": "object",
   "required": [
     "schema_version", "framework_version", "skill_release_version", "project_id", "sample_id",
+    "observation_unit",
     "project_config", "workflow_profile", "biological_profile", "candidate_catalog",
     "threshold_registry", "candidate_context_policy",
     "selected_input_snapshot", "input_scope", "artifact_role_policy", "expression_ancestry_policy",
@@ -15,9 +16,10 @@
   "properties": {
     "schema_version": {"const": "2.0"},
     "framework_version": {"const": "2.0.0"},
-    "skill_release_version": {"const": "2.2.0"},
+    "skill_release_version": {"enum": ["2.2.0", "2.5.0"]},
     "project_id": {"type": "string", "minLength": 1},
     "sample_id": {"type": "string", "minLength": 1},
+    "observation_unit": {"enum": ["cell", "nucleus", "cellbin", "spot"]},
     "project_config": {"$ref": "#/$defs/artifact"},
     "workflow_profile": {"$ref": "#/$defs/artifact"},
     "biological_profile": {"$ref": "#/$defs/artifact"},
@@ -392,11 +394,21 @@
     },
     "release_taxonomy": {
       "type": "object",
-      "required": ["vascular_parent", "hierarchy_validation_required"],
+      "required": [
+        "independent_vascular_lineages", "lymphatic_parent",
+        "legacy_vascular_associated_release_forbidden",
+        "single_public_annotation_column", "hierarchy_validation_required"
+      ],
       "properties": {
-        "vascular_parent": {"const": "Vascular-associated"},
+        "independent_vascular_lineages": {
+          "const": ["Endothelial", "Pericyte/mural", "Smooth muscle"]
+        },
+        "lymphatic_parent": {"const": "Endothelial"},
+        "legacy_vascular_associated_release_forbidden": {"const": true},
+        "single_public_annotation_column": {"const": "final_cell_type"},
         "hierarchy_validation_required": {"const": true}
-      }
+      },
+      "additionalProperties": false
     }
   },
   "$defs": {

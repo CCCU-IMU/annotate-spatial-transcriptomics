@@ -24,7 +24,7 @@ parse_args <- function(values) {
 }
 
 args <- parse_args(commandArgs(trailingOnly = TRUE))
-required <- c("rds", "profile", "catalog", "partitions", "out")
+required <- c("rds", "profile", "catalog", "partitions", "out", "observation-unit")
 missing <- required[!required %in% names(args)]
 if (length(missing)) stop("missing required arguments: ", paste(missing, collapse = ", "))
 script_argument <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
@@ -63,6 +63,10 @@ knn_k <- if ("knn-k" %in% names(args)) as.integer(args[["knn-k"]]) else 31L
 workers <- if ("workers" %in% names(args)) as.integer(args$workers) else 1L
 if (!is.finite(workers) || workers < 1L) stop("--workers must be >= 1")
 if (.Platform$OS.type != "unix") workers <- 1L
+observation_unit <- tolower(trimws(args[["observation-unit"]]))
+if (!observation_unit %in% c("cell", "nucleus", "cellbin", "spot")) {
+  stop("--observation-unit must be cell, nucleus, cellbin or spot")
+}
 direct_weight <- as.numeric(scoring_policy$direct_weight)
 local_weight <- as.numeric(scoring_policy$local_weight)
 anti_weight <- as.numeric(scoring_policy$anti_weight)
@@ -369,7 +373,12 @@ for (candidate in candidates) {
   if (candidate_id == "oocyte" && is.list(rule) && !is.null(rule$contradictory_somatic)) {
     soft_anti_genes[[candidate_id]] <- as_chars(rule$contradictory_somatic)
   }
-  hard_anti_sources[[candidate_id]] <- as.character(unlist(candidate$hard_anti_families))
+  hard_anti <- candidate$hard_anti_families
+  unit_specific <- candidate$hard_anti_families_by_observation_unit
+  if (is.list(unit_specific) && !is.null(unit_specific[[observation_unit]])) {
+    hard_anti <- unit_specific[[observation_unit]]
+  }
+  hard_anti_sources[[candidate_id]] <- as.character(unlist(hard_anti))
   candidate_meta[[candidate_id]] <- candidate
 }
 

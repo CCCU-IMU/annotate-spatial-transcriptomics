@@ -308,6 +308,21 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
             packet_manifest, packet_hashes = write_evidence_packet_manifest(
                 root, review_1 / "catalog_wide_lineage_review_manifest.json", queue
             )
+            granulosa_review_id = next(
+                row["review_id"] for row in queue
+                if row["target_broad_label"] == "Granulosa"
+            )
+            targeted_manifest = root / "granulosa_targeted_review.json"
+            targeted_manifest.write_text(json.dumps({
+                "status": "PASS",
+                "stage": "per_broad_targeted_membership_evidence",
+                "route_class": "canonical_per_broad_evidence_packet",
+                "review_id": granulosa_review_id,
+                "target_broad_label": "Granulosa",
+                "evidence_packet_sha256": packet_hashes[granulosa_review_id],
+                "source_membership": artifact(membership),
+                "patch_membership": artifact(granulosa_patch),
+            }), encoding="utf-8")
             decision_rows = []
             for row in queue:
                 recall = row["target_broad_label"] == "Granulosa"
@@ -324,6 +339,12 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
                     "rationale": "Direct multigene identity and the bounded spatial component support this exact decision.",
                     "membership_path": str(granulosa_patch) if recall else "",
                     "membership_sha256": sha(granulosa_patch) if recall else "",
+                    "targeted_review_manifest_path": (
+                        str(targeted_manifest) if recall else ""
+                    ),
+                    "targeted_review_manifest_sha256": (
+                        sha(targeted_manifest) if recall else ""
+                    ),
                 })
             write_tsv(decisions, decision_rows)
             validation_out = root / "validation"
@@ -394,8 +415,8 @@ class CatalogWideLineageReviewArchitectureTests(unittest.TestCase):
             "parent_broad_label": "Luteal",
         }))
         self.assertTrue(candidate_can_support_broad_review({
-            "candidate_role": "fine", "release_broad_label": "Vascular-associated",
-            "parent_broad_label": "Vascular-associated",
+            "candidate_role": "fine", "release_broad_label": "Endothelial",
+            "parent_broad_label": "Endothelial",
             "parent_broad_reconstruction_allowed": True,
         }))
 

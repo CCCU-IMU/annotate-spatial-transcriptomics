@@ -1,23 +1,156 @@
 #!/usr/bin/env Rscript
 
-suppressPackageStartupMessages({library(Seurat);library(SeuratObject);library(data.table);library(ggplot2);library(scattermore);library(patchwork)})
-parse_args<-function(x){o<-list();i<-1L;while(i<=length(x)){k<-sub("^--","",x[i]);if(i==length(x)||startsWith(x[i+1],"--")){o[[k]]<-TRUE;i<-i+1L}else{o[[k]]<-x[i+1];i<-i+2L}};o};a<-parse_args(commandArgs(trailingOnly=TRUE))
-need<-c("rds","metadata","out","cell-id-col","broad-col","subtype-col");m<-need[!need%in%names(a)];if(length(m))stop("Missing: ",paste(m,collapse=", "))
-dir.create(a$out,recursive=TRUE,showWarnings=FALSE);node_dir<-file.path(a$out,"spatial_nodes");dir.create(node_dir,showWarnings=FALSE);fig<-file.path(a$out,"figures");dir.create(fig,showWarnings=FALSE);dir.create(file.path(a$out,"tables"),showWarnings=FALSE)
-read_any<-function(p)if(grepl("\\.gz$",p))fread(cmd=paste("gzip -dc",shQuote(p)))else fread(p)
-save_both<-function(p,stem,w=9,h=7,bg="white"){ggsave(paste0(stem,".png"),p,width=w,height=h,dpi=400,bg=bg,limitsize=FALSE);ggsave(paste0(stem,".pdf"),p,width=w,height=h,device=cairo_pdf,bg=bg,limitsize=FALSE)}
-safe<-function(x)substr(gsub("_+","_",gsub("[^A-Za-z0-9_.-]+","_",x)),1,150)
-obj<-readRDS(a$rds);meta<-read_any(a$metadata);cc<-a$`cell-id-col`;meta[[cc]]<-as.character(meta[[cc]]);stopifnot(uniqueN(meta[[cc]])==nrow(meta));cells<-intersect(colnames(obj),meta[[cc]]);if(!length(cells))stop("No matching IDs");meta<-meta[match(cells,get(cc))]
-plot_map<-function(d,group,title,stem,spatial=FALSE){d[,label:=as.character(get(group))];d<-d[!is.na(label)&nzchar(label)];lev<-sort(unique(d$label));if(spatial){base_pal<-c("#FF375F","#FF9F0A","#FFD60A","#30D158","#00E5FF","#64D2FF","#0A84FF","#BF5AF2","#FF2D55","#FF453A","#AC8E68","#5E5CE6");pal_values<-if(length(lev)<=length(base_pal))base_pal[seq_along(lev)]else grDevices::colorRampPalette(base_pal)(length(lev));pal<-setNames(pal_values,lev);p<-ggplot(d,aes(x,y,colour=label))+scattermore::geom_scattermore(pointsize=.82,pixels=c(2200,2200))+scale_colour_manual(values=pal)+scale_y_reverse()+coord_equal()+theme_void()+labs(title=title,colour=NULL)+theme(plot.background=element_rect(fill="black",colour=NA),panel.background=element_rect(fill="black",colour=NA),legend.background=element_rect(fill="black",colour=NA),legend.key=element_rect(fill="black",colour=NA),legend.text=element_text(colour="white"),plot.title=element_text(colour="white"));save_both(p,stem,bg="black")}else{pal<-setNames(hcl.colors(length(lev),"Dark 3"),lev);p<-ggplot(d,aes(x,y,colour=label))+scattermore::geom_scattermore(pointsize=.75,pixels=c(2200,2200))+scale_colour_manual(values=pal)+theme_classic(base_size=8)+labs(title=title,colour=NULL);save_both(p,stem)}}
-has_state_col<-!is.null(a$`state-col`);if(has_state_col&&!a$`state-col`%in%names(meta))stop("state-col absent from metadata")
-has_subtype<-any(!is.na(meta[[a$`subtype-col`]])&nzchar(as.character(meta[[a$`subtype-col`]])));has_state<-has_state_col&&any(!is.na(meta[[a$`state-col`]])&nzchar(as.character(meta[[a$`state-col`]])))
-if(is.null(a$`skip-umap`)){if(!is.null(a$umap)){um<-read_any(a$umap);um[[cc]]<-as.character(um[[cc]]);um<-um[match(cells,get(cc))];ux<-intersect(c("UMAP_1","umap_1","UMAP1"),names(um))[1];uy<-intersect(c("UMAP_2","umap_2","UMAP2"),names(um))[1];ud<-data.table(cell_id=cells,x=um[[ux]],y=um[[uy]])}else if(inherits(obj,"Seurat")){red<-ifelse(is.null(a$reduction),"umap",a$reduction);em<-Embeddings(obj,red)[cells,1:2,drop=FALSE];ud<-data.table(cell_id=cells,x=em[,1],y=em[,2])}else if(inherits(obj,"SingleCellExperiment")){if(!requireNamespace("SingleCellExperiment",quietly=TRUE))stop("SingleCellExperiment package required");red<-ifelse(is.null(a$reduction),"UMAP",a$reduction);em<-SingleCellExperiment::reducedDim(obj,red)[cells,1:2,drop=FALSE];ud<-data.table(cell_id=cells,x=em[,1],y=em[,2])}else stop("Supply --umap for this object class");ud<-cbind(ud,meta[,.(broad=get(a$`broad-col`),subtype=get(a$`subtype-col`),state=if(has_state_col)get(a$`state-col`) else "")]);plot_map(ud,"broad","Final broad-class UMAP",file.path(fig,"final_broad_UMAP"));if(has_subtype)plot_map(ud,"subtype","Final high-confidence subtype UMAP",file.path(fig,"final_subtype_UMAP"));if(has_state)plot_map(ud,"state","Final supported state UMAP",file.path(fig,"final_state_UMAP"))}
-has_spatial<-FALSE
-if(!is.null(a$coordinates)){co<-read_any(a$coordinates);co[[cc]]<-as.character(co[[cc]]);co<-co[match(cells,get(cc))];xx<-intersect(c("sdimx","x","spatial_x"),names(co))[1];yy<-intersect(c("sdimy","y","spatial_y"),names(co))[1];if(is.na(xx)||is.na(yy))stop("coordinates lack x/y columns");sd<-data.table(cell_id=cells,x=co[[xx]],y=co[[yy]]);has_spatial<-TRUE}else if(inherits(obj,"Seurat")&&all(c("x","y")%in%colnames(obj[[]]))){md<-obj[[]];sd<-data.table(cell_id=cells,x=as.numeric(md[cells,"x"]),y=as.numeric(md[cells,"y"]));has_spatial<-TRUE}
-rows<-list();z<-1L
-if(has_spatial){sd<-cbind(sd,meta[,.(broad=get(a$`broad-col`),subtype=get(a$`subtype-col`),state=if(has_state_col)get(a$`state-col`) else "")]);plot_map(sd,"broad","Final broad-class spatial",file.path(fig,"final_broad_spatial"),TRUE);if(has_subtype)plot_map(sd,"subtype","Final high-confidence subtype spatial",file.path(fig,"final_subtype_spatial"),TRUE);if(has_state)plot_map(sd,"state","Final supported state spatial",file.path(fig,"final_state_spatial"),TRUE)
-highlight<-function(d,selected,title,stem,level,parent,label){p<-ggplot(d,aes(x,y))+scattermore::geom_scattermore(data=d[!selected],colour="#666666",pointsize=.55,pixels=c(1600,1600))+scattermore::geom_scattermore(data=d[selected],colour="#FF2D20",pointsize=.9,pixels=c(1600,1600))+scale_y_reverse()+coord_equal()+theme_void()+labs(title=title)+theme(plot.background=element_rect(fill="black",colour=NA),panel.background=element_rect(fill="black",colour=NA),plot.title=element_text(colour="white"));save_both(p,stem,bg="black");rows[[z]]<<-data.table(level=level,parent_label=parent,label=label,n_observations=sum(selected),png=paste0(stem,".png"),pdf=paste0(stem,".pdf"));z<<-z+1L}
-for(g in sort(unique(na.omit(as.character(sd$broad))))){if(nzchar(g)){sel<-as.character(sd$broad)==g;highlight(sd,sel,paste0(g," (n=",sum(sel),")"),file.path(node_dir,paste0("broad__",safe(g))),"broad","",g)}}
-pairs<-unique(sd[!is.na(broad)&nzchar(as.character(broad))&!is.na(subtype)&nzchar(as.character(subtype)),.(broad=as.character(broad),subtype=as.character(subtype))]);setorder(pairs,broad,subtype);for(i in seq_len(nrow(pairs))){parent<-pairs$broad[i];g<-pairs$subtype[i];sel<-as.character(sd$broad)==parent&as.character(sd$subtype)==g;highlight(sd,sel,paste0(parent," → ",g," (n=",sum(sel),")"),file.path(node_dir,paste0("subtype__",safe(parent),"__",safe(g))),"subtype",parent,g)}
-if(has_state){for(g in sort(unique(na.omit(as.character(sd$state))))){if(nzchar(g)){sel<-as.character(sd$state)==g;highlight(sd,sel,paste0(g," state (n=",sum(sel),")"),file.path(node_dir,paste0("state__",safe(g))),"state","",g)}}}}
-if(length(rows))fwrite(rbindlist(rows),file.path(a$out,"tables","spatial_node_asset_index.tsv"),sep="\t")
+suppressPackageStartupMessages({
+  library(Seurat); library(SeuratObject); library(data.table)
+  library(ggplot2); library(scattermore)
+})
+
+parse_args <- function(x) {
+  out <- list(); i <- 1L
+  while (i <= length(x)) {
+    key <- sub("^--", "", x[[i]])
+    if (i == length(x) || startsWith(x[[i + 1L]], "--")) {
+      out[[key]] <- TRUE; i <- i + 1L
+    } else {
+      out[[key]] <- x[[i + 1L]]; i <- i + 2L
+    }
+  }
+  out
+}
+
+a <- parse_args(commandArgs(trailingOnly = TRUE))
+required <- c("rds", "metadata", "out", "cell-id-col", "final-cell-type-col")
+missing <- required[!required %in% names(a)]
+if (length(missing)) stop("Missing: ", paste(missing, collapse = ", "))
+dir.create(a$out, recursive = TRUE, showWarnings = FALSE)
+figure_dir <- file.path(a$out, "figures")
+node_dir <- file.path(a$out, "spatial_nodes")
+table_dir <- file.path(a$out, "tables")
+dir.create(figure_dir, showWarnings = FALSE)
+dir.create(node_dir, showWarnings = FALSE)
+dir.create(table_dir, showWarnings = FALSE)
+
+read_any <- function(path) {
+  if (grepl("\\.gz$", path, ignore.case = TRUE)) {
+    fread(cmd = paste("gzip -dc", shQuote(path)))
+  } else fread(path)
+}
+save_both <- function(plot, stem, width = 9, height = 7, background = "white") {
+  ggsave(paste0(stem, ".png"), plot, width = width, height = height,
+         dpi = 400, bg = background, limitsize = FALSE)
+  ggsave(paste0(stem, ".pdf"), plot, width = width, height = height,
+         device = cairo_pdf, bg = background, limitsize = FALSE)
+}
+safe <- function(x) substr(gsub("_+", "_", gsub("[^A-Za-z0-9_.-]+", "_", x)), 1, 150)
+
+preferred <- c(
+  "Oocyte" = "#FFD60A", "Granulosa" = "#FF375F", "Theca" = "#FF9F0A",
+  "Luteal" = "#FF453A", "Stromal/mesenchymal" = "#64D2FF",
+  "Smooth muscle" = "#30D158", "Endothelial" = "#00E5FF",
+  "Lymphatic endothelial" = "#00A6A6", "Pericyte/mural" = "#BF5AF2",
+  "Immune" = "#5E5CE6", "Epithelial/mesothelial" = "#FF2D55",
+  "Glial/Schwann-like" = "#AC8E68", "QC/Unknown" = "#8E8E93"
+)
+palette_for <- function(levels) {
+  missing_levels <- setdiff(levels, names(preferred))
+  extra <- if (length(missing_levels)) {
+    setNames(hcl.colors(length(missing_levels), "Dark 3"), missing_levels)
+  } else character()
+  c(preferred[intersect(names(preferred), levels)], extra)[levels]
+}
+
+object <- readRDS(a$rds)
+metadata <- read_any(a$metadata)
+cell_col <- a$`cell-id-col`; type_col <- a$`final-cell-type-col`
+if (!all(c(cell_col, type_col) %in% names(metadata))) {
+  stop("metadata lacks cell ID or final_cell_type")
+}
+metadata[[cell_col]] <- as.character(metadata[[cell_col]])
+if (uniqueN(metadata[[cell_col]]) != nrow(metadata)) stop("duplicate metadata IDs")
+cells <- intersect(colnames(object), metadata[[cell_col]])
+if (!length(cells)) stop("No matching IDs")
+metadata <- metadata[match(cells, get(cell_col))]
+labels <- as.character(metadata[[type_col]])
+labels[is.na(labels) | !nzchar(labels)] <- "QC/Unknown"
+
+plot_map <- function(data, title, stem, spatial = FALSE) {
+  data[, label := labels]
+  levels <- sort(unique(data$label))
+  plot <- ggplot(data, aes(x, y, colour = label)) +
+    scattermore::geom_scattermore(pointsize = if (spatial) .82 else .75,
+                                  pixels = c(2200, 2200)) +
+    scale_colour_manual(values = palette_for(levels)) + labs(title = title, colour = NULL)
+  if (spatial) {
+    plot <- plot + scale_y_reverse() + coord_equal() + theme_void() +
+      theme(plot.background = element_rect(fill = "black", colour = NA),
+            panel.background = element_rect(fill = "black", colour = NA),
+            legend.background = element_rect(fill = "black", colour = NA),
+            legend.key = element_rect(fill = "black", colour = NA),
+            legend.text = element_text(colour = "white"),
+            plot.title = element_text(colour = "white"))
+    save_both(plot, stem, background = "black")
+  } else {
+    plot <- plot + theme_classic(base_size = 8)
+    save_both(plot, stem)
+  }
+}
+
+if (is.null(a$`skip-umap`)) {
+  if (!is.null(a$umap)) {
+    umap <- read_any(a$umap); umap[[cell_col]] <- as.character(umap[[cell_col]])
+    umap <- umap[match(cells, get(cell_col))]
+    ux <- intersect(c("UMAP_1", "umap_1", "UMAP1"), names(umap))[[1L]]
+    uy <- intersect(c("UMAP_2", "umap_2", "UMAP2"), names(umap))[[1L]]
+    umap_data <- data.table(cell_id = cells, x = umap[[ux]], y = umap[[uy]])
+  } else {
+    reduction <- ifelse(is.null(a$reduction), "umap", a$reduction)
+    embedding <- Embeddings(object, reduction)[cells, 1:2, drop = FALSE]
+    umap_data <- data.table(cell_id = cells, x = embedding[, 1], y = embedding[, 2])
+  }
+  plot_map(umap_data, "Final cell type UMAP",
+           file.path(figure_dir, "final_cell_type_UMAP"), FALSE)
+}
+
+spatial <- NULL
+if (!is.null(a$coordinates)) {
+  coordinates <- read_any(a$coordinates)
+  coordinates[[cell_col]] <- as.character(coordinates[[cell_col]])
+  coordinates <- coordinates[match(cells, get(cell_col))]
+  x_col <- intersect(c("sdimx", "x", "spatial_x"), names(coordinates))[[1L]]
+  y_col <- intersect(c("sdimy", "y", "spatial_y"), names(coordinates))[[1L]]
+  spatial <- data.table(cell_id = cells, x = coordinates[[x_col]], y = coordinates[[y_col]])
+} else if (inherits(object, "Seurat") && all(c("x", "y") %in% colnames(object[[]]))) {
+  md <- object[[]]
+  spatial <- data.table(cell_id = cells, x = as.numeric(md[cells, "x"]),
+                        y = as.numeric(md[cells, "y"]))
+}
+
+node_rows <- list()
+if (!is.null(spatial)) {
+  plot_map(spatial, "Final cell type spatial",
+           file.path(figure_dir, "final_cell_type_spatial"), TRUE)
+  for (label in sort(unique(labels))) {
+    selected <- labels == label
+    plot <- ggplot(spatial, aes(x, y)) +
+      scattermore::geom_scattermore(data = spatial[!selected], colour = "#595959",
+                                    pointsize = .55, pixels = c(1600, 1600)) +
+      scattermore::geom_scattermore(data = spatial[selected], colour = "#FF2D20",
+                                    pointsize = .9, pixels = c(1600, 1600)) +
+      scale_y_reverse() + coord_equal() + theme_void() +
+      labs(title = paste0(label, " (n=", sum(selected), ")")) +
+      theme(plot.background = element_rect(fill = "black", colour = NA),
+            panel.background = element_rect(fill = "black", colour = NA),
+            plot.title = element_text(colour = "white"))
+    stem <- file.path(node_dir, paste0("cell_type__", safe(label)))
+    save_both(plot, stem, background = "black")
+    node_rows[[length(node_rows) + 1L]] <- data.table(
+      level = "cell_type", parent_label = "", label = label,
+      n_observations = sum(selected), png = paste0(stem, ".png"),
+      pdf = paste0(stem, ".pdf")
+    )
+  }
+}
+if (length(node_rows)) {
+  fwrite(rbindlist(node_rows), file.path(table_dir, "spatial_node_asset_index.tsv"),
+         sep = "\t")
+}

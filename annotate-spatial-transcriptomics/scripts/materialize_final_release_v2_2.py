@@ -79,9 +79,15 @@ def main() -> int:
             raise SystemExit("final context evidence is missing, stale or unbound")
     elif bound_context or authority_context:
         raise SystemExit("final release omitted contract-bound context evidence")
-    candidates = catalog_candidates(
-        json.loads(args.catalog.read_text(encoding="utf-8"))
+    catalog_payload = json.loads(args.catalog.read_text(encoding="utf-8"))
+    candidates = catalog_candidates(catalog_payload)
+    forbidden_release_labels = set(
+        catalog_payload.get("taxonomy_policy", {}).get(
+            "forbidden_runtime_release_labels", []
+        )
     )
+    if "Vascular-associated" not in forbidden_release_labels:
+        raise SystemExit("candidate catalog does not forbid legacy Vascular-associated")
     context_summary = apply_candidate_context(
         candidates,
         read_tsv(args.context_evidence) if args.context_evidence else [],
@@ -213,6 +219,8 @@ def main() -> int:
         row = dict(source)
         cell = str(row["cell_id"])
         broad = str(row.get("final_broad_label", ""))
+        if broad in forbidden_release_labels:
+            raise SystemExit(f"final broad label is forbidden by taxonomy: {broad}")
         if broad and broad not in eligible_broad_labels:
             raise SystemExit(
                 f"final broad label is not eligible under bound context: {broad}"
@@ -248,36 +256,48 @@ def main() -> int:
             )
             row["assignment_origin"] = "final_typed_residual_qc"
             row["confidence"] = "low"
+            row["final_cell_type"] = "QC/Unknown"
         elif not assignment:
             row["final_state"] = "defined_broad_only"
             row["qc_reason"] = ""
+            row["final_cell_type"] = broad
+        else:
+            row["final_cell_type"] = str(row["final_fine_label"])
+        if row["final_cell_type"] in forbidden_release_labels:
+            raise SystemExit("final_cell_type contains a forbidden legacy label")
         final.append(row)
 
     qc_n = sum(row["final_state"] == "qc_holdout" for row in final)
     qc_fraction = qc_n / len(final)
-    if (
+    high_unresolved = bool(
         qc_n >= int(completion_policy["residual_qc_count_trigger"])
         or qc_fraction >= float(
             completion_policy["residual_qc_fraction_trigger"]
         )
-    ):
-        raise SystemExit(
-            "residual QC reaches the bound completion threshold; return to the implicated "
-            "second-round cohort or post-merge unresolved review"
-        )
+    )
 
     broad_census = Counter(str(row.get("final_broad_label", "")) for row in final if row.get("final_broad_label"))
     fine_census = Counter(str(row.get("final_fine_label", "")) for row in final if row.get("final_fine_label"))
+    final_cell_type_census = Counter(
+        str(row.get("final_cell_type", "")) for row in final
+        if row.get("final_cell_type")
+    )
     state_census = Counter(
         state for row in final
         for state in str(row.get("state_annotations", "")).split(";") if state
     )
     qc_reason_census = Counter(str(row.get("qc_reason", "")) for row in final if row.get("qc_reason"))
     args.out.mkdir(parents=True, exist_ok=True)
-    membership_path = args.out / "final_release_membership.tsv.gz"
+    membership_path = args.out / (
+        "pending_high_unresolved_membership.tsv.gz"
+        if high_unresolved else "final_release_membership.tsv.gz"
+    )
     write_tsv(membership_path, final)
     manifest = {
-        "status": "PASS",
+        "status": (
+            "PENDING_USER_REVIEW_HIGH_UNRESOLVED"
+            if high_unresolved else "PASS"
+        ),
         "schema_version": "2.2",
         "phase": "materialize_final_release",
         "controller_version": "2.2.0",
@@ -290,6 +310,7 @@ def main() -> int:
         "residual_qc_fraction": qc_fraction,
         "broad_census": dict(sorted(broad_census.items())),
         "fine_census": dict(sorted(fine_census.items())),
+        "final_cell_type_census": dict(sorted(final_cell_type_census.items())),
         "state_census": dict(sorted(state_census.items())),
         "qc_reason_census": dict(sorted(qc_reason_census.items())),
         "membership": {
@@ -301,7 +322,15 @@ def main() -> int:
             "path": str(args.atlas_completeness_manifest.resolve()),
             "sha256": sha256(args.atlas_completeness_manifest),
         },
-        "formal_broad_fine_state_qc_membership_written": True,
+        "formal_broad_fine_state_qc_membership_written": not high_unresolved,
+        "review_candidate_membership_written": high_unresolved,
+        "release_ready": not high_unresolved,
+        "automatic_recovery_exhausted": high_unresolved,
+        "required_next_action": (
+            "user_review_high_unresolved_without_additional_global_residual_reclustering"
+            if high_unresolved else "none"
+        ),
+        "public_annotation_column": "final_cell_type",
         "context_evidence": (
             {
                 "path": str(args.context_evidence.resolve()),

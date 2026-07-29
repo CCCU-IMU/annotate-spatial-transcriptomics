@@ -11,6 +11,8 @@
     "candidate_roles_control_release_not_visibility": true,
     "all_candidates_scanned_at_every_boundary": true,
     "formal_unmodeled_label_requires_catalog_revision_and_rerun": true,
+    "forbidden_runtime_release_labels": ["Vascular-associated"],
+    "public_final_cell_type_policy": "high-confidence parent-locked fine overrides broad; otherwise publish broad; terminal unresolved publishes QC/Unknown",
     "state_patterns_are_not_lineages": [
       "ECM-rich", "contractile-only", "stress", "hypoxia", "cell-cycle",
       "low-RNA", "ambient", "cortical", "follicle-adjacent"
@@ -66,7 +68,13 @@
       "parent_broad_label": "",
       "writeback_strategy": "candidate_local_then_exact_remainder",
       "specificity_priority": 90,
-      "hard_anti_families": ["granulosa", "vascular_endothelial", "immune"],
+      "hard_anti_families": ["granulosa", "immune"],
+      "hard_anti_families_by_observation_unit": {
+        "cell": ["granulosa", "immune", "vascular_endothelial", "pericyte_mural", "smooth_muscle"],
+        "nucleus": ["granulosa", "immune", "vascular_endothelial", "pericyte_mural", "smooth_muscle"],
+        "cellbin": ["granulosa", "immune"],
+        "spot": ["granulosa", "immune"]
+      },
       "soft_anti_families": ["stromal_mesenchymal"],
       "context_requirements": ["steroidogenic/androgenic program"],
       "anatomy_review_role": "post hoc challenger only; follicle ROI or distance cannot admit, shrink or expand the molecular candidate",
@@ -84,7 +92,7 @@
       "release_level": "evidence_dependent_broad_candidate",
       "profile_program": "lineages.theca_steroidogenic",
       "review_required": true,
-      "release_rule": "Discover and validate Theca from a coherent steroidogenic/androgenic program across the complete molecular candidate space; use anatomy only for post hoc challenge. ECM, LHCGR, follicle distance or wall location alone is insufficient and cannot remove molecularly supported members."
+      "release_rule": "Discover and validate Theca from a coherent steroidogenic/androgenic program across the complete molecular candidate space; use anatomy only for post hoc challenge. In cellbin/spot data, complete endothelial, mural and mature-smooth identities are orthogonal competitors that trigger local splitting or unresolved status rather than a hard veto from sparse adjacent RNA. ECM, LHCGR, follicle distance or wall location alone is insufficient and cannot remove molecularly supported members."
     },
     {
       "candidate_id": "theca_structural_perifollicular",
@@ -159,7 +167,7 @@
     },
     {
       "candidate_id": "smooth_muscle",
-      "family": "stromal_contractile_mural",
+      "family": "contractile_mesenchyme",
       "candidate_role": "broad",
       "release_broad_label": "Smooth muscle",
       "release_fine_label": "",
@@ -175,41 +183,41 @@
       "release_level": "evidence_dependent_broad_candidate",
       "profile_program": "lineages.smooth_muscle",
       "review_required": true,
-      "release_rule": "Require a mature MYH11/CNN1/ACTG2-centered contractile backbone, stable separation and coherent nonvascular structural tracks. RGS5/PDGFRB/NOTCH3/MCAM/CSPG4-supported vascular-wall cells return to Vascular-associated."
+      "release_rule": "Require a mature MYH11/CNN1/ACTG2/SMTN/LMOD1-centered contractile backbone, independent contractile support, stable separation and coherent nonvascular structural tracks. A coherent mural backbone routes members to Pericyte/mural; a coherent endothelial backbone routes members to Endothelial. ACTA2/TAGLN/MYL9-only cells remain contractile Stromal/mesenchymal state or unresolved."
     },
     {
       "candidate_id": "pericyte_mural",
-      "family": "vascular",
-      "candidate_role": "fine",
-      "release_broad_label": "Vascular-associated",
-      "release_fine_label": "Pericyte/mural",
-      "parent_broad_label": "Vascular-associated",
-      "parent_broad_reconstruction_allowed": true,
-      "writeback_strategy": "candidate_local_to_vascular_parent",
+      "family": "mural_mesenchyme",
+      "candidate_role": "broad",
+      "release_broad_label": "Pericyte/mural",
+      "release_fine_label": "",
+      "parent_broad_label": "",
+      "parent_broad_reconstruction_allowed": false,
+      "writeback_strategy": "candidate_local_then_exact_remainder",
       "specificity_priority": 95,
-      "hard_anti_families": ["smooth_muscle"],
-      "soft_anti_families": ["stromal_mesenchymal", "vascular_endothelial"],
+      "hard_anti_families": ["smooth_muscle", "vascular_endothelial"],
+      "soft_anti_families": ["stromal_mesenchymal"],
       "context_requirements": ["mural backbone", "vascular adjacency"],
       "required_positive_families": ["mural_identity_backbone", "mural_contractile_support"],
       "seed_required_positive_families": ["mural_identity_backbone"],
       "minimum_identity_core_fraction": 0.15,
-      "release_level": "evidence_dependent_fine_candidate_under_vascular_associated",
+      "release_level": "evidence_dependent_broad_candidate",
       "profile_program": "lineages.pericyte_mural",
       "review_required": true,
-      "release_rule": "Require a coherent RGS5/PDGFRB/CSPG4/NOTCH3/MCAM mural program and vascular adjacency, not ACTA2 or proximity alone; release broad Vascular-associated with optional fine Pericyte/mural."
+      "release_rule": "Require a coherent RGS5/PDGFRB/CSPG4/NOTCH3/MCAM/RERGL/ABCC9/KCNJ8/COX4I2 mural identity backbone plus an independent contractile/support family. Vascular adjacency supports anatomy but ACTA2/TAGLN/MYL9 or proximity alone cannot release Pericyte/mural."
     },
     {
       "candidate_id": "vascular_endothelial",
-      "family": "vascular",
+      "family": "vascular_endothelium",
       "candidate_role": "broad",
-      "release_broad_label": "Vascular-associated",
-      "release_fine_label": "Blood endothelial",
-      "parent_broad_label": "Vascular-associated",
-      "parent_broad_reconstruction_allowed": true,
-      "writeback_strategy": "candidate_local_to_vascular_parent",
+      "release_broad_label": "Endothelial",
+      "release_fine_label": "",
+      "parent_broad_label": "",
+      "parent_broad_reconstruction_allowed": false,
+      "writeback_strategy": "candidate_local_then_exact_remainder",
       "specificity_priority": 90,
-      "hard_anti_families": ["smooth_muscle"],
-      "soft_anti_families": ["pericyte_mural", "stromal_mesenchymal"],
+      "hard_anti_families": ["smooth_muscle", "pericyte_mural"],
+      "soft_anti_families": ["stromal_mesenchymal"],
       "context_requirements": ["endothelial backbone", "branching vascular morphology"],
       "required_positive_families": ["endothelial_junction_backbone", "angiovascular_support"],
       "seed_required_positive_families": ["endothelial_junction_backbone"],
@@ -217,17 +225,17 @@
       "release_level": "default_broad_candidate",
       "profile_program": "lineages.blood_endothelial",
       "review_required": true,
-      "release_rule": "Release the broad Vascular-associated parent when a coherent endothelial backbone and branching morphology pass; preserve Blood endothelial as an optional fine identity."
+      "release_rule": "Release broad Endothelial only when a coherent endothelial junction backbone and an independent angiovascular support family pass. Branching morphology supports anatomy but CD34, VWF, KDR or location alone cannot define identity."
     },
     {
       "candidate_id": "lymphatic_endothelial",
-      "family": "vascular",
+      "family": "vascular_endothelium",
       "candidate_role": "fine",
-      "release_broad_label": "Vascular-associated",
+      "release_broad_label": "Endothelial",
       "release_fine_label": "Lymphatic endothelial",
-      "parent_broad_label": "Vascular-associated",
+      "parent_broad_label": "Endothelial",
       "parent_broad_reconstruction_allowed": true,
-      "writeback_strategy": "candidate_local_to_vascular_parent",
+      "writeback_strategy": "supported_subset_with_parent_lock",
       "specificity_priority": 96,
       "hard_anti_families": ["smooth_muscle"],
       "soft_anti_families": ["vascular_endothelial", "pericyte_mural"],
@@ -235,10 +243,10 @@
       "required_positive_families": ["endothelial_backbone", "lymphatic_identity_support"],
       "seed_required_positive_families": ["lymphatic_identity_support"],
       "minimum_identity_core_fraction": 0.10,
-      "release_level": "evidence_dependent_fine_candidate_under_vascular_associated",
+      "release_level": "evidence_dependent_fine_candidate_under_endothelial",
       "profile_program": "lineages.lymphatic_endothelial",
       "review_required": true,
-      "release_rule": "Require both an endothelial backbone and coherent PROX1/FLT4/MMRN1/LYVE1/PDPN/CCL21 support; otherwise retain broad Vascular-associated."
+      "release_rule": "Require both an endothelial backbone and coherent PROX1/FLT4/MMRN1/LYVE1/PDPN/CCL21 support; otherwise retain broad Endothelial. PDPN, LYVE1, CCL21 or FLT4 alone cannot publish Lymphatic endothelial."
     },
     {
       "candidate_id": "immune",
@@ -399,7 +407,8 @@
     "granulosa": ["cumulus-like", "mural/estrogenic", "small/preantral-like", "large/antral-like"],
     "luteal_steroidogenic": ["early luteal", "late luteal", "transitional luteal"],
     "immune": ["macrophage/myeloid", "T/NK", "B/plasma", "granulocyte"],
-    "vascular_associated": ["blood endothelial", "lymphatic endothelial", "pericyte/mural"],
+    "endothelial": ["lymphatic endothelial"],
+    "pericyte_mural": [],
     "epithelial_mesothelial": ["surface epithelial", "mesothelial-like", "rete/glandular-like"]
   },
   "state_candidate_catalog": {
@@ -426,9 +435,7 @@
       {"candidate_id": "immune_granulocyte", "candidate_role": "fine", "release_label": "Granulocyte", "parent_release_label": "Immune", "profile_program": "lineages.immune.neutrophil"}
     ],
     "vascular_endothelial": [
-      {"candidate_id": "vascular_blood_endothelial", "candidate_role": "fine", "release_label": "Blood endothelial", "parent_release_label": "Vascular-associated", "profile_program": "lineages.blood_endothelial"},
-      {"candidate_id": "vascular_lymphatic_endothelial", "candidate_role": "fine", "release_label": "Lymphatic endothelial", "parent_release_label": "Vascular-associated", "profile_program": "lineages.lymphatic_endothelial"},
-      {"candidate_id": "vascular_pericyte_mural", "candidate_role": "fine", "release_label": "Pericyte/mural", "parent_release_label": "Vascular-associated", "profile_program": "lineages.pericyte_mural"}
+      {"candidate_id": "vascular_lymphatic_endothelial", "candidate_role": "fine", "release_label": "Lymphatic endothelial", "parent_release_label": "Endothelial", "profile_program": "lineages.lymphatic_endothelial", "required_positive_families": ["endothelial_backbone", "lymphatic_identity_support"], "seed_required_positive_families": ["lymphatic_identity_support"]}
     ],
     "epithelial_mesothelial": [
       {"candidate_id": "epithelial_surface", "candidate_role": "fine", "release_label": "Surface epithelial", "parent_release_label": "Epithelial/mesothelial", "profile_program": "lineages.epithelial_mesothelial.subtype_modules.surface_epithelial", "required_discriminator": "continuous surface topology plus epithelial adhesion support"},

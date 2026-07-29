@@ -46,6 +46,71 @@ CELL_TYPE_PRECISION = {"supported", "over_recall_detected", "not_applicable", "n
 CELL_TYPE_RECALL = {"complete", "under_recall_detected", "confirmed_absent", "not_evaluable"}
 CELL_TYPE_SPATIAL = {"consistent", "localized_issue", "inconsistent", "not_evaluable"}
 CELL_TYPE_MOLECULAR = {"supported", "mixed", "unsupported", "not_evaluable"}
+ALLOWED_TARGETED_REVIEW_ROUTES = {
+    "canonical_per_broad_evidence_packet",
+    "bounded_source_cohort_raw_count_review",
+}
+FORBIDDEN_TARGETED_REVIEW_ROUTES = {
+    "global_residual_recluster", "residual_anchor_recluster",
+    "qc_anchor_recluster", "qc_holdout_recluster",
+    "whole_unresolved_recluster",
+}
+
+
+def validate_targeted_review_manifest(
+    decision: dict[str, str], review_id: str, queued: dict[str, str],
+    packet: dict[str, str], review: dict,
+) -> tuple[dict | None, str | None]:
+    raw_path = str(decision.get("targeted_review_manifest_path", "")).strip()
+    expected_sha = str(
+        decision.get("targeted_review_manifest_sha256", "")
+    ).strip()
+    path = Path(raw_path)
+    if not path.is_file() or expected_sha != sha256(path):
+        return None, f"{review_id}: targeted review manifest is missing or stale"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    route_class = str(document.get("route_class", ""))
+    if (
+        document.get("status") != "PASS"
+        or document.get("stage") != "per_broad_targeted_membership_evidence"
+        or route_class not in ALLOWED_TARGETED_REVIEW_ROUTES
+        or route_class in FORBIDDEN_TARGETED_REVIEW_ROUTES
+        or str(document.get("review_id", "")) != review_id
+        or str(document.get("target_broad_label", ""))
+        != str(queued.get("target_broad_label", ""))
+        or str(document.get("evidence_packet_sha256", ""))
+        != str(packet.get("evidence_packet_sha256", ""))
+    ):
+        return None, f"{review_id}: targeted review manifest has invalid authority"
+    review_membership = review.get("membership", {})
+    source = document.get("source_membership", {})
+    patch = document.get("patch_membership", {})
+    patch_path = str(decision.get("membership_path", "")).strip()
+    patch_sha = str(decision.get("membership_sha256", "")).strip()
+    if (
+        Path(str(source.get("path", ""))).resolve()
+        != Path(str(review_membership.get("path", ""))).resolve()
+        or source.get("sha256") != review_membership.get("sha256")
+        or Path(str(patch.get("path", ""))).resolve() != Path(patch_path).resolve()
+        or patch.get("sha256") != patch_sha
+    ):
+        return None, f"{review_id}: targeted review does not bind source and patch"
+    if route_class == "bounded_source_cohort_raw_count_review":
+        ancestry_record = document.get("raw_count_ancestry", {})
+        ancestry_path = Path(str(ancestry_record.get("path", "")))
+        if (
+            not ancestry_path.is_file()
+            or ancestry_record.get("sha256") != sha256(ancestry_path)
+        ):
+            return None, f"{review_id}: bounded raw-count review ancestry is stale"
+        ancestry = json.loads(ancestry_path.read_text(encoding="utf-8"))
+        if (
+            ancestry.get("status") != "PASS"
+            or str(ancestry.get("raw_count_assay", "")) in {"", "SCT"}
+            or "raw_counts" not in str(ancestry.get("clustering_path", ""))
+        ):
+            return None, f"{review_id}: targeted review did not use project raw counts"
+    return document, None
 
 
 def main() -> int:
@@ -105,6 +170,7 @@ def main() -> int:
     ):
         errors.append("decisions must cover the review queue exactly once")
     pending = 0
+    targeted_review_manifests: list[dict[str, object]] = []
     for review_id, queued in queue.items():
         decision = decision_by_id.get(review_id, {})
         mode = str(queued.get("review_mode", ""))
@@ -224,7 +290,7 @@ def main() -> int:
                         f"{review_id}: Oocyte cannot close without the canonical quality review"
                     )
                 follicle_related = {
-                    "Granulosa", "Theca", "Vascular-associated",
+                    "Granulosa", "Theca", "Endothelial", "Pericyte/mural",
                     "Smooth muscle", "Stromal/mesenchymal",
                 }
                 if (
@@ -265,8 +331,28 @@ def main() -> int:
             path = Path(patch_path)
             if not path.is_file() or patch_hash != sha256(path):
                 errors.append(f"{review_id}: targeted membership patch is missing or stale")
+            else:
+                targeted, targeted_error = validate_targeted_review_manifest(
+                    decision, review_id, queued, packet, review
+                )
+                if targeted_error:
+                    errors.append(targeted_error)
+                elif targeted is not None:
+                    targeted_review_manifests.append({
+                        "review_id": review_id,
+                        "path": str(Path(
+                            decision["targeted_review_manifest_path"]
+                        ).resolve()),
+                        "sha256": decision["targeted_review_manifest_sha256"],
+                        "route_class": targeted["route_class"],
+                    })
         elif patch_path or patch_hash:
             errors.append(f"{review_id}: non-patch decision carries membership authority")
+        elif (
+            str(decision.get("targeted_review_manifest_path", "")).strip()
+            or str(decision.get("targeted_review_manifest_sha256", "")).strip()
+        ):
+            errors.append(f"{review_id}: non-patch decision carries targeted review authority")
         if outcome == "targeted_raw_count_review_required":
             pending += 1
 
@@ -301,6 +387,7 @@ def main() -> int:
         },
         "decision_n": len(decisions),
         "pending_targeted_review_n": pending,
+        "targeted_review_manifests": targeted_review_manifests,
         "errors": errors,
     }
     manifest_path = args.out / "catalog_wide_lineage_decision_validation.json"

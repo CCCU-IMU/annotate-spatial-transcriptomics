@@ -145,6 +145,9 @@ def main() -> int:
         except json.JSONDecodeError:
             project_config = {}
     direct_workflow = project_config.get("routing_model", "direct_cross_lineage_recluster_cohorts") in {"direct_cross_lineage_recluster_cohorts", "direct_cross_branch_recluster_cohorts", "direct_cross_lineage_recluster_cohorts_global_atlas"}
+    canonical_v22 = str(
+        project_config.get("canonical_lineage_controller_version", "")
+    ) == "2.2.0"
     context = resolve_context_path(root)
     context_validation = root / "provenance/biological_context_validation.json"
     discovery = root / "input_discovery"
@@ -171,7 +174,7 @@ def main() -> int:
     release_manifest = root / "provenance/release_manifest.tsv"
     checksums = root / "provenance/checksums.sha256"
     release_audit = root / "provenance/release_audit.json"
-    final_census = root / "tables/final_annotation_census.tsv"
+    final_census = root / "tables/final_cell_type_census.tsv"
     confirmation_record = read_confirmation(confirmation)
     user_confirmed = confirmation_valid(confirmation, root)
 
@@ -186,13 +189,128 @@ def main() -> int:
     elif json_status(context_validation) != "PASS":
         add("context", "validate_biological_context.py", "biological context has not passed validation")
 
-    if not cluster_ledger.exists() or not cell_ledger.exists():
+    if not canonical_v22 and (
+        not cluster_ledger.exists() or not cell_ledger.exists()
+    ):
         add("broad_annotation", "select clustering and write direct initial broad/QC decisions", "cell- and cluster-level annotation state is incomplete")
 
     runs = read_tsv(run_registry)
     unfinished = [row for row in runs if row.get("status", "") not in TERMINAL_RUN_STATES]
     if unfinished:
         add("run_control", "monitor, inspect logs, validate artifacts, then update run_registry.tsv", f"{len(unfinished)} submitted/running/nonterminal run(s) remain")
+
+    # v2.2 projects are controlled exclusively by the phase-authorized lineage
+    # controller.  Do not fall through to the pre-v2.2 state ledger, iteration
+    # planner or check_completion_gate suggestions below: those compatibility
+    # routes can reopen residual/QC-anchor work after the bounded controller has
+    # already exhausted its biological recovery budget.
+    if canonical_v22:
+        manifests: list[tuple[Path, dict]] = []
+        for path in root.rglob("lineage_controller_manifest.json"):
+            try:
+                document = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if (
+                document.get("controller_version") == "2.2.0"
+                and document.get("phase")
+            ):
+                manifests.append((path, document))
+        latest_by_phase: dict[str, tuple[Path, dict]] = {}
+        for path, document in sorted(
+            manifests, key=lambda item: item[0].stat().st_mtime
+        ):
+            latest_by_phase[str(document["phase"])] = (path, document)
+
+        final_record = latest_by_phase.get("materialize_final_release")
+        atlas_record = latest_by_phase.get("atlas_and_completeness_review")
+        merge_record = latest_by_phase.get("merge_and_freeze_broad")
+        whole_record = latest_by_phase.get("whole_tissue_partition")
+        if final_record:
+            final_path, final_doc = final_record
+            final_status = str(final_doc.get("status", ""))
+            if final_status == "PENDING_USER_REVIEW_HIGH_UNRESOLVED":
+                add(
+                    "high_unresolved_user_review",
+                    "build an explicitly diagnostic pending_user_review report from the bound pending membership; do not submit another residual/QC-anchor reclustering job",
+                    "the bounded Atlas, unresolved, ROI and per-broad recovery budget is exhausted; this membership is reviewable but not release-ready",
+                )
+            elif final_status != "PASS":
+                add(
+                    "canonical_final_review",
+                    "inspect and resume the exact blocking v2.2 controller phase",
+                    f"latest final controller manifest is {final_status or 'invalid'}: {final_path}",
+                )
+            elif not report.is_file():
+                add(
+                    "confirmation_review",
+                    "build final_cell_type review assets and build_frozen_review_report.py --release-status pending_user_review",
+                    "the canonical final membership is PASS but its user review report is missing",
+                )
+        elif atlas_record:
+            atlas_path, atlas_doc = atlas_record
+            atlas_status = str(atlas_doc.get("status", ""))
+            if atlas_status == "PASS":
+                add(
+                    "final_annotation",
+                    "run_lineage_controller.py materialize_final_release with the exact PASS Atlas/completeness manifest and membership",
+                    "post-Atlas biological and per-broad review is complete but final membership has not been materialized",
+                )
+            else:
+                add(
+                    "atlas_and_per_broad_review",
+                    "resume only the exact Atlas conflict, biological endpoint or per-broad decision queue recorded by the latest controller manifest",
+                    f"latest Atlas/completeness controller status is {atlas_status or 'invalid'}: {atlas_path}",
+                )
+        elif merge_record:
+            add(
+                "atlas_and_completeness_review",
+                "run one calibrated all-cell Atlas route, bounded unresolved review, tissue review and per-broad whole-query review",
+                "formal broad membership is frozen but the single post-freeze review phase is missing",
+            )
+        elif whole_record:
+            add(
+                "second_round_cohorts",
+                "finish exactly one raw-count second-round cohort per initial cluster, audit combined local-split workload, then merge and freeze broad",
+                "the provisional whole-tissue cohort plan exists but no canonical broad-freeze manifest was found",
+            )
+        else:
+            add(
+                "whole_tissue_partition",
+                "run_lineage_controller.py whole_tissue_partition from the frozen annotation contract",
+                "no canonical v2.2 whole-tissue cohort plan was found",
+            )
+
+        if actions:
+            status, phase, terminal = "CONTINUE", actions[0]["phase"], False
+        else:
+            status, phase, terminal = "COMPLETE", "complete", True
+        result = {
+            "status": status,
+            "phase": phase,
+            "terminal": terminal,
+            "controller_mode": "canonical_v2_2",
+            "next_actions": actions,
+            "rule": (
+                "Use only the phase-authorized v2.2 controller; never reopen "
+                "legacy completion or global residual/QC-anchor recovery."
+            ),
+        }
+        output = root / "provenance/autopilot_status.json"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(
+            json.dumps(result, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        queue_out = root / "state/autopilot_next_actions.tsv"
+        queue_out.parent.mkdir(parents=True, exist_ok=True)
+        fields = ["priority", "phase", "command", "reason"]
+        with queue_out.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
+            writer.writeheader()
+            writer.writerows(actions)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        return 0 if terminal else 2
 
     confirmed_at = parse_time(str(confirmation_record.get("confirmed_at", ""))) if user_confirmed else None
     post_confirmation_runs = []
@@ -222,8 +340,8 @@ def main() -> int:
     ):
         add(
             "final_annotation",
-            "build_final_annotation.py PROJECT_ROOT --cell-ledger state/cell_ledger.tsv.gz --out state/cell_ledger.tsv.gz --sample SAMPLE --version DECISION_VERSION",
-            "single final annotation is missing or stale; materialize moderate-or-higher broad and high-confidence fine labels before state/taxonomy/completion audits",
+            "run_lineage_controller.py materialize_final_release --contract ANNOTATION_CONTRACT --post-atlas-membership FROZEN_POST_ATLAS_MEMBERSHIP --prerequisite-manifest ATLAS_COMPLETENESS_MANIFEST --out FINAL_RELEASE_DIR",
+            "the canonical controller has not materialized a current final_cell_type release from the frozen post-Atlas membership",
         )
 
     # Once the cell ledger, cluster ledger and completion gate have been
@@ -272,8 +390,8 @@ def main() -> int:
         if expensive_stale(review_asset_manifest, review_dependencies) or json_status(review_asset_manifest) != "PASS":
             add(
                 "confirmation_review_assets",
-                "build_confirmation_review_assets.R",
-                "build the frozen broad spatial and canonical-marker evidence only after all annotation and completion gates pass",
+                "build_confirmation_review_assets.R --final-cell-type-col final_cell_type",
+                "build the frozen final_cell_type spatial and canonical-marker evidence only after all annotation and completion gates pass",
             )
         elif not master_request_ok:
             add(
@@ -312,29 +430,19 @@ def main() -> int:
         "tables/final_cell_metadata.tsv", "tables/final_cell_metadata.tsv.gz",
         "tables/final_cell_metadata_v*.tsv", "tables/final_cell_metadata_v*.tsv.gz",
     ])
-    broad_deg = newest_match(root, [
-        "tables/final_broad_DEG_one_vs_rest_all.tsv", "tables/final_broad_DEG_one_vs_rest_all.tsv.gz",
-        "tables/broad_DEG_one_vs_rest_all.tsv", "tables/broad_DEG_one_vs_rest_all.tsv.gz",
+    cell_type_deg = newest_match(root, [
+        "tables/final_cell_type_DEG_one_vs_rest_all.tsv",
+        "tables/final_cell_type_DEG_one_vs_rest_all.tsv.gz",
+        "tables/cell_type_DEG_one_vs_rest_all.tsv",
+        "tables/cell_type_DEG_one_vs_rest_all.tsv.gz",
     ])
-    subtype_deg = newest_match(root, [
-        "tables/final_subtype_DEG_one_vs_rest_all.tsv", "tables/final_subtype_DEG_one_vs_rest_all.tsv.gz",
-        "tables/subtype_DEG_one_vs_rest_all.tsv", "tables/subtype_DEG_one_vs_rest_all.tsv.gz",
-    ])
-    has_final_fine = False
-    if final_census.exists():
-        try:
-            has_final_fine = any(row.get("fine_label", "") and int(float(row.get("n_observations", 0) or 0)) > 0 for row in read_tsv(final_census))
-        except (TypeError, ValueError):
-            has_final_fine = True
     required_assets = [
         final_metadata or root / "tables/final_cell_metadata.tsv.gz",
-        broad_deg or root / "tables/final_broad_DEG_one_vs_rest_all.tsv",
+        cell_type_deg or root / "tables/final_cell_type_DEG_one_vs_rest_all.tsv",
         root / "figures/marker_dotplots/marker_dotplot_asset_index.tsv",
-        root / "figures/final_broad_UMAP.png",
+        root / "figures/final_cell_type_UMAP.png",
         root / "provenance/release_sessionInfo.txt",
     ]
-    if has_final_fine:
-        required_assets.extend([subtype_deg or root / "tables/final_subtype_DEG_one_vs_rest_all.tsv", root / "figures/final_subtype_UMAP.png"])
     modality = ""
     if project.exists():
         try:
@@ -342,16 +450,14 @@ def main() -> int:
         except json.JSONDecodeError:
             pass
     if modality == "spatial":
-        required_assets.extend([root / "figures/final_broad_spatial.png", root / "tables/spatial_node_asset_index.tsv"])
-        if has_final_fine:
-            required_assets.append(root / "figures/final_subtype_spatial.png")
+        required_assets.extend([root / "figures/final_cell_type_spatial.png", root / "tables/spatial_node_asset_index.tsv"])
     missing_assets = [str(path.relative_to(root)) for path in required_assets if not path.exists()]
     if json_status(completion) == "PASS" and user_confirmed and missing_assets:
-        add("final_assets", "prepare final metadata, all-accepted broad DEG/dotplots and high-confidence subtype assets", f"{len(missing_assets)} required final asset(s) are missing")
+        add("final_assets", "prepare final metadata, final_cell_type DEG/dotplots and spatial assets", f"{len(missing_assets)} required final asset(s) are missing")
 
     asset_dependencies = [path for path in required_assets if path.exists()] + [completion]
     if json_status(completion) == "PASS" and user_confirmed and not missing_assets and (not report.exists() or expensive_stale(report, asset_dependencies + [confirmation])):
-        add("report", "build_report.py", "final report is missing or older than its evidence assets")
+        add("report", "build_frozen_review_report.py --release-status approved_final --membership FINAL_RELEASE_MEMBERSHIP --release-manifest FINAL_RELEASE_MANIFEST --cell-type-deg FINAL_CELL_TYPE_DEG ...", "the single-final-cell-type report is missing or older than its evidence assets")
 
     release_dependencies = [report, completion, cluster_ledger, cell_ledger, run_registry] + [path for path in required_assets if path.exists()]
     if user_confirmed and report.exists() and (expensive_stale(release_manifest, release_dependencies + [confirmation]) or expensive_stale(checksums, release_dependencies + [confirmation])):

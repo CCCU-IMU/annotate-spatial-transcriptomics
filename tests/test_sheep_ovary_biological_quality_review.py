@@ -24,8 +24,8 @@ class SheepOvaryBiologicalQualityReviewTest(unittest.TestCase):
         "granulosa": "Granulosa",
         "oocyte": "Oocyte",
         "theca_steroidogenic": "Theca",
-        "vascular_endothelial": "Vascular-associated",
-        "pericyte_mural": "Vascular-associated",
+        "vascular_endothelial": "Endothelial",
+        "pericyte_mural": "Pericyte/mural",
         "smooth_muscle": "Smooth muscle",
         "stromal_mesenchymal": "Stromal/mesenchymal",
     }
@@ -50,7 +50,7 @@ class SheepOvaryBiologicalQualityReviewTest(unittest.TestCase):
         for candidate, label, radius, n in (
             ("granulosa", "Granulosa", 20.0, 96),
             ("theca_steroidogenic", "Theca", 23.0, 96),
-            ("vascular_endothelial", "Vascular-associated", 25.0, 48),
+            ("vascular_endothelial", "Endothelial", 25.0, 48),
             ("smooth_muscle", "Smooth muscle", 28.0, 96),
             ("stromal_mesenchymal", "Stromal/mesenchymal", 31.0, 96),
         ):
@@ -156,7 +156,7 @@ class SheepOvaryBiologicalQualityReviewTest(unittest.TestCase):
             self.assertNotIn("Theca", set(repaired_membership.final_broad_label))
             self.assertFalse(manifest["formal_membership_written"])
 
-    def test_missing_vascular_layer_is_detected_without_theca_mislabeling(self):
+    def test_absent_vascular_program_is_negative_audit_not_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             membership, scores, catalog = self.build_fixture(root)
@@ -172,24 +172,28 @@ class SheepOvaryBiologicalQualityReviewTest(unittest.TestCase):
                 frame.loc[mask, column] = False
             frame.loc[mask, ["normalized_evidence", "program_score"]] = 0.05
             frame.to_csv(scores, sep="\t", index=False, compression="gzip")
+            current = pd.read_csv(membership, sep="\t")
+            current.loc[
+                current.final_broad_label.isin({"Endothelial", "Pericyte/mural"}),
+                "final_broad_label",
+            ] = "Stromal/mesenchymal"
+            current.to_csv(membership, sep="\t", index=False, compression="gzip")
             out = root / "review"
             result = subprocess.run([
                 sys.executable, str(SCRIPT), "--membership", str(membership),
                 "--scores", str(scores), "--catalog", str(catalog),
                 "--out", str(out),
             ], capture_output=True, text=True, check=False)
-            self.assertEqual(result.returncode, 2, result.stderr)
-            actions = pd.read_csv(
-                out / "biological_quality_next_actions.tsv", sep="\t",
+            self.assertEqual(result.returncode, 0, result.stderr)
+            review = json.loads(
+                (out / "sheep_ovary_biological_quality_review.json").read_text()
             )
-            self.assertIn(
-                "vascular_interna_program_not_resolved",
-                set(actions.issue_code),
-            )
-            self.assertNotIn(
-                "theca_interna_label_under_recall",
-                set(actions.issue_code),
-            )
+            self.assertEqual(review["status"], "PASS")
+            layers = pd.read_csv(out / "follicle_roi_layer_hierarchy.tsv", sep="\t")
+            vascular = layers.loc[
+                layers.layer_name.isin({"endothelial_interna", "pericyte_mural_interna"})
+            ]
+            self.assertTrue(set(vascular.status) <= {"NOT_EVALUABLE", "PASS"})
 
     def test_structural_perifollicular_program_cannot_substitute_for_theca_interna(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -232,7 +236,10 @@ class SheepOvaryBiologicalQualityReviewTest(unittest.TestCase):
             ], capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 2, result.stderr)
             actions = pd.read_csv(out / "biological_quality_next_actions.tsv", sep="\t")
-            self.assertIn("theca_interna_program_not_resolved", set(actions.issue_code))
+            self.assertIn(
+                "theca_interna_published_label_lacks_corresponding_program",
+                set(actions.issue_code),
+            )
 
     def test_no_follicle_and_no_oocyte_are_not_evaluable_not_failures(self):
         with tempfile.TemporaryDirectory() as tmp:

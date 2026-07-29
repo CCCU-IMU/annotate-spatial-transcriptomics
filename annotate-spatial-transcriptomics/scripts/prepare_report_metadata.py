@@ -33,6 +33,7 @@ def main() -> int:
     data = pd.read_csv(args.cell_ledger, sep="\t", dtype={args.cell_id_col: str}, keep_default_na=False)
     required = {
         args.cell_id_col, "analysis_scope", "final_state", "final_broad_label", "final_fine_label",
+        "final_cell_type",
         "final_confidence", "final_assignment_tier", "final_broad_eligible", "final_fine_eligible",
         "fine_anchor_eligible", "route",
     }
@@ -53,6 +54,18 @@ def main() -> int:
     fine_eligible = data.final_fine_eligible.astype(str).str.lower().isin({"true", "1", "yes"})
     data["primary_broad_label"] = data.final_broad_label.where(broad_eligible, "")
     data["primary_subtype_label"] = data.final_fine_label.where(fine_eligible, "")
+    expected_cell_type = data.final_fine_label.where(
+        fine_eligible, data.final_broad_label.where(broad_eligible, "QC/Unknown")
+    )
+    analysis = data.analysis_scope.eq("analysis_set")
+    mismatch = analysis & data.final_cell_type.ne(expected_cell_type)
+    if mismatch.any():
+        raise SystemExit(
+            "final_cell_type is inconsistent with frozen broad/fine release semantics"
+        )
+    data["primary_final_cell_type"] = data.final_cell_type.where(
+        analysis, "Excluded initial QC"
+    )
     data["fine_marker_discovery_eligible"] = data.final_fine_eligible
     anchor_confidence = data["final_fine_confidence"] if "final_fine_confidence" in data else data.final_confidence
     data["anchor_reference_eligible"] = (
@@ -74,12 +87,16 @@ def main() -> int:
         "status": "PASS", "n_observations": int(len(data)),
         "n_final_broad": int(broad_eligible.sum()),
         "n_final_fine": int(fine_eligible.sum()),
+        "n_final_cell_type_labels": int(
+            data.loc[analysis, "primary_final_cell_type"].nunique()
+        ),
         "n_anchor_reference_eligible": int((data.anchor_reference_eligible == "true").sum()),
         "n_broad_labels": int(data.primary_broad_label[data.primary_broad_label.ne("")].nunique()),
         "n_fine_labels": int(data.primary_subtype_label[data.primary_subtype_label.ne("")].nunique()),
         "release_label_columns": {
-            "broad": "primary_broad_label",
-            "subtype": "primary_subtype_label",
+            "public_cell_type": "primary_final_cell_type",
+            "internal_broad_audit": "primary_broad_label",
+            "internal_fine_audit": "primary_subtype_label",
             "retained_state": "retained_state_display",
         },
         "sha256": hashlib.sha256(args.out.read_bytes()).hexdigest(), "output": str(args.out.resolve()),

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a marker panel from the single final broad and high-confidence subtype DEG tables."""
+"""Build a marker panel from the single public final_cell_type DEG table."""
 from __future__ import annotations
 
 import argparse
@@ -25,31 +25,27 @@ def number(value: str, default: float) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--broad-deg", required=True, type=Path)
-    parser.add_argument("--subtype-deg", type=Path, help="optional; omit when no high-confidence fine labels are released")
+    parser.add_argument("--cell-type-deg", required=True, type=Path)
     parser.add_argument("--canonical", required=True, type=Path)
     parser.add_argument("--group-alias", type=Path)
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--top-per-label", type=int, default=4)
     parser.add_argument("--min-pct", type=float, default=0.05)
     parser.add_argument("--max-padj", type=float, default=0.05)
-    parser.add_argument("--broad-view", default="final")
-    parser.add_argument("--subtype-view", default="final")
+    parser.add_argument("--analysis-view", default="final")
     parser.add_argument(
         "--exclude-regex", default=r"^(LOC|ENSOARG|MT-|RPS|RPL|HBA|HBB|EEF1|GAPDH$|ACTB$|MALAT1$|GNAS$)",
     )
     args = parser.parse_args()
 
-    deg = {"broad": read(args.broad_deg)}
-    if args.subtype_deg:
-        deg["subtype"] = read(args.subtype_deg)
+    deg = {"cell_type": read(args.cell_type_deg)}
     for level, rows in deg.items():
         if not rows:
             raise SystemExit(f"{level} DEG is empty")
         required = {"label", "gene", "analysis_view"}
         if not required.issubset(rows[0]):
             raise SystemExit(f"{level} DEG lacks columns: {sorted(required-set(rows[0]))}")
-        expected_view = args.broad_view if level == "broad" else args.subtype_view
+        expected_view = args.analysis_view
         if any(row.get("analysis_view") != expected_view for row in rows):
             raise SystemExit(f"{level} DEG is not entirely {expected_view} evidence")
 
@@ -61,7 +57,7 @@ def main() -> int:
     if args.group_alias:
         for row in read(args.group_alias):
             level, source, target = row.get("level", ""), row.get("source_group", ""), row.get("target_group", "")
-            if level not in {"broad", "subtype"} or not source or not target:
+            if level != "cell_type" or not source or not target:
                 raise SystemExit("Alias rows require level, source_group and target_group")
             aliases[(level, source)].append(target)
 
@@ -69,7 +65,7 @@ def main() -> int:
     canonical = read(args.canonical)
     for row in canonical:
         level = row.get("level", "")
-        if level not in {"broad", "subtype"} or row.get("panel") != "canonical":
+        if level != "cell_type" or row.get("panel") != "canonical":
             continue
         source = row.get("marker_group", "")
         targets = aliases.get((level, source), [source])
@@ -138,8 +134,8 @@ def main() -> int:
         writer = csv.DictWriter(handle, fieldnames=["gene", "marker_group", "panel", "level"], delimiter="\t")
         writer.writeheader(); writer.writerows(deduplicated)
     print(
-        f"PASS rows={len(deduplicated)} broad_labels={len(label_sets['broad'])} "
-        f"subtype_labels={len(label_sets.get('subtype', set()))} out={args.out}"
+        f"PASS rows={len(deduplicated)} final_cell_type_labels="
+        f"{len(label_sets['cell_type'])} out={args.out}"
     )
     return 0
 

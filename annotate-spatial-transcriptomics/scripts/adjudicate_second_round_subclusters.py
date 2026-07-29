@@ -16,6 +16,7 @@ from lineage_controller_lib import (
     group_candidate_score, group_identity_core_fraction,
     group_identity_core_direct_fraction,
     local_split_worthy_group_program,
+    rare_group_program_watch,
     group_orthogonal_support_count, group_release_supported_fraction,
     number, read_tsv, write_tsv,
 )
@@ -162,6 +163,11 @@ def main() -> int:
             item for item in specific_positive
             if local_split_worthy_group_program(item[2], item[3])
         ]
+        rare_watch = [
+            item for item in specific_positive
+            if not local_split_worthy_group_program(item[2], item[3])
+            and rare_group_program_watch(item[2], item[3])
+        ]
         generic_positive = [
             item for item in positive
             if str(item[3].get("candidate_id", "")) == "stromal_mesenchymal"
@@ -307,6 +313,9 @@ def main() -> int:
             "provisional_broad_after_score_freeze": args.provisional_broad,
             "local_split_required": str(local_split).lower(),
             "competing_candidate_ids": ";".join(str(item[2].get("candidate_id", "")) for item in positive),
+            "rare_watch_candidate_ids": ";".join(
+                str(item[2].get("candidate_id", "")) for item in rare_watch
+            ),
             "target_raw_supported_fraction": target_raw,
             "strongest_competitor_raw_fraction": runner_raw,
             "contradiction_fraction": contradiction,

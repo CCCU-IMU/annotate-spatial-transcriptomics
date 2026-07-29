@@ -46,6 +46,13 @@ def main() -> int:
         ),
     )
     ap.add_argument(
+        "--follicle-roi-repair-manifest", type=Path,
+        help=(
+            "canonical bounded follicle-ROI repair inserted after the post-merge "
+            "unresolved review and before any per-broad review patches"
+        ),
+    )
+    ap.add_argument(
         "--catalog-wide-review-manifest", action="append", type=Path, default=[],
         help="validated catalog-wide review apply manifests in chronological order",
     )
@@ -223,9 +230,85 @@ def main() -> int:
                 supported_post_merge_programs.add((
                     str(row.get("component_id", "")), candidate_id, broad
                 ))
+    supported_follicle_roi_cells: set[tuple[str, str, str]] = set()
+    supported_follicle_roi_programs: set[tuple[str, str, str]] = set()
+    follicle_roi_membership_path: Path | None = None
+    if args.follicle_roi_repair_manifest:
+        repair = json.loads(
+            args.follicle_roi_repair_manifest.read_text(encoding="utf-8")
+        )
+        if (
+            repair.get("stage") != "follicle_roi_repair_apply"
+            or repair.get("status")
+            != "PENDING_POST_REPAIR_BIOLOGICAL_REVIEW"
+        ):
+            raise SystemExit("follicle ROI repair manifest is not canonical")
+        authority_record = repair.get("stage_authority", {})
+        authority_path = Path(str(authority_record.get("path", "")))
+        if (
+            not authority_path.is_file()
+            or authority_record.get("sha256") != sha256(authority_path)
+        ):
+            raise SystemExit("follicle ROI repair stage authority is missing or stale")
+        authority = json.loads(authority_path.read_text(encoding="utf-8"))
+        writer = Path(__file__).resolve().parent / "apply_sheep_ovary_follicle_roi_repair.py"
+        writer_record = authority.get("scripts", {}).get(writer.name, {})
+        if (
+            authority.get("mode") != "stage_authority"
+            or authority.get("phase") != "atlas_and_completeness_review"
+            or Path(str(writer_record.get("path", ""))).resolve()
+            != writer.resolve()
+            or writer_record.get("sha256") != sha256(writer)
+        ):
+            raise SystemExit("follicle ROI repair lacks canonical writer authority")
+        source_record = repair.get("pre_repair_membership", {})
+        result_record = repair.get("repaired_membership", {})
+        source_path = Path(str(source_record.get("path", "")))
+        follicle_roi_membership_path = Path(str(result_record.get("path", "")))
+        if (
+            not source_path.is_file()
+            or source_record.get("sha256") != sha256(source_path)
+            or not follicle_roi_membership_path.is_file()
+            or result_record.get("sha256") != sha256(follicle_roi_membership_path)
+            or (
+                post_merge_review_membership_path is not None
+                and source_path.resolve()
+                != post_merge_review_membership_path.resolve()
+            )
+        ):
+            raise SystemExit("follicle ROI repair membership chain is missing or stale")
+        changes_record = repair.get("changes", {})
+        changes_path = Path(str(changes_record.get("path", "")))
+        if (
+            not changes_path.is_file()
+            or changes_record.get("sha256") != sha256(changes_path)
+        ):
+            raise SystemExit("follicle ROI repair changes are missing or stale")
+        repaired_rows = {
+            str(row.get("cell_id", "")): row
+            for row in read_tsv(follicle_roi_membership_path)
+        }
+        for row in read_tsv(changes_path):
+            cell_id = str(row.get("cell_id", ""))
+            candidate_id = str(row.get("candidate_id", ""))
+            broad = str(row.get("new_broad_label", ""))
+            result_row = repaired_rows.get(cell_id, {})
+            if (
+                not cell_id or not candidate_id or not broad
+                or str(result_row.get("final_broad_label", "")) != broad
+                or str(result_row.get("assignment_origin", ""))
+                != "follicle_roi_raw_count_direct_identity_repair"
+            ):
+                raise SystemExit("follicle ROI repair delta differs from membership")
+            supported_follicle_roi_cells.add((cell_id, candidate_id, broad))
+            supported_follicle_roi_programs.add((
+                str(row.get("follicle_roi_id", "")), candidate_id, broad
+            ))
     supported_catalog_review_cells: set[tuple[str, str, str]] = set()
     supported_catalog_review_programs: set[tuple[str, str, str]] = set()
-    previous_membership_path: Path | None = post_merge_review_membership_path
+    previous_membership_path: Path | None = (
+        follicle_roi_membership_path or post_merge_review_membership_path
+    )
     for index, path in enumerate(args.catalog_wide_review_manifest):
         manifest = json.loads(path.read_text(encoding="utf-8"))
         if (
@@ -329,6 +412,10 @@ def main() -> int:
             source_supported = (
                 str(row.get("cell_id", "")), candidate_id, broad
             ) in supported_post_merge_cells
+        elif origin == "follicle_roi_raw_count_direct_identity_repair":
+            source_supported = (
+                str(row.get("cell_id", "")), candidate_id, broad
+            ) in supported_follicle_roi_cells
         elif origin.startswith("catalog_wide_lineage_review_round_"):
             source_supported = (
                 str(row.get("cell_id", "")), candidate_id, broad
@@ -371,6 +458,10 @@ def main() -> int:
         local_positive_n += sum(
             candidate_id in eligible_candidate_ids and component_broad == broad
             for _, candidate_id, component_broad in supported_post_merge_programs
+        )
+        local_positive_n += sum(
+            candidate_id in eligible_candidate_ids and component_broad == broad
+            for _, candidate_id, component_broad in supported_follicle_roi_programs
         )
         local_positive_n += sum(
             candidate_id in eligible_candidate_ids and component_broad == broad
@@ -582,6 +673,9 @@ def main() -> int:
         "supported_post_merge_component_observation_n": len(
             supported_post_merge_cells
         ),
+        "supported_follicle_roi_repair_observation_n": len(
+            supported_follicle_roi_cells
+        ),
         "supported_catalog_wide_review_observation_n": len(
             supported_catalog_review_cells
         ),
@@ -589,6 +683,13 @@ def main() -> int:
             {"path": str(path.resolve()), "sha256": sha256(path)}
             for path in args.catalog_wide_review_manifest
         ],
+        "follicle_roi_repair_manifest": (
+            {
+                "path": str(args.follicle_roi_repair_manifest.resolve()),
+                "sha256": sha256(args.follicle_roi_repair_manifest),
+            }
+            if args.follicle_roi_repair_manifest else None
+        ),
         "membership": {
             "path": str(args.membership.resolve()),
             "sha256": sha256(args.membership),

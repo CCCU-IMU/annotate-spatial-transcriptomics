@@ -84,7 +84,7 @@ def five_genes(candidates: list[dict], profile: dict) -> list[str]:
             pools.append(genes)
     selected: list[str] = []
     # Keep a coherent primary identity while representing child identities of
-    # shared broad parents such as Vascular-associated.
+    # a broad parent, such as Lymphatic endothelial under Endothelial.
     if pools:
         for gene in pools[0][:3]:
             if gene not in selected:
@@ -132,10 +132,16 @@ def main() -> int:
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
     rows = read_tsv(args.membership)
+    if not rows or "final_cell_type" not in rows[0]:
+        raise SystemExit("release membership lacks final_cell_type")
     catalog = json.loads(args.catalog.read_text(encoding="utf-8"))
     profile = json.loads(args.profile.read_text(encoding="utf-8"))
     broad_counts = Counter(row.get("final_broad_label", "") for row in rows if row.get("final_broad_label", ""))
     fine_counts = Counter(row.get("final_fine_label", "") for row in rows if row.get("final_fine_label", ""))
+    cell_type_counts = Counter(
+        row.get("final_cell_type", "") for row in rows
+        if row.get("final_cell_type", "") not in {"", "QC/Unknown"}
+    )
     fine_parent_counts: dict[str, Counter[str]] = defaultdict(Counter)
     for row in rows:
         if row.get("final_fine_label", "") and row.get("final_broad_label", ""):
@@ -143,21 +149,31 @@ def main() -> int:
     state_counts: Counter[str] = Counter()
     source_counts: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     for row in rows:
+        cell_type = row.get("final_cell_type", "")
         broad = row.get("final_broad_label", "")
-        if broad:
-            source_counts[("broad", broad)][row.get("broad_freeze_source", "") or row.get("assignment_origin", "") or "second_round"] += 1
         fine = row.get("final_fine_label", "")
-        if fine:
-            source_counts[("subtype", fine)][row.get("final_fine_assignment_source", "") or "second_round_fine"] += 1
+        if cell_type and cell_type != "QC/Unknown":
+            source_counts[("cell_type", cell_type)][
+                row.get("final_fine_assignment_source", "") if fine else ""
+                or row.get("broad_freeze_source", "")
+                or row.get("assignment_origin", "") or "second_round"
+            ] += 1
         for state in (row.get("state_annotations", "") or row.get("final_state_annotation", "")).split(";"):
             if state:
                 state_counts[state] += 1
                 source_counts[("state", state)]["second_round_state_program"] += 1
 
     boundary_by_broad: dict[str, list[dict]] = defaultdict(list)
+    candidate_label: dict[str, str] = {}
     state_by_label: dict[str, dict] = {}
     for candidate in catalog.get("candidate_boundaries", []):
         broad = str(candidate.get("release_broad_label", ""))
+        candidate_id = str(candidate.get("candidate_id", ""))
+        if candidate_id:
+            candidate_label[candidate_id] = (
+                str(candidate.get("release_fine_label", ""))
+                or broad or candidate_id
+            )
         if broad:
             boundary_by_broad[broad].append(candidate)
         state = str(candidate.get("release_state_label", ""))
@@ -170,11 +186,40 @@ def main() -> int:
 
     marker_rows: list[dict[str, object]] = []
     support_rows: list[dict[str, object]] = []
-    for broad, count in sorted(broad_counts.items()):
+    for label, count in sorted(cell_type_counts.items()):
+        fine_candidate = fine_catalog.get(label, {}) or (
+            closest_label(label, fine_catalog) if label in fine_counts else {}
+        )
+        parent = str(fine_candidate.get("parent_release_label", "")) or (
+            fine_parent_counts[label].most_common(1)[0][0]
+            if fine_parent_counts.get(label) else ""
+        )
+        broad = parent or label
         candidates = boundary_by_broad.get(broad, [])
-        genes = five_genes(candidates, profile)
+        anti_ids = {
+            str(value)
+            for candidate in candidates + ([fine_candidate] if fine_candidate else [])
+            for key in ("hard_anti_families", "soft_anti_families")
+            for value in candidate.get(key, [])
+            if value
+        }
+        competing = sorted(candidate_label.get(value, value) for value in anti_ids)
+        parent_genes = five_genes(candidates, profile)
+        if fine_candidate:
+            fine_program = nested(
+                profile, str(fine_candidate.get("profile_program", ""))
+            )
+            fine_genes = (
+                genes_from_program(fine_candidate)
+                or genes_from_program(fine_program)
+            )
+            genes = list(dict.fromkeys(fine_genes[:3] + parent_genes))[:5]
+        else:
+            genes = parent_genes
         for gene in genes:
-            marker_rows.append({"level": "broad", "marker_group": broad, "gene": gene})
+            marker_rows.append({
+                "level": "cell_type", "marker_group": label, "gene": gene,
+            })
         spatial = "; ".join(
             str(nested(profile, str(candidate.get("profile_program", ""))).get("spatial_expectation", ""))
             for candidate in candidates
@@ -182,37 +227,40 @@ def main() -> int:
             and nested(profile, str(candidate.get("profile_program", ""))).get("spatial_expectation")
         )
         support_rows.append({
-            "level": "broad", "parent_label": "", "label": broad,
+            "level": "cell_type", "parent_label": parent, "label": label,
             "n_observations": count, "canonical_markers": ";".join(genes),
-            "evidence_source": "full-catalog second-round query evidence; DEG/pseudobulk; spatial and post-Atlas biological review",
-            "member_sources": "; ".join(f"{name}: {n}" for name, n in source_counts[("broad", broad)].most_common()),
-            "spatial_support": spatial or "sample-specific spatial localization reviewed on complete membership",
-            "release_interpretation": "most specific supported broad identity; geometry alone had no label authority",
-        })
-    for fine, count in sorted(fine_counts.items()):
-        candidate = fine_catalog.get(fine, {}) or closest_label(fine, fine_catalog)
-        program = nested(profile, str(candidate.get("profile_program", "")))
-        genes = genes_from_program(candidate) or genes_from_program(program)
-        genes = genes[:5]
-        parent = str(candidate.get("parent_release_label", "")) or (
-            fine_parent_counts[fine].most_common(1)[0][0] if fine_parent_counts[fine] else ""
-        )
-        for gene in genes:
-            marker_rows.append({"level": "subtype", "marker_group": fine, "gene": gene})
-        support_rows.append({
-            "level": "subtype", "parent_label": parent, "label": fine,
-            "n_observations": count, "canonical_markers": ";".join(genes),
-            "evidence_source": "parent-locked second-round fine discriminator",
-            "member_sources": "; ".join(f"{name}: {n}" for name, n in source_counts[("subtype", fine)].most_common()),
-            "spatial_support": "; ".join(str(value) for value in candidate.get("context_requirements", [])),
-            "release_interpretation": "high-confidence fine identity within its frozen broad parent",
+            "evidence_source": (
+                "parent-locked high-confidence fine discriminator plus frozen broad evidence"
+                if fine_candidate else
+                "full-catalog second-round query evidence; DEG/pseudobulk; spatial and post-Atlas biological review"
+            ),
+            "member_sources": "; ".join(
+                f"{name}: {n}" for name, n
+                in source_counts[("cell_type", label)].most_common()
+            ),
+            "spatial_support": (
+                "; ".join(str(value) for value in fine_candidate.get("context_requirements", []))
+                if fine_candidate else spatial
+            ) or "sample-specific spatial localization reviewed on complete membership",
+            "competing_lineages": ";".join(competing),
+            "anti_marker_review": (
+                "frozen membership retained after direct multi-gene anti-program and pairwise competitor review against "
+                + ", ".join(competing)
+                if competing else
+                "no catalog-declared specific competitor; alternative programs remain recorded in the source review"
+            ),
+            "release_interpretation": (
+                "single public cell type uses a high-confidence fine identity within its frozen broad parent"
+                if fine_candidate else
+                "single public cell type uses the most specific supported broad identity"
+            ),
         })
     state_marker_rows: list[dict[str, object]] = []
     for state, count in sorted(state_counts.items()):
         candidate = state_by_label.get(state.lower(), {}) or closest_label(state, state_by_label)
         genes = genes_from_program(candidate)[:5]
         for gene in genes:
-            state_marker_rows.append({"level": "broad", "marker_group": state, "gene": gene})
+            state_marker_rows.append({"level": "state", "marker_group": state, "gene": gene})
         support_rows.append({
             "level": "state", "parent_label": str(candidate.get("parent_broad_label", "")),
             "label": state, "n_observations": count,
@@ -229,14 +277,31 @@ def main() -> int:
     write_tsv(args.out / "annotation_support_summary.tsv", support_rows, [
         "level", "parent_label", "label", "n_observations",
         "canonical_markers", "evidence_source", "member_sources",
-        "spatial_support", "release_interpretation",
+        "spatial_support", "competing_lineages", "anti_marker_review",
+        "release_interpretation",
     ])
+    write_tsv(
+        args.out / "final_cell_type_census.tsv",
+        [
+            {"final_cell_type": label, "n_observations": count}
+            for label, count in sorted(
+                Counter(
+                    row.get("final_cell_type", "") for row in rows
+                    if row.get("final_cell_type", "")
+                ).items()
+            )
+        ],
+        ["final_cell_type", "n_observations"],
+    )
     manifest = {
-        "status": "PASS", "n_broad": len(broad_counts),
-        "n_fine": len(fine_counts), "n_state": len(state_counts),
+        "status": "PASS", "n_cell_type": len(cell_type_counts),
+        "n_internal_broad": len(broad_counts),
+        "n_internal_fine": len(fine_counts), "n_state": len(state_counts),
+        "public_annotation_column": "final_cell_type",
         "canonical_marker_panel": str((args.out / "canonical_marker_panel.tsv").resolve()),
         "state_marker_panel": str((args.out / "state_marker_panel.tsv").resolve()),
         "annotation_support_summary": str((args.out / "annotation_support_summary.tsv").resolve()),
+        "final_cell_type_census": str((args.out / "final_cell_type_census.tsv").resolve()),
     }
     (args.out / "release_evidence_tables_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

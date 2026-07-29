@@ -167,6 +167,11 @@ def main() -> int:
     project = json.loads(project_path.read_text(encoding="utf-8"))
     if project.get("framework_version") != "2.0.0":
         raise SystemExit("project framework_version must be 2.0.0")
+    observation_unit = str(project.get("observation_unit", "")).strip().lower()
+    if observation_unit not in {"cell", "nucleus", "cellbin", "spot"}:
+        raise SystemExit(
+            "project observation_unit must be cell, nucleus, cellbin or spot"
+        )
     snapshot_registry = root / "state/input_snapshot_registry.tsv"
     with snapshot_registry.open(newline="", encoding="utf-8") as handle:
         matches = [row for row in csv.DictReader(handle, delimiter="\t") if row.get("snapshot_id") == args.snapshot_id and row.get("status") in {"frozen", "validated", "active"}]
@@ -212,9 +217,10 @@ def main() -> int:
     contract = {
         "schema_version": "2.0",
         "framework_version": "2.0.0",
-        "skill_release_version": "2.2.0",
+        "skill_release_version": "2.5.0",
         "project_id": project["project_id"],
         "sample_id": project["sample_id"],
+        "observation_unit": observation_unit,
         "project_config": artifact(project_path),
         "workflow_profile": freeze_artifact(
             args.workflow_profile, root, "workflow_profile", args.contract_id
@@ -462,7 +468,12 @@ def main() -> int:
             "fine_anchor_eligible": False,
         },
         "release_taxonomy": {
-            "vascular_parent": "Vascular-associated",
+            "independent_vascular_lineages": [
+                "Endothelial", "Pericyte/mural", "Smooth muscle"
+            ],
+            "lymphatic_parent": "Endothelial",
+            "legacy_vascular_associated_release_forbidden": True,
+            "single_public_annotation_column": "final_cell_type",
             "hierarchy_validation_required": True,
         },
     }
