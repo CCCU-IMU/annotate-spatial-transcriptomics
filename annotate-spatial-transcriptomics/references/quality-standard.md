@@ -29,14 +29,18 @@ A fine label additionally requires a matching frozen broad parent and an indepen
 - Trigger observation-level splitting only for a documented mixed second-round subcluster.
 - Recompute exact local remainder without converting nonselection into QC.
 - Freeze broad membership only after all cohorts merge into an exact disjoint analysis-set cover.
-- Run Atlas and missing-lineage review only after broad freeze; Atlas may rescue unlabeled broad identities but cannot overwrite a defined label or create fine labels.
+- Run Atlas and missing-lineage review only after broad freeze. For sheep ovary, new mappings use only the immutable contract-bound GSE233801 split-wall v2 bundle reconstructed from original reference clusters. Supported Granulosa, Immune, Stromal/mesenchymal, Endothelial, Pericyte/mural and Smooth-muscle pairs may rescue an unlabeled broad identity only after current-query classwise calibration; challenge-only Epithelial/mesothelial and Theca can raise review questions but cannot write labels. Atlas cannot overwrite a defined label, create a fine label or substitute another reference. The deprecated merged v1 bundle is resume-only.
 - Audit every present broad, every zero-census catalog lineage, every stable unmodeled program and every parent-by-fine candidate.
+- After tissue-specific review, audit broad identities strictly one at a time. One invocation exposes one active cell type, one multichannel packet and one decision. The decision must separately close current-member precision, whole-query recall, molecular identity, whole-section spatial consistency and the literature boundary. A patch reopens only types whose own membership/recall/watch signature changed.
 - Convert unresolved biological cells to typed QC only at final materialization.
 
 ## Failure patterns that block release
 
 - Granulosa, Epithelial, Smooth muscle or another restricted lineage expands diffusely through an anatomically incompatible compartment.
 - A mixed subcluster is assigned wholesale from its aggregate winner despite an independent competitor.
+- Multiple visible/shared marker programs are treated as mixed without material pairwise-exclusive direct identity components.
+- A clear specific parent is reopened by a weak background trace that lacks independent subcluster-level DEG/pseudobulk and stability evidence.
+- Observation-level splitting is attempted before the already computed neighboring Leiden partitions are checked.
 - Epithelial is inferred from one keratin/surface marker or a single spatial component.
 - Smooth muscle is inferred from `ACTA2/TAGLN` without mature nonvascular contractile identity or mural exclusion.
 - Endothelial, Pericyte/mural and mature nonvascular Smooth muscle are independently adjudicated; ACTA2/TAGLN-only or irreducibly mixed vascular-wall observations are not forced into any of them.
@@ -65,6 +69,8 @@ For sheep ovary, reduce final biological approval to three required questions:
 3. Where follicles are present, are stage-appropriate follicle ROIs interpretable, and do large/antral candidates show a cavity-bounding Granulosa layer followed by Theca-interna steroidogenesis with interleaved vasculature and an outer fibromuscular/stromal transition?
 
 Run the deterministic sheep-ovary biological-quality review after broad freeze and Atlas. A sample without follicles or without antral follicles may close the corresponding structure as `NOT_EVALUABLE`; absence is not a failure. A coherent multisector lineage program hidden inside generic Stromal/unresolved is an iteration trigger. Reopen only the exact source subcluster or bounded follicle ROI. Spatial shape alone never writes a label.
+
+Only after those three endpoints are reviewed may the controller enter **逐大类全样本复核**. The Agent announces `现在开始对 <cell type> 进行专项复核。`, completes that type and freezes its closure before opening the next type. Shared raw-count and coordinate caches are allowed; batch generation or batch closure of formal cell-type decisions is not.
 
 ## Main-Agent approval
 

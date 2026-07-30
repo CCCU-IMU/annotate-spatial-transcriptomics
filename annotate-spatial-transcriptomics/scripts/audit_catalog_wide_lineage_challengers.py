@@ -764,13 +764,14 @@ def main() -> int:
                 f"watch_group:{boundary}:{cluster}"
                 for boundary, cluster in sorted(watch_groups_by_broad.get(broad, set()))
             ]
-            + [f"global_membership:{global_membership_semantic_sha256}"]
         )
         signature = unit_signature(review_mode, broad, signature_tokens)
         closed = (review_mode, broad, signature) in prior_closed
-        # Every present broad is reviewed on the exact complete-membership
-        # scope.  Any membership change alters the global semantic signature
-        # and reopens every broad; an unchanged retained scope can close.
+        # The review still scans the whole query, but closure is invalidated by
+        # a change to this target's current members, recall components or source
+        # watches.  An unrelated lineage patch must not reopen every already
+        # closed type.  Patches that move cells into or out of this target alter
+        # these tokens and therefore reopen it deterministically.
         open_review = not closed
         review_id = ""
         if open_review:

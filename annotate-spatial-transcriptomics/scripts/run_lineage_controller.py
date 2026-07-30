@@ -16,54 +16,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from evidence_schema_lib import sha256
+from controller_runtime_state import materialize_runtime_state
 from lineage_controller_lib import deterministic_cell_id_set_hash
-
-
-PHASES = (
-    "whole_tissue_partition",
-    "cluster_cohort_recluster",
-    "local_mixed_subcluster_split",
-    "merge_and_freeze_broad",
-    "atlas_and_completeness_review",
-    "materialize_final_release",
+from membership_transform_lib import load_and_validate_chain
+from runtime_dependency_registry import (
+    CANONICAL_DEPENDENCIES,
+    CANONICAL_SCRIPTS,
+    PHASE_ORDER,
+    REGISTRY_VERSION,
 )
+from validate_fixed_atlas_bundle import (
+    ACTIVE_BUNDLE_ID,
+    validate as validate_fixed_atlas,
+)
+
+
+PHASES = PHASE_ORDER
 WHOLE_TISSUE_FORK_WORKER_CAP = 64
-CANONICAL_SCRIPTS = (
-    "validate_phase_runtime.py",
-    "plan_cohort_resources.py",
-    "run_observation_lineage_scoring.R",
-    "derive_candidate_local_subsets.R",
-    "close_exact_remainders.py",
-    "build_whole_tissue_cohort_plan.py",
-    "adjudicate_second_round_subclusters.py",
-    "audit_local_split_workload.py",
-    "build_candidate_context_evidence.py",
-    "merge_and_freeze_broad_membership.py",
-    "route_global_atlas_v2.py",
-    "validate_global_atlas_v2.py",
-    "apply_post_merge_atlas_routing.py",
-    "review_post_merge_unresolved_components.py",
-    "audit_post_merge_completeness.py",
-    "audit_catalog_wide_lineage_challengers.py",
-    "build_cell_type_review_marker_manifest.py",
-    "export_cell_type_review_counts.R",
-    "build_broad_cell_type_review_evidence.py",
-    "export_broad_cell_type_review_pseudobulk.R",
-    "summarize_broad_cell_type_review_pseudobulk.py",
-    "build_broad_cell_type_review_packet_index.py",
-    "validate_catalog_wide_lineage_review_decisions.py",
-    "apply_catalog_wide_lineage_review.py",
-    "validate_sheep_ovary_biological_quality.py",
-    "apply_sheep_ovary_follicle_roi_repair.py",
-    "screen_rare_cell_programs.R",
-    "screen_spatial_foci.py",
-    "materialize_oocyte_cluster_membership.py",
-    "apply_cell_id_membership_patch.py",
-    "materialize_parent_locked_fine_proposals.py",
-    "materialize_final_release_v2_2.py",
-    "evaluate_annotation_robustness.py",
-    "run_lineage_controller.py",
-)
 FORBIDDEN_SCORING_COLUMNS = {
     "provisional_broad", "provisional_broad_after_score_freeze",
     "initial_broad_label", "broad_label", "fine_label", "final_broad_label",
@@ -130,6 +99,36 @@ def run(command: list[str], log: Path, allowed_codes: tuple[int, ...] = (0,)) ->
         )
 
 
+def initialize_membership_transform_chain(
+    paths: dict[str, Path], membership: Path, output: Path, log_root: Path,
+) -> Path:
+    out = output / "T0000_initial"
+    run([
+        sys.executable, str(paths["manage_membership_transform_chain.py"]),
+        "init", "--membership", str(membership.resolve()), "--out", str(out),
+    ], log_root / "membership_transform_T0000.log")
+    return out / "membership_transform_chain.json"
+
+
+def append_membership_transform(
+    paths: dict[str, Path], chain: Path, operation: str, source: Path,
+    result: Path, evidence_manifest: Path, output: Path, index: int,
+    log_root: Path, target_cell_type: str = "",
+) -> Path:
+    out = output / f"T{index:04d}_{operation}"
+    command = [
+        sys.executable, str(paths["manage_membership_transform_chain.py"]),
+        "append", "--chain", str(chain.resolve()), "--operation", operation,
+        "--source", str(source.resolve()), "--result", str(result.resolve()),
+        "--evidence-manifest", str(evidence_manifest.resolve()),
+        "--out", str(out),
+    ]
+    if target_cell_type:
+        command.extend(["--target-cell-type", target_cell_type])
+    run(command, log_root / f"membership_transform_T{index:04d}.log")
+    return out / "membership_transform_chain.json"
+
+
 def resolve_bound(contract_path: Path, record: dict, label: str) -> Path:
     path = Path(str(record.get("path", "")))
     if not path.is_absolute():
@@ -152,6 +151,8 @@ def validate_contract(contract_path: Path) -> tuple[dict, dict[str, Path]]:
         raise RuntimeError("annotation contract does not bind controller v2.2.0")
     if controller.get("phase_order") != list(PHASES):
         raise RuntimeError("annotation contract does not bind the staged v2.2 architecture")
+    if controller.get("runtime_dependency_registry_version") != REGISTRY_VERSION:
+        raise RuntimeError("annotation contract binds a stale runtime dependency registry")
     observation_unit = str(contract.get("observation_unit", "")).strip().lower()
     if observation_unit not in {"cell", "nucleus", "cellbin", "spot"}:
         raise RuntimeError("annotation contract has no supported observation_unit")
@@ -165,6 +166,8 @@ def validate_contract(contract_path: Path) -> tuple[dict, dict[str, Path]]:
     ):
         raise RuntimeError("annotation contract does not bind the v2.2 vascular taxonomy")
     script_dir = Path(__file__).resolve().parent
+    if set(controller.get("scripts", {})) != set(CANONICAL_SCRIPTS):
+        raise RuntimeError("contract script set differs from the canonical registry")
     paths = {name: script_dir / name for name in CANONICAL_SCRIPTS}
     for name, path in paths.items():
         record = controller.get("scripts", {}).get(name, {})
@@ -190,9 +193,9 @@ def validate_contract(contract_path: Path) -> tuple[dict, dict[str, Path]]:
         ):
             raise RuntimeError(f"contract does not bind installed canonical {name}")
         paths[name] = path
-    for dependency_name in (
-        "controller_thresholds.py", "lineage_controller_lib.py"
-    ):
+    if set(controller.get("dependencies", {})) != set(CANONICAL_DEPENDENCIES):
+        raise RuntimeError("contract dependency set differs from the canonical registry")
+    for dependency_name in CANONICAL_DEPENDENCIES:
         dependency = script_dir / dependency_name
         record = controller.get("dependencies", {}).get(dependency_name, {})
         if (
@@ -242,10 +245,35 @@ def validate_contract(contract_path: Path) -> tuple[dict, dict[str, Path]]:
     paths["catalog"] = resolve_bound(
         contract_path, contract.get("candidate_catalog", {}), "candidate catalog"
     )
+    paths["atlas_bundle"] = resolve_bound(
+        contract_path, contract.get("atlas_bundle", {}), "fixed Atlas bundle"
+    )
+    atlas_bundle = json.loads(paths["atlas_bundle"].read_text(encoding="utf-8"))
+    atlas_errors = validate_fixed_atlas(atlas_bundle)
+    if atlas_errors:
+        raise RuntimeError(
+            "fixed GSE233801 Atlas descriptor is invalid: "
+            + "; ".join(atlas_errors)
+        )
+    atlas_policy = contract.get("atlas_routing", {})
+    if not (
+        atlas_policy.get("bundle_id") == atlas_bundle.get("bundle_id")
+        and atlas_policy.get("capability_matrix_enforced") is True
+        and atlas_policy.get("runtime_atlas_substitution_forbidden") is True
+    ):
+        raise RuntimeError("contract does not enforce the fixed GSE233801 Atlas")
     context_record = contract.get("candidate_context_evidence")
     if context_record:
         paths["context_evidence"] = resolve_bound(
             contract_path, context_record, "candidate context evidence"
+        )
+    input_audit_record = contract.get("query_input_audit")
+    if input_audit_record:
+        paths["query_input_audit"] = resolve_bound(
+            contract_path, input_audit_record, "query input audit"
+        )
+        paths["raw_count_assay"] = str(
+            input_audit_record.get("raw_count_assay", "")
         )
     paths["selected_input"] = selected_path
     input_scope = contract.get("input_scope", {})
@@ -1901,21 +1929,73 @@ def run_catalog_wide_review_iterations(
     args, paths: dict[str, Path], output: Path, membership: Path,
     observation_score_paths: list[Path], cluster_evidence_paths: list[Path],
     biological_quality_required: bool,
+    membership_already_includes_prior_applies: bool = False,
 ) -> dict:
-    """Run bounded post-Atlas precision/recall review without reclustering."""
+    """Run exactly one formal per-cell-type review step without reclustering."""
     policy = json.loads(
         paths["threshold_registry"].read_text(encoding="utf-8")
     )["catalog_wide_lineage_review_policy"]
     maximum_decisions = int(policy["maximum_decision_rounds"])
     supplied_decisions = list(args.lineage_review_decisions or [])
-    if len(supplied_decisions) > maximum_decisions:
-        raise RuntimeError("catalog-wide review decisions exceed the bounded-round policy")
+    if len(supplied_decisions) > 1:
+        raise RuntimeError(
+            "one controller invocation may decide only one active cell type"
+        )
     current_membership = membership
-    prior_validations: list[Path] = []
-    apply_manifests: list[Path] = []
-    evidence_packet_manifests: list[Path] = []
-    previous_review: Path | None = None
+    prior_validations: list[Path] = list(
+        args.lineage_review_prior_validation or []
+    )
+    apply_manifests: list[Path] = list(
+        args.lineage_review_prior_apply or []
+    )
+    evidence_packet_manifests: list[Path] = list(
+        args.lineage_review_prior_packet or []
+    )
+    previous_review: Path | None = args.lineage_review_previous_review
     last_review: Path | None = None
+
+    prior_replay_membership = current_membership
+    for index, manifest_path in enumerate(apply_manifests, 1):
+        document = json.loads(manifest_path.read_text(encoding="utf-8"))
+        source = document.get("source_membership", {})
+        result = document.get("membership", {})
+        source_path = Path(str(source.get("path", "")))
+        result_path = Path(str(result.get("path", "")))
+        if (
+            document.get("stage") != "catalog_wide_lineage_review_apply"
+            or document.get("formal_batch_closure_performed") is not False
+            or not source_path.is_file()
+            or source.get("sha256") != sha256(source_path)
+            or not result_path.is_file()
+            or result.get("sha256") != sha256(result_path)
+        ):
+            raise RuntimeError(
+                f"prior cell-type review apply {index} is stale or non-contiguous"
+            )
+        if not membership_already_includes_prior_applies:
+            if source_path.resolve() != current_membership.resolve():
+                raise RuntimeError(
+                    f"prior cell-type review apply {index} is non-contiguous"
+                )
+            current_membership = result_path
+        elif index > 1:
+            previous = json.loads(
+                apply_manifests[index - 2].read_text(encoding="utf-8")
+            )
+            previous_result = Path(str(previous["membership"]["path"]))
+            if source_path.resolve() != previous_result.resolve():
+                raise RuntimeError(
+                    f"prior cell-type review apply {index} is non-contiguous"
+                )
+    if membership_already_includes_prior_applies and apply_manifests:
+        final_prior = json.loads(
+            apply_manifests[-1].read_text(encoding="utf-8")
+        )
+        final_prior_path = Path(str(final_prior["membership"]["path"]))
+        if final_prior_path.resolve() != prior_replay_membership.resolve():
+            raise RuntimeError(
+                "resume membership differs from the last prior cell-type review apply"
+            )
 
     static_out = output / "07_catalog_wide_review_evidence_static"
     marker_out = static_out / "00_marker_manifest"
@@ -1935,7 +2015,7 @@ def run_catalog_wide_review_iterations(
         "--marker-manifest", str(marker_manifest),
         "--out", str(count_out),
     ], output / "logs/07_catalog_wide_raw_count_export.log")
-    for review_round in range(1, maximum_decisions + 2):
+    for review_round in range(len(prior_validations) + 1, len(prior_validations) + 2):
         review_out = output / f"07_catalog_wide_review_round_{review_round:02d}"
         review_authority = stage_authority(
             "atlas_and_completeness_review", args.contract, paths, review_out,
@@ -1982,7 +2062,7 @@ def run_catalog_wide_review_iterations(
         last_review = review_out / "catalog_wide_lineage_review_manifest.json"
         review = json.loads(last_review.read_text(encoding="utf-8"))
         if review.get("status") == "PASS":
-            if len(supplied_decisions) > len(prior_validations):
+            if supplied_decisions:
                 raise RuntimeError("unused catalog-wide review decision file remains")
             return {
                 "status": "PASS", "membership": current_membership,
@@ -1990,7 +2070,52 @@ def run_catalog_wide_review_iterations(
                 "decision_validations": prior_validations,
                 "apply_manifests": apply_manifests,
                 "evidence_packet_manifests": evidence_packet_manifests,
+                "review_state": None,
             }
+        state_out = review_out / "00_sequential_cell_type_state"
+        state_command = [
+            sys.executable,
+            str(paths["manage_cell_type_review_queue.py"]),
+            "--review-manifest", str(last_review.resolve()),
+            "--maximum-decisions-per-cell-type", str(maximum_decisions),
+            "--out", str(state_out),
+        ]
+        if args.lineage_review_previous_state:
+            state_command.extend([
+                "--previous-state",
+                str(args.lineage_review_previous_state.resolve()),
+            ])
+        for path in prior_validations:
+            state_command.extend([
+                "--prior-decision-validation", str(path.resolve())
+            ])
+        run(
+            state_command,
+            output / f"logs/07_cell_type_state_round_{review_round:02d}.log",
+            allowed_codes=(0, 2),
+        )
+        review_state_path = state_out / "cell_type_review_state.json"
+        review_state = json.loads(
+            review_state_path.read_text(encoding="utf-8")
+        )
+        active = review_state.get("active_cell_type_review") or {}
+        active_review_id = str(active.get("review_id", ""))
+        if review_state.get("status") == "BLOCKED":
+            return {
+                "status": "ITERATION_REQUIRED",
+                "membership": current_membership,
+                "review_manifest": last_review,
+                "decision_validations": prior_validations,
+                "apply_manifests": apply_manifests,
+                "evidence_packet_manifests": evidence_packet_manifests,
+                "review_state": review_state_path,
+                "active_cell_type": "",
+                "required_progress_message": (
+                    "该细胞类型两轮专项修订后仍未关闭，需要人工生物学裁决。"
+                ),
+            }
+        if review_state.get("status") != "REVIEW_REQUIRED" or not active_review_id:
+            raise RuntimeError("open review did not yield exactly one active cell type")
         evidence_root = review_out / "broad_cell_type_evidence"
         biological_quality_path: Path | None = None
         if biological_quality_required:
@@ -2026,6 +2151,7 @@ def run_catalog_wide_review_iterations(
             "--marker-manifest", str(marker_manifest),
             "--membership", str(current_membership.resolve()),
             "--review-manifest", str(last_review.resolve()),
+            "--active-review-id", active_review_id,
             "--catalog", str(paths["catalog"]),
             "--threshold-registry", str(paths["threshold_registry"]),
             "--workers", str(max(1, int(args.resolution_workers))),
@@ -2081,6 +2207,7 @@ def run_catalog_wide_review_iterations(
             "--broad-evidence-manifest", str(broad_evidence_manifest),
             "--pseudobulk-summary-manifest", str(pseudobulk_summary_manifest),
             "--threshold-registry", str(paths["threshold_registry"]),
+            "--active-review-id", active_review_id,
             "--out", str(packet_out),
         ]
         if biological_quality_path:
@@ -2096,22 +2223,27 @@ def run_catalog_wide_review_iterations(
             packet_out / "broad_cell_type_review_packet_manifest.json"
         )
         evidence_packet_manifests.append(evidence_packet_manifest)
-        decision_index = review_round - 1
-        if decision_index >= maximum_decisions or decision_index >= len(supplied_decisions):
+        if not supplied_decisions:
             return {
-                "status": "ITERATION_REQUIRED", "membership": current_membership,
+                "status": "REVIEW_REQUIRED", "membership": current_membership,
                 "review_manifest": last_review,
                 "decision_validations": prior_validations,
                 "apply_manifests": apply_manifests,
                 "evidence_packet_manifests": evidence_packet_manifests,
+                "review_state": review_state_path,
+                "active_cell_type": active.get("target_broad_label", ""),
+                "required_progress_message": active.get(
+                    "required_progress_message", ""
+                ),
             }
         decision_out = output / f"07_catalog_wide_decision_round_{review_round:02d}"
         run([
             sys.executable,
             str(paths["validate_catalog_wide_lineage_review_decisions.py"]),
             "--review-manifest", str(last_review),
+            "--review-state", str(review_state_path),
             "--evidence-packet-manifest", str(evidence_packet_manifest),
-            "--decisions", str(supplied_decisions[decision_index].resolve()),
+            "--decisions", str(supplied_decisions[0].resolve()),
             "--out", str(decision_out),
         ], output / f"logs/07_catalog_wide_decision_round_{review_round:02d}.log", allowed_codes=(0, 2))
         validation_path = (
@@ -2125,12 +2257,15 @@ def run_catalog_wide_review_iterations(
                 "decision_validations": prior_validations + [validation_path],
                 "apply_manifests": apply_manifests,
                 "evidence_packet_manifests": evidence_packet_manifests,
+                "review_state": review_state_path,
+                "active_cell_type": active.get("target_broad_label", ""),
             }
         apply_out = output / f"07_catalog_wide_apply_round_{review_round:02d}"
         apply_authority = stage_authority(
             "atlas_and_completeness_review", args.contract, paths, apply_out,
             post_atlas_membership=current_membership,
             catalog_review_manifest=last_review,
+            cell_type_review_state=review_state_path,
             catalog_decision_validation=validation_path,
             candidate_catalog=paths["catalog"],
             context_evidence=paths.get("context_evidence"),
@@ -2141,6 +2276,7 @@ def run_catalog_wide_review_iterations(
             "--stage-authority", str(apply_authority),
             "--membership", str(current_membership.resolve()),
             "--review-manifest", str(last_review),
+            "--review-state", str(review_state_path),
             "--decision-validation", str(validation_path),
             "--catalog", str(paths["catalog"]),
             "--out", str(apply_out),
@@ -2158,8 +2294,266 @@ def run_catalog_wide_review_iterations(
         current_membership = Path(str(apply_doc["membership"]["path"]))
         prior_validations.append(validation_path)
         apply_manifests.append(apply_manifest)
-        previous_review = last_review
+        return {
+            "status": "REVIEW_STEP_APPLIED",
+            "membership": current_membership,
+            "review_manifest": last_review,
+            "decision_validations": prior_validations,
+            "apply_manifests": apply_manifests,
+            "evidence_packet_manifests": evidence_packet_manifests,
+            "review_state": review_state_path,
+            "active_cell_type": active.get("target_broad_label", ""),
+            "required_progress_message": (
+                "当前类型已关闭或修订；重新运行本阶段以激活下一个细胞类型。"
+            ),
+        }
     raise RuntimeError("catalog-wide review loop exceeded its bounded policy")
+
+
+def resume_sequential_cell_type_review(
+    args, contract: dict, paths: dict[str, Path], prerequisite: dict,
+    cluster_evidence_paths: list[Path], fine_proposal_paths: list[Path],
+    state_proposal_paths: list[Path], unmodeled_manifest_paths: list[Path],
+    observation_score_paths: list[Path],
+    local_subset_validation_paths: list[Path],
+    local_remainder_audit_paths: list[Path],
+) -> dict:
+    """Resume only the final serial biological review; never rerun Atlas or clustering."""
+    resume_path = args.resume_review_manifest.resolve()
+    resume = json.loads(resume_path.read_text(encoding="utf-8"))
+    if (
+        resume.get("phase") != "atlas_and_completeness_review"
+        or resume.get("status") != "REVIEW_REQUIRED"
+        or resume.get("pause_reason") not in {
+            "single_active_cell_type_review",
+            "single_cell_type_review_step_applied",
+        }
+        or resume.get("annotation_contract", {}).get("sha256")
+        != sha256(args.contract)
+        or resume.get("prerequisite", {}).get("sha256")
+        != sha256(args.prerequisite_manifest)
+    ):
+        raise RuntimeError(
+            "resume manifest is not a canonical pause from this contract/prerequisite"
+        )
+
+    def one(record: dict, label: str) -> Path:
+        path = Path(str((record or {}).get("path", "")))
+        if not path.is_file() or (record or {}).get("sha256") != sha256(path):
+            raise RuntimeError(f"resume {label} is missing or stale")
+        return path
+
+    current_membership = one(resume.get("membership", {}), "membership")
+    transform_chain_path = one(
+        resume.get("membership_transform_chain", {}),
+        "membership transform chain",
+    )
+    transform_document = load_and_validate_chain(
+        transform_chain_path, current_membership
+    )
+    transform_index = int(transform_document.get("transform_n", 0)) + 1
+    prior_validations = bound_artifact_paths(
+        resume.get("catalog_wide_decision_validations", []),
+        "resume cell-type decision validation",
+    )
+    prior_applies = bound_artifact_paths(
+        resume.get("catalog_wide_apply_manifests", []),
+        "resume cell-type apply manifest",
+    )
+    prior_packets = bound_artifact_paths(
+        resume.get("catalog_wide_evidence_packet_manifests", []),
+        "resume cell-type evidence packet",
+    )
+    previous_review = one(
+        resume.get("catalog_wide_lineage_review", {}),
+        "previous cell-type review",
+    )
+    previous_state_record = resume.get("cell_type_review_state")
+    previous_state = (
+        one(previous_state_record, "previous cell-type review state")
+        if previous_state_record else None
+    )
+    for supplied, recovered, label in (
+        (args.lineage_review_prior_validation, prior_validations, "validation"),
+        (args.lineage_review_prior_apply, prior_applies, "apply"),
+        (args.lineage_review_prior_packet, prior_packets, "packet"),
+    ):
+        if supplied and [path.resolve() for path in supplied] != [
+            path.resolve() for path in recovered
+        ]:
+            raise RuntimeError(f"resume {label} list differs from the pause manifest")
+    args.lineage_review_prior_validation = prior_validations
+    args.lineage_review_prior_apply = prior_applies
+    args.lineage_review_prior_packet = prior_packets
+    args.lineage_review_previous_review = previous_review
+    args.lineage_review_previous_state = previous_state
+
+    profile = json.loads(paths["profile"].read_text(encoding="utf-8"))
+    quality_required = bool(
+        profile.get("biological_quality_endpoints", {}).get("required", False)
+    )
+    prior_apply_n = len(prior_applies)
+    review = run_catalog_wide_review_iterations(
+        args, paths, args.out.resolve(), current_membership,
+        observation_score_paths, cluster_evidence_paths, quality_required,
+        membership_already_includes_prior_applies=True,
+    )
+    review_status = str(review["status"])
+    current_membership = Path(review["membership"])
+    apply_manifests = list(review["apply_manifests"])
+    transform_root = args.out.resolve() / "membership_transform_chain"
+    for apply_manifest_path in apply_manifests[prior_apply_n:]:
+        apply_doc = json.loads(
+            apply_manifest_path.read_text(encoding="utf-8")
+        )
+        transform_chain_path = append_membership_transform(
+            paths, transform_chain_path, "cell_type_review_patch",
+            Path(str(apply_doc["source_membership"]["path"])),
+            Path(str(apply_doc["membership"]["path"])),
+            apply_manifest_path, transform_root, transform_index,
+            args.out.resolve() / "logs",
+            target_cell_type=str(apply_doc.get("active_cell_type", "")),
+        )
+        transform_index += 1
+
+    common = {
+        "phase": "atlas_and_completeness_review",
+        "formal_membership_written": False,
+        "membership": artifact(current_membership),
+        "membership_transform_chain": artifact(transform_chain_path),
+        "prerequisite": artifact(args.prerequisite_manifest),
+        "resume_source": artifact(resume_path),
+        "atlas_validation": resume.get("atlas_validation"),
+        "post_merge_unresolved_review": resume.get(
+            "post_merge_unresolved_review"
+        ),
+        "biological_quality_status": resume.get(
+            "biological_quality_status", "NOT_REQUIRED"
+        ),
+        "biological_quality_review": resume.get(
+            "biological_quality_review"
+        ),
+        "targeted_follicle_roi_repair": resume.get(
+            "targeted_follicle_roi_repair"
+        ),
+        "catalog_wide_lineage_review_status": review_status,
+        "catalog_wide_lineage_review": artifact(review["review_manifest"]),
+        "cell_type_review_state": (
+            artifact(Path(review["review_state"]))
+            if review.get("review_state") else None
+        ),
+        "active_cell_type_review": review.get("active_cell_type", ""),
+        "required_progress_message": review.get(
+            "required_progress_message", ""
+        ),
+        "catalog_wide_decision_validations": [
+            artifact(path) for path in review["decision_validations"]
+        ],
+        "catalog_wide_evidence_packet_manifests": [
+            artifact(path) for path in review["evidence_packet_manifests"]
+        ],
+        "catalog_wide_apply_manifests": [
+            artifact(path) for path in apply_manifests
+        ],
+        "observation_scores": [artifact(path) for path in observation_score_paths],
+        "cluster_evidence": [artifact(path) for path in cluster_evidence_paths],
+        "fine_candidate_proposals": [artifact(path) for path in fine_proposal_paths],
+        "state_annotation_proposals": [artifact(path) for path in state_proposal_paths],
+    }
+    if review_status != "PASS":
+        pause_reason = {
+            "REVIEW_REQUIRED": "single_active_cell_type_review",
+            "REVIEW_STEP_APPLIED": "single_cell_type_review_step_applied",
+            "ITERATION_REQUIRED": "manual_biological_adjudication_required",
+        }.get(review_status, "single_active_cell_type_review")
+        return {
+            **common,
+            "status": "REVIEW_REQUIRED",
+            "pause_reason": pause_reason,
+        }
+
+    completeness_out = args.out.resolve() / "08_post_catalog_completeness"
+    command = [
+        sys.executable, str(paths["audit_post_merge_completeness.py"]),
+        "--membership", str(current_membership),
+        "--catalog", str(paths["catalog"]),
+        "--membership-transform-chain", str(transform_chain_path),
+        "--out", str(completeness_out),
+    ]
+    for path in cluster_evidence_paths:
+        command.extend(["--cluster-evidence", str(path)])
+    for path in fine_proposal_paths:
+        command.extend(["--fine-audit", str(path)])
+    for path in unmodeled_manifest_paths:
+        command.extend(["--unmodeled", str(path)])
+    if args.unmodeled_decisions:
+        command.extend(["--unmodeled-review", str(args.unmodeled_decisions)])
+    for path in local_subset_validation_paths:
+        command.extend(["--local-subset-validation", str(path)])
+    for path in local_remainder_audit_paths:
+        command.extend(["--local-remainder-audit", str(path)])
+    if "context_evidence" in paths:
+        command.extend(["--context-evidence", str(paths["context_evidence"])])
+    if quality_required:
+        command.append("--defer-canonical-zero-to-biological-review")
+    run(
+        command, args.out.resolve() / "logs/08_post_catalog_completeness.log",
+        allowed_codes=(0, 2),
+    )
+    completeness_manifest = (
+        completeness_out / "post_merge_completeness_manifest.json"
+    )
+    completeness_status = str(json.loads(
+        completeness_manifest.read_text(encoding="utf-8")
+    ).get("status", ""))
+    quality_status = "NOT_REQUIRED"
+    quality_manifest = None
+    if quality_required:
+        quality_out = args.out.resolve() / "09_post_catalog_biological_quality"
+        quality_command = [
+            sys.executable,
+            str(paths["validate_sheep_ovary_biological_quality.py"]),
+            "--membership", str(current_membership),
+            "--catalog", str(paths["catalog"]), "--out", str(quality_out),
+        ]
+        for path in observation_score_paths:
+            quality_command.extend(["--scores", str(path)])
+        if args.canonical_oocyte_review:
+            quality_command.extend([
+                "--canonical-oocyte-review", str(args.canonical_oocyte_review)
+            ])
+        run(
+            quality_command,
+            args.out.resolve() / "logs/09_post_catalog_biological_quality.log",
+            allowed_codes=(0, 2),
+        )
+        quality_path = (
+            quality_out / "sheep_ovary_biological_quality_review.json"
+        )
+        quality_status = str(json.loads(
+            quality_path.read_text(encoding="utf-8")
+        ).get("status", ""))
+        quality_manifest = artifact(quality_path)
+    unresolved_n = sum(
+        not str(row.get("final_broad_label", ""))
+        for row in read_tsv(current_membership)
+    )
+    return {
+        **common,
+        "status": (
+            "PASS"
+            if completeness_status == "PASS"
+            and quality_status in {"PASS", "NOT_REQUIRED"}
+            else "ITERATION_REQUIRED"
+        ),
+        "completeness": artifact(completeness_manifest),
+        "biological_quality_status": quality_status,
+        "biological_quality_review": quality_manifest,
+        "n_unresolved_biological": unresolved_n,
+        "unlabeled_broad_rescue_n": int(
+            resume.get("unlabeled_broad_rescue_n", 0) or 0
+        ),
+    }
 
 
 def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
@@ -2194,10 +2588,24 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         or membership_record.get("sha256") != sha256(args.frozen_broad_membership)
     ):
         raise RuntimeError("Atlas phase membership differs from broad freeze")
+    if args.resume_review_manifest:
+        return resume_sequential_cell_type_review(
+            args, contract, paths, prerequisite, cluster_evidence_paths,
+            fine_proposal_paths, state_proposal_paths,
+            unmodeled_manifest_paths, observation_score_paths,
+            local_subset_validation_paths, local_remainder_audit_paths,
+        )
+    atlas_bundle = json.loads(paths["atlas_bundle"].read_text(encoding="utf-8"))
+    if atlas_bundle.get("bundle_id") != ACTIVE_BUNDLE_ID:
+        raise RuntimeError(
+            "new Atlas routing requires the active split-wall GSE233801 bundle; "
+            "the merged v1 bundle is resume-only"
+        )
     output = args.out.resolve()
     authority = stage_authority(
         "atlas_and_completeness_review", args.contract, paths, output,
         frozen_broad=args.frozen_broad_membership,
+        atlas_bundle=paths["atlas_bundle"],
         atlas_mapping=args.atlas_mapping,
         calibration_manifest=args.calibration_manifest,
         atlas_decisions=args.atlas_decisions,
@@ -2217,6 +2625,7 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         "--atlas-mapping", str(args.atlas_mapping.resolve()),
         "--calibration-manifest", str(args.calibration_manifest.resolve()),
         "--workflow-profile", str(paths["workflow_profile"]),
+        "--atlas-bundle-manifest", str(paths["atlas_bundle"]),
         "--catalog", str(paths["catalog"]),
         "--out", str(routing_out),
         *(
@@ -2280,6 +2689,18 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         (apply_out / "post_atlas_membership_manifest.json").read_text(encoding="utf-8")
     )
     post_membership = Path(applied["membership"]["path"])
+    transform_root = output / "membership_transform_chain"
+    transform_chain_path = initialize_membership_transform_chain(
+        paths, args.frozen_broad_membership, transform_root, output / "logs"
+    )
+    transform_index = 1
+    transform_chain_path = append_membership_transform(
+        paths, transform_chain_path, "atlas_unlabeled_broad_rescue",
+        args.frozen_broad_membership, post_membership,
+        apply_out / "post_atlas_membership_manifest.json",
+        transform_root, transform_index, output / "logs",
+    )
+    transform_index += 1
     profile = json.loads(paths["profile"].read_text(encoding="utf-8"))
     quality_required = bool(
         profile.get("biological_quality_endpoints", {}).get("required", False)
@@ -2292,6 +2713,7 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         context_evidence=paths.get("context_evidence"),
     )
     unresolved_review_out = output / "03_post_merge_unresolved_review"
+    pre_unresolved_membership = post_membership
     unresolved_review_command = [
         sys.executable,
         str(paths["review_post_merge_unresolved_components.py"]),
@@ -2323,12 +2745,19 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         unresolved_review_manifest_path.read_text(encoding="utf-8")
     )
     post_membership = Path(unresolved_review_manifest["membership"]["path"])
+    transform_chain_path = append_membership_transform(
+        paths, transform_chain_path, "post_merge_unresolved_return",
+        pre_unresolved_membership, post_membership,
+        unresolved_review_manifest_path, transform_root, transform_index,
+        output / "logs",
+    )
+    transform_index += 1
     completeness_out = output / "04_completeness"
     command = [
         sys.executable, str(paths["audit_post_merge_completeness.py"]),
         "--membership", str(post_membership),
         "--catalog", str(paths["catalog"]),
-        "--post-merge-review-manifest", str(unresolved_review_manifest_path),
+        "--membership-transform-chain", str(transform_chain_path),
         "--out", str(completeness_out),
     ]
     for path in cluster_evidence_paths:
@@ -2393,6 +2822,7 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             raise RuntimeError("invalid sheep-ovary biological quality status")
         quality_manifest = artifact(quality_path)
         if quality_status == "ITERATION_REQUIRED":
+            pre_follicle_repair_membership = post_membership
             repair = run_targeted_follicle_roi_iteration(
                 args, contract, paths, output, post_membership, quality_path,
                 observation_score_paths,
@@ -2405,6 +2835,13 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
                     raise RuntimeError("invalid post-repair sheep-ovary quality status")
                 quality_manifest = artifact(quality_path)
                 follicle_repair_manifest = artifact(repair["repair_manifest"])
+                transform_chain_path = append_membership_transform(
+                    paths, transform_chain_path, "follicle_roi_reconciliation",
+                    pre_follicle_repair_membership, post_membership,
+                    repair["repair_manifest"], transform_root, transform_index,
+                    output / "logs",
+                )
+                transform_index += 1
                 membership_output = artifact(post_membership)
                 post_rows = read_tsv(post_membership)
                 n_unresolved_biological = sum(
@@ -2417,10 +2854,7 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
                     str(paths["audit_post_merge_completeness.py"]),
                     "--membership", str(post_membership),
                     "--catalog", str(paths["catalog"]),
-                    "--post-merge-review-manifest",
-                    str(unresolved_review_manifest_path),
-                    "--follicle-roi-repair-manifest",
-                    str(repair["repair_manifest"]),
+                    "--membership-transform-chain", str(transform_chain_path),
                     "--out", str(completeness_out),
                 ]
                 for path in cluster_evidence_paths:
@@ -2465,6 +2899,79 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
     catalog_review_status = str(catalog_review["status"])
     post_membership = Path(catalog_review["membership"])
     catalog_apply_manifests = list(catalog_review["apply_manifests"])
+    for apply_manifest_path in catalog_apply_manifests:
+        apply_doc = json.loads(
+            apply_manifest_path.read_text(encoding="utf-8")
+        )
+        source_path = Path(str(apply_doc["source_membership"]["path"]))
+        result_path = Path(str(apply_doc["membership"]["path"]))
+        transform_chain_path = append_membership_transform(
+            paths, transform_chain_path, "cell_type_review_patch",
+            source_path, result_path, apply_manifest_path, transform_root,
+            transform_index, output / "logs",
+            target_cell_type=str(apply_doc.get("active_cell_type", "")),
+        )
+        transform_index += 1
+    if catalog_review_status != "PASS":
+        review_state_path = catalog_review.get("review_state")
+        pause_reason = {
+            "REVIEW_REQUIRED": "single_active_cell_type_review",
+            "REVIEW_STEP_APPLIED": "single_cell_type_review_step_applied",
+            "ITERATION_REQUIRED": "manual_biological_adjudication_required",
+        }.get(catalog_review_status, "single_active_cell_type_review")
+        return {
+            "status": "REVIEW_REQUIRED",
+            "phase": "atlas_and_completeness_review",
+            "pause_reason": pause_reason,
+            "formal_membership_written": False,
+            "membership": artifact(post_membership),
+            "membership_transform_chain": artifact(transform_chain_path),
+            "stage_authority": artifact(authority),
+            "prerequisite": artifact(args.prerequisite_manifest),
+            "atlas_validation": artifact(validation_path),
+            "post_merge_unresolved_review": artifact(
+                unresolved_review_manifest_path
+            ),
+            "biological_quality_status": quality_status,
+            "biological_quality_review": quality_manifest,
+            "targeted_follicle_roi_repair": follicle_repair_manifest,
+            "catalog_wide_lineage_review_status": catalog_review_status,
+            "catalog_wide_lineage_review": artifact(
+                catalog_review["review_manifest"]
+            ),
+            "cell_type_review_state": (
+                artifact(Path(review_state_path)) if review_state_path else None
+            ),
+            "active_cell_type_review": catalog_review.get(
+                "active_cell_type", ""
+            ),
+            "required_progress_message": catalog_review.get(
+                "required_progress_message", ""
+            ),
+            "catalog_wide_decision_validations": [
+                artifact(path) for path in catalog_review["decision_validations"]
+            ],
+            "catalog_wide_evidence_packet_manifests": [
+                artifact(path)
+                for path in catalog_review["evidence_packet_manifests"]
+            ],
+            "catalog_wide_apply_manifests": [
+                artifact(path) for path in catalog_apply_manifests
+            ],
+            "observation_scores": [
+                artifact(path) for path in observation_score_paths
+            ],
+            "cluster_evidence": [
+                artifact(path) for path in cluster_evidence_paths
+            ],
+            "fine_candidate_proposals": [
+                artifact(path) for path in fine_proposal_paths
+            ],
+            "state_annotation_proposals": [
+                artifact(path) for path in state_proposal_paths
+            ],
+            "unlabeled_broad_rescue_n": applied["unlabeled_broad_rescue_n"],
+        }
     membership_output = artifact(post_membership)
     post_rows = read_tsv(post_membership)
     n_unresolved_biological = sum(
@@ -2477,14 +2984,9 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             sys.executable, str(paths["audit_post_merge_completeness.py"]),
             "--membership", str(post_membership),
             "--catalog", str(paths["catalog"]),
-            "--post-merge-review-manifest", str(unresolved_review_manifest_path),
+            "--membership-transform-chain", str(transform_chain_path),
             "--out", str(completeness_out),
         ]
-        if follicle_repair_manifest:
-            command.extend([
-                "--follicle-roi-repair-manifest",
-                str(follicle_repair_manifest["path"]),
-            ])
         for path in cluster_evidence_paths:
             command.extend(["--cluster-evidence", str(path.resolve())])
         for path in fine_proposal_paths:
@@ -2499,8 +3001,6 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             command.extend(["--local-subset-validation", str(path.resolve())])
         for path in local_remainder_audit_paths:
             command.extend(["--local-remainder-audit", str(path.resolve())])
-        for path in catalog_apply_manifests:
-            command.extend(["--catalog-wide-review-manifest", str(path.resolve())])
         if "context_evidence" in paths:
             command.extend(["--context-evidence", str(paths["context_evidence"])])
         if quality_required:
@@ -2555,6 +3055,7 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         "prerequisite": artifact(args.prerequisite_manifest),
         "formal_membership_written": False,
         "membership": membership_output,
+        "membership_transform_chain": artifact(transform_chain_path),
         "atlas_validation": artifact(validation_path),
         "post_merge_unresolved_review": artifact(
             unresolved_review_manifest_path
@@ -2599,6 +3100,16 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
         raise RuntimeError(
             "final phase membership differs from the reviewed post-Atlas membership"
         )
+    transform_record = prerequisite.get("membership_transform_chain", {})
+    transform_chain = Path(str(transform_record.get("path", "")))
+    if (
+        not transform_chain.is_file()
+        or transform_record.get("sha256") != sha256(transform_chain)
+    ):
+        raise RuntimeError("final phase lacks the reviewed membership transform chain")
+    chain_document = load_and_validate_chain(
+        transform_chain, args.post_atlas_membership
+    )
     fine_proposal_paths = bound_artifact_paths(
         prerequisite.get("fine_candidate_proposals"), "fine proposal"
     )
@@ -2650,9 +3161,34 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
     final_manifest = json.loads(
         (final_out / "final_release_manifest.json").read_text(encoding="utf-8")
     )
+    final_manifest_path = final_out / "final_release_manifest.json"
     final_status = str(final_manifest.get("status", ""))
     if final_status not in {"PASS", "PENDING_USER_REVIEW_HIGH_UNRESOLVED"}:
         raise RuntimeError("final materializer returned an invalid status")
+    final_membership = Path(str(final_manifest["membership"]["path"]))
+    final_transform_chain = append_membership_transform(
+        paths, transform_chain, "final_release_materialization",
+        args.post_atlas_membership, final_membership, final_manifest_path,
+        output / "02_final_membership_transform",
+        int(chain_document.get("transform_n", 0)) + 1,
+        output / "logs",
+    )
+    deliverables_out = output / "03_final_deliverables"
+    deliverables_command = [
+        sys.executable, str(paths["materialize_final_deliverables.py"]),
+        "--contract", str(args.contract),
+        "--membership", str(final_membership),
+        "--release-manifest", str(final_manifest_path),
+        "--rscript", str(args.rscript),
+        "--threads", str(max(1, int(args.writer_threads))),
+        "--release-status", str(args.release_status),
+        "--biological-context", str(args.biological_context),
+        "--out", str(deliverables_out),
+    ]
+    run(deliverables_command, output / "logs/03_final_deliverables.log")
+    deliverables_manifest = (
+        deliverables_out / "final_deliverables_checkpoint.json"
+    )
     return {
         "status": final_status, "phase": "materialize_final_release",
         "stage_authority": artifact(authority),
@@ -2663,6 +3199,8 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
         ),
         "required_next_action": final_manifest["required_next_action"],
         "membership": final_manifest["membership"],
+        "membership_transform_chain": artifact(final_transform_chain),
+        "final_deliverables": artifact(deliverables_manifest),
         "broad_census": final_manifest["broad_census"],
         "fine_census": final_manifest["fine_census"],
         "state_census": final_manifest["state_census"],
@@ -2705,6 +3243,8 @@ def run_phase_runtime_preflight(
     for name in CANONICAL_SCRIPTS:
         if name.endswith(".py"):
             command.extend(["--python-script", str(paths[name])])
+        elif name.endswith(".R"):
+            command.extend(["--r-script", str(paths[name])])
     python_imports = {
         "whole_tissue_partition": ("numpy", "pandas", "scipy"),
         "cluster_cohort_recluster": ("numpy", "pandas", "scipy"),
@@ -2730,7 +3270,10 @@ def run_phase_runtime_preflight(
         "atlas_and_completeness_review": (
             "Seurat", "Matrix", "data.table", "jsonlite",
         ),
-        "materialize_final_release": (),
+        "materialize_final_release": (
+            "Seurat", "SeuratObject", "Matrix", "data.table", "jsonlite",
+            "ggplot2", "scattermore", "patchwork",
+        ),
     }
     for package in r_packages[args.phase]:
         command.extend(["--r-package", package])
@@ -2827,8 +3370,33 @@ def parse_args() -> argparse.Namespace:
     atlas.add_argument(
         "--lineage-review-decisions", type=Path, action="append", default=[],
         help=(
-            "repeat in chronological order for at most two catalog-wide "
-            "post-Atlas biological review rounds"
+            "exactly one decision file for the currently active cell type; "
+            "batch decisions are forbidden"
+        ),
+    )
+    atlas.add_argument(
+        "--lineage-review-prior-validation", type=Path,
+        action="append", default=[],
+        help="PASS single-cell-type validations from earlier invocations",
+    )
+    atlas.add_argument(
+        "--lineage-review-prior-apply", type=Path,
+        action="append", default=[],
+        help="contiguous single-cell-type apply manifests from earlier invocations",
+    )
+    atlas.add_argument(
+        "--lineage-review-prior-packet", type=Path,
+        action="append", default=[],
+        help="earlier single-active-type evidence packet manifests",
+    )
+    atlas.add_argument("--lineage-review-previous-review", type=Path)
+    atlas.add_argument("--lineage-review-previous-state", type=Path)
+    atlas.add_argument(
+        "--resume-review-manifest", type=Path,
+        help=(
+            "canonical REVIEW_REQUIRED controller manifest; skips Atlas, "
+            "unresolved rescue, ROI repair and clustering, then activates only "
+            "the next single cell-type review"
         ),
     )
     atlas.add_argument("--resolution-workers", type=int, default=1)
@@ -2837,11 +3405,20 @@ def parse_args() -> argparse.Namespace:
     add_common(final)
     final.add_argument("--prerequisite-manifest", required=True, type=Path)
     final.add_argument("--post-atlas-membership", required=True, type=Path)
+    final.add_argument(
+        "--writer-threads", type=int,
+        default=max(1, int(os.environ.get("LSB_DJOB_NUMPROC", "1"))),
+    )
+    final.add_argument("--biological-context", default="")
+    final.add_argument(
+        "--release-status",
+        choices=["pending_user_review", "approved_final"],
+        default="pending_user_review",
+    )
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
+def execute(args: argparse.Namespace) -> tuple[dict, Path]:
     args.contract = args.contract.resolve()
     contract, paths = validate_contract(args.contract)
     runtime_preflight = run_phase_runtime_preflight(args, paths)
@@ -2898,6 +3475,29 @@ def main() -> int:
     manifest.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    return result, manifest
+
+
+def main() -> int:
+    args = parse_args()
+    try:
+        result, manifest = execute(args)
+    except Exception as exc:
+        try:
+            materialize_runtime_state(
+                args.out.resolve(), args.phase, args.contract.resolve(), error=exc
+            )
+        except Exception:
+            pass
+        raise
+    current_stage, next_action = materialize_runtime_state(
+        args.out.resolve(), args.phase, args.contract.resolve(),
+        result=result, controller_manifest=manifest,
+    )
+    result["runtime_state"] = {
+        "current_stage": artifact(current_stage),
+        "next_action": artifact(next_action),
+    }
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

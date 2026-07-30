@@ -47,14 +47,25 @@ def artifact(path: Path) -> dict[str, str]:
 
 def write_evidence_packet_manifest(
     root: Path, review_manifest: Path, queue: list[dict[str, str]],
-) -> tuple[Path, dict[str, str]]:
+) -> tuple[Path, dict[str, str], Path]:
+    queue = [queue[0]]
     packet_hashes: dict[str, str] = {}
     rows = []
     for row in queue:
         review_id = row["review_id"]
-        packet_hashes[review_id] = hashlib.sha256(
-            f"packet::{review_id}::{row['unit_signature']}".encode()
-        ).hexdigest()
+        payload = {
+            "review_id": review_id,
+            "target_broad_label": row["target_broad_label"],
+            "literature_boundary": {
+                "candidate_rules": [{"candidate_id": "fixture"}],
+                "catalog_literature_basis": ["fixture"],
+            },
+        }
+        payload_path = root / "active_packet.json"
+        payload_path.write_text(json.dumps(payload), encoding="utf-8")
+        packet_hashes[review_id] = hashlib.sha256(json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
         present = row["review_mode"] == "broad_lineage_review"
         recall_question = 5 if row["target_broad_label"] == "Granulosa" else 0
         rows.append({
@@ -94,8 +105,24 @@ def write_evidence_packet_manifest(
         "review_manifest": artifact(review_manifest),
         "broad_evidence_manifest": artifact(broad_manifest),
         "packet_index": artifact(packet_index),
+        "active_review_id": queue[0]["review_id"],
+        "formal_batch_packet_generation_forbidden": True,
+        "active_evidence_packet": artifact(payload_path),
     }), encoding="utf-8")
-    return manifest, packet_hashes
+    state = root / "cell_type_review_state.json"
+    state.write_text(json.dumps({
+        "status": "REVIEW_REQUIRED",
+        "artifact_role": "sequential_cell_type_review_state",
+        "active_review_n": 1,
+        "formal_batch_closure_forbidden": True,
+        "review_manifest": artifact(review_manifest),
+        "active_cell_type_review": {
+            "review_id": queue[0]["review_id"],
+            "target_broad_label": queue[0]["target_broad_label"],
+            "unit_signature": queue[0]["unit_signature"],
+        },
+    }), encoding="utf-8")
+    return manifest, packet_hashes, state
 
 
 def cluster_evidence(cluster: str, candidate: str, positive: bool) -> dict[str, object]:
@@ -305,7 +332,7 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
                 "candidate_id": "granulosa",
             } for index in range(5)])
             decisions = root / "decisions.tsv"
-            packet_manifest, packet_hashes = write_evidence_packet_manifest(
+            packet_manifest, packet_hashes, review_state = write_evidence_packet_manifest(
                 root, review_1 / "catalog_wide_lineage_review_manifest.json", queue
             )
             granulosa_review_id = next(
@@ -323,34 +350,36 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
                 "source_membership": artifact(membership),
                 "patch_membership": artifact(granulosa_patch),
             }), encoding="utf-8")
-            decision_rows = []
-            for row in queue:
-                recall = row["target_broad_label"] == "Granulosa"
-                decision_rows.append({
-                    "review_id": row["review_id"], "review_mode": row["review_mode"],
-                    "outcome": "apply_cell_type_membership_patch" if recall else "retain_current_cell_type",
-                    "evidence_packet_sha256": packet_hashes[row["review_id"]],
-                    "current_member_precision": "not_applicable" if recall else "supported",
-                    "whole_query_recall": "under_recall_detected" if recall else "complete",
-                    "spatial_consistency": "localized_issue" if recall else "consistent",
-                    "molecular_support": "supported",
-                    "proposed_broad_label": "",
-                    "evidence_basis": "query raw-count marker DEG pseudobulk and spatial review",
-                    "rationale": "Direct multigene identity and the bounded spatial component support this exact decision.",
-                    "membership_path": str(granulosa_patch) if recall else "",
-                    "membership_sha256": sha(granulosa_patch) if recall else "",
-                    "targeted_review_manifest_path": (
-                        str(targeted_manifest) if recall else ""
-                    ),
-                    "targeted_review_manifest_sha256": (
-                        sha(targeted_manifest) if recall else ""
-                    ),
-                })
+            row = next(
+                row for row in queue
+                if row["target_broad_label"] == "Granulosa"
+            )
+            decision_rows = [{
+                "review_id": row["review_id"], "review_mode": row["review_mode"],
+                "outcome": "apply_cell_type_membership_patch",
+                "evidence_packet_sha256": packet_hashes[row["review_id"]],
+                "current_member_precision": "not_applicable",
+                "whole_query_recall": "under_recall_detected",
+                "spatial_consistency": "localized_issue",
+                "molecular_support": "supported",
+                "literature_consistency": "consistent",
+                "literature_rationale": "The fixture candidate boundary agrees with the direct multigene evidence.",
+                "current_member_challenger_resolution": "no_questions",
+                "outside_recall_challenger_resolution": "confirmed_under_recall",
+                "proposed_broad_label": "",
+                "evidence_basis": "query raw-count marker DEG pseudobulk and spatial review",
+                "rationale": "Direct multigene identity and the bounded spatial component support this exact decision.",
+                "membership_path": str(granulosa_patch),
+                "membership_sha256": sha(granulosa_patch),
+                "targeted_review_manifest_path": str(targeted_manifest),
+                "targeted_review_manifest_sha256": sha(targeted_manifest),
+            }]
             write_tsv(decisions, decision_rows)
             validation_out = root / "validation"
             result = subprocess.run([
                 sys.executable, str(SCRIPTS / "validate_catalog_wide_lineage_review_decisions.py"),
                 "--review-manifest", str(review_1 / "catalog_wide_lineage_review_manifest.json"),
+                "--review-state", str(review_state),
                 "--evidence-packet-manifest", str(packet_manifest),
                 "--decisions", str(decisions), "--out", str(validation_out),
             ], capture_output=True, text=True)
@@ -362,6 +391,7 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
                 "annotation_contract_sha256": sha(contract),
                 "post_atlas_membership": artifact(membership),
                 "catalog_review_manifest": artifact(review_1 / "catalog_wide_lineage_review_manifest.json"),
+                "cell_type_review_state": artifact(review_state),
                 "catalog_decision_validation": artifact(validation),
                 "candidate_catalog": artifact(catalog),
             }), encoding="utf-8")
@@ -371,6 +401,7 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
                 "--contract", str(contract), "--stage-authority", str(apply_authority),
                 "--membership", str(membership),
                 "--review-manifest", str(review_1 / "catalog_wide_lineage_review_manifest.json"),
+                "--review-state", str(review_state),
                 "--decision-validation", str(validation), "--catalog", str(catalog),
                 "--out", str(apply_out),
             ], capture_output=True, text=True)

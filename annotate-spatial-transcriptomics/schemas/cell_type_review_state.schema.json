@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sequential per-cell-type review state",
+  "type": "object",
+  "required": [
+    "schema_version", "status", "artifact_role", "user_facing_stage_name",
+    "review_manifest", "review_queue", "membership", "task_ledger",
+    "active_cell_type_review", "active_review_n", "queued_review_n",
+    "closed_review_n", "blocked_review_n",
+    "maximum_decisions_per_cell_type", "formal_batch_closure_forbidden",
+    "next_action"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "status": {"enum": ["REVIEW_REQUIRED", "COMPLETE", "BLOCKED"]},
+    "artifact_role": {"const": "sequential_cell_type_review_state"},
+    "user_facing_stage_name": {"const": "逐大类全样本复核"},
+    "active_cell_type_review": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": [
+            "review_id", "target_broad_label", "unit_signature",
+            "required_progress_message"
+          ],
+          "properties": {
+            "review_id": {"type": "string", "minLength": 1},
+            "target_broad_label": {"type": "string", "minLength": 1},
+            "unit_signature": {"pattern": "^[0-9a-f]{64}$"},
+            "required_progress_message": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "active_review_n": {"type": "integer", "minimum": 0, "maximum": 1},
+    "queued_review_n": {"type": "integer", "minimum": 0},
+    "closed_review_n": {"type": "integer", "minimum": 0},
+    "blocked_review_n": {"type": "integer", "minimum": 0},
+    "maximum_decisions_per_cell_type": {"type": "integer", "minimum": 1},
+    "formal_batch_closure_forbidden": {"const": true},
+    "next_action": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": true
+}

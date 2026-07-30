@@ -43,13 +43,15 @@ def run(script: str, *args: object) -> subprocess.CompletedProcess[str]:
 CATALOG = {
     "candidate_boundaries": [
         {"candidate_id": "granulosa", "candidate_role": "broad", "release_broad_label": "Granulosa", "release_fine_label": ""},
-        {"candidate_id": "stromal", "candidate_role": "broad", "release_broad_label": "Stromal/mesenchymal", "release_fine_label": ""},
+        {"candidate_id": "stromal_mesenchymal", "candidate_role": "broad", "release_broad_label": "Stromal/mesenchymal", "release_fine_label": "", "writeback_strategy": "generic_exact_remainder_after_specific_lineages"},
         {"candidate_id": "smooth", "candidate_role": "broad", "release_broad_label": "Smooth muscle", "release_fine_label": ""},
         {"candidate_id": "endothelial", "candidate_role": "broad", "release_broad_label": "Endothelial", "release_fine_label": ""},
         {"candidate_id": "pericyte", "candidate_role": "broad", "release_broad_label": "Pericyte/mural", "release_fine_label": ""},
         {"candidate_id": "lymphatic", "candidate_role": "fine", "release_broad_label": "Endothelial", "release_fine_label": "Lymphatic endothelial", "parent_broad_label": "Endothelial"},
         {"candidate_id": "epithelial", "candidate_role": "broad", "release_broad_label": "Epithelial/mesothelial", "release_fine_label": ""},
         {"candidate_id": "oocyte", "candidate_role": "broad", "release_broad_label": "Oocyte", "release_fine_label": "", "writeback_strategy": "canonical_cluster_membership"},
+        {"candidate_id": "luteal", "candidate_role": "broad", "release_broad_label": "Luteal", "release_fine_label": ""},
+        {"candidate_id": "theca", "candidate_role": "broad", "release_broad_label": "Theca", "release_fine_label": "", "contextual_parent_overrides": [{"context_broad_label": "Luteal", "writeback_broad_label": "Luteal"}]},
         {"candidate_id": "granulosa_hypoxia", "candidate_role": "state", "release_broad_label": "", "release_fine_label": "", "release_state_label": "Hypoxia", "parent_broad_label": "Granulosa"},
     ]
 }
@@ -496,17 +498,19 @@ class V22StagedArchitectureTests(unittest.TestCase):
             source,
         )
 
-    def test_specific_split_program_precedes_generic_remainder(self) -> None:
+    def test_mixed_trigger_requires_separable_identity_not_candidate_visibility(self) -> None:
         source = (SCRIPTS / "adjudicate_second_round_subclusters.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("specific_split_worthy", source)
-        self.assertIn("generic_positive", source)
+        self.assertIn("parent_worthy_specific", source)
+        self.assertIn("pairwise_separable_identity_components", source)
+        self.assertIn("specific_component_embedded_in_generic_parent", source)
         self.assertLess(
-            source.index("specific_split_worthy[0]"),
+            source.index("parent_worthy_specific[0]"),
             source.index("generic_positive[0]"),
         )
-        self.assertIn("elif winner and specific_split_worthy", source)
+        self.assertNotIn("elif winner and specific_split_worthy", source)
+        self.assertIn("elif winner and true_local_split", source)
 
     def test_first_pass_reuses_selected_grid_evidence_without_observation_scores(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -929,7 +933,11 @@ class V22StagedArchitectureTests(unittest.TestCase):
                 audit[0]["review_outcome"], "insufficient_identity_program"
             )
 
-    def adjudicate(self, supported: dict[str, tuple[float, float, float]]) -> tuple[dict, list[dict[str, str]], list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
+    def adjudicate(
+        self,
+        supported: dict[str, tuple[float, float, float]],
+        components: dict[str, set[str]] | None = None,
+    ) -> tuple[dict, list[dict[str, str]], list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -958,11 +966,32 @@ class V22StagedArchitectureTests(unittest.TestCase):
         evidence_path = root / "evidence.tsv"
         write_tsv(evidence_path, evidence_rows)
         scores = root / "scores.tsv"
-        write_tsv(scores, [
-            {"cell_id": cell, "candidate_id": candidate}
-            for cell in cells
-            for candidate in [row["candidate_id"] for row in CATALOG["candidate_boundaries"]]
-        ])
+        components = components or {}
+        score_rows = []
+        for cell in cells:
+            for candidate in [row["candidate_id"] for row in CATALOG["candidate_boundaries"]]:
+                active_members = components.get(
+                    candidate,
+                    set(cells) if candidate in supported else set(),
+                )
+                active = cell in active_members
+                score_rows.append({
+                    "cell_id": cell,
+                    "candidate_id": candidate,
+                    "direct_signal": "0.4" if active else "0",
+                    "local_signal": "0.4" if active else "0",
+                    "ambient_suspect": "false",
+                    "positive_family_count": "2" if active else "0",
+                    "positive_gene_count": "4" if active else "0",
+                    "identity_core_direct": str(active).lower(),
+                    "release_family_coherent": str(active).lower(),
+                    "hard_contradiction": "false",
+                    "direct_anti_gene_count": "0",
+                    "direct_anti_family_count": "0",
+                    "candidate_seed": str(active).lower(),
+                    "normalized_evidence": "0.8" if active else "0",
+                })
+        write_tsv(scores, score_rows)
         out = root / "out"
         result = run(
             "adjudicate_second_round_subclusters.py",
@@ -990,12 +1019,72 @@ class V22StagedArchitectureTests(unittest.TestCase):
 
     def test_minor_specific_program_can_trigger_local_check_despite_negative_group_deg(self) -> None:
         manifest, base, pending, _, _ = self.adjudicate({
-            "stromal": (0.85, 0.75, 0.4),
+            "stromal_mesenchymal": (0.85, 0.85, 0.4),
             "smooth": (0.35, 0.35, -0.3),
+        }, {
+            "stromal_mesenchymal": {f"c{i:02d}" for i in range(20)},
+            "smooth": {f"c{i:02d}" for i in range(7)},
         })
         self.assertFalse(base)
         self.assertEqual(len(pending), 20)
         self.assertEqual(manifest["status"], "LOCAL_SPLIT_REQUIRED")
+
+    def test_one_moderate_specific_program_without_a_second_identity_is_not_mixed(self) -> None:
+        manifest, base, pending, _, _ = self.adjudicate({
+            "smooth": (0.35, 0.35, -0.3),
+        }, {
+            "smooth": {f"c{i:02d}" for i in range(7)},
+        })
+        self.assertFalse(pending)
+        self.assertEqual(manifest["status"], "PASS")
+        self.assertEqual(len(base), 20)
+        self.assertTrue(all(
+            row["proposed_state"] == "unresolved_biological" for row in base
+        ))
+
+    def test_two_separable_specific_identity_components_are_mixed(self) -> None:
+        manifest, base, pending, _, _ = self.adjudicate({
+            "smooth": (0.50, 0.50, 1.2),
+            "pericyte": (0.50, 0.50, 1.2),
+        }, {
+            "smooth": {f"c{i:02d}" for i in range(10)},
+            "pericyte": {f"c{i:02d}" for i in range(10, 20)},
+        })
+        self.assertFalse(base)
+        self.assertEqual(len(pending), 20)
+        self.assertEqual(manifest["status"], "LOCAL_SPLIT_REQUIRED")
+
+    def test_two_completely_coexpressed_identities_remain_unresolved(self) -> None:
+        manifest, base, pending, _, _ = self.adjudicate({
+            "granulosa": (0.85, 0.85, 1.5),
+            "smooth": (0.80, 0.80, 1.4),
+        }, {
+            "granulosa": {f"c{i:02d}" for i in range(20)},
+            "smooth": {f"c{i:02d}" for i in range(20)},
+        })
+        self.assertFalse(pending)
+        self.assertEqual(manifest["status"], "PASS")
+        self.assertEqual(len(base), 20)
+        self.assertTrue(all(
+            row["proposed_state"] == "unresolved_biological" for row in base
+        ))
+
+    def test_shared_theca_and_stromal_programs_do_not_make_luteal_subcluster_mixed(self) -> None:
+        manifest, base, pending, _, _ = self.adjudicate({
+            "luteal": (0.90, 0.90, 1.5),
+            "theca": (0.70, 0.70, 1.2),
+            "stromal_mesenchymal": (0.90, 0.90, 0.5),
+        }, {
+            "luteal": {f"c{i:02d}" for i in range(20)},
+            "theca": {f"c{i:02d}" for i in range(12)},
+            "stromal_mesenchymal": {f"c{i:02d}" for i in range(20)},
+        })
+        self.assertEqual(manifest["status"], "PASS")
+        self.assertFalse(pending)
+        self.assertEqual(len(base), 20)
+        self.assertTrue(all(
+            row["proposed_broad_label"] == "Luteal" for row in base
+        ))
 
     def test_state_is_released_only_for_a_high_purity_resolved_parent(self) -> None:
         _, base, pending, _, states = self.adjudicate({
@@ -1013,9 +1102,13 @@ class V22StagedArchitectureTests(unittest.TestCase):
 
     def test_stromal_smooth_vascular_mixture_requires_local_split(self) -> None:
         manifest, base, pending, fine, state = self.adjudicate({
-            "stromal": (0.70, 0.60, 1.0),
+            "stromal_mesenchymal": (0.85, 0.85, 1.0),
             "smooth": (0.35, 0.20, 1.2),
             "pericyte": (0.30, 0.18, 1.1),
+        }, {
+            "stromal_mesenchymal": {f"c{i:02d}" for i in range(20)},
+            "smooth": {f"c{i:02d}" for i in range(7)},
+            "pericyte": {f"c{i:02d}" for i in range(7, 14)},
         })
         self.assertFalse(base)
         self.assertEqual(len(pending), 20)
@@ -1025,8 +1118,11 @@ class V22StagedArchitectureTests(unittest.TestCase):
 
     def test_low_fraction_epithelial_program_is_not_silently_diluted(self) -> None:
         _, base, pending, _, _ = self.adjudicate({
-            "stromal": (0.80, 0.70, 1.0),
+            "stromal_mesenchymal": (0.85, 0.85, 1.0),
             "epithelial": (0.05, 0.01, 2.0),
+        }, {
+            "stromal_mesenchymal": {f"c{i:02d}" for i in range(20)},
+            "epithelial": {f"c{i:02d}" for i in range(5)},
         })
         self.assertFalse(base)
         self.assertEqual(len(pending), 20)
@@ -1056,7 +1152,7 @@ class V22StagedArchitectureTests(unittest.TestCase):
             ev_rows = []
             for cluster in ("0", "1"):
                 for candidate in [row["candidate_id"] for row in CATALOG["candidate_boundaries"]]:
-                    item = evidence(candidate, 0.8 if candidate == ("granulosa" if cluster == "0" else "stromal") else 0, 0.6, 1.0)
+                    item = evidence(candidate, 0.8 if candidate == ("granulosa" if cluster == "0" else "stromal_mesenchymal") else 0, 0.6, 1.0)
                     item.update(source_boundary="whole", source_cluster=cluster, resolution_role="selected")
                     ev_rows.append(item)
             write_tsv(ev, ev_rows)

@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "bundle_id": "sheep_ovary_GSE233801_v1",
+  "reference_id": "GSE233801_independent_R_reviewed_broad_v001",
+  "artifact_role": "external_reference",
+  "legacy_resume_only": true,
+  "new_routing_authority": false,
+  "immutable": true,
+  "reusable_across_queries": true,
+  "query_reference_joint_retraining": false,
+  "reference_labels_reconstructed": true,
+  "released_cell_labels_available": false,
+  "reference_n": 21673,
+  "mapping_engine": "fixed_projection_prototype",
+  "asset_hashes": {
+    "feature_transform.joblib": "bc9b50560556d2a3488dfcea3d6c007cb060f8e9078a394b89a16ed6c90bde2b",
+    "reference_prototypes.npz": "67187f07c2c9674fff045348324ca974d2eb996053b659c83068c82f3123392d",
+    "fixed_features.tsv": "17417a2b6f5da25c3e42b1b154c3ef8a16e2afd834bcb14b5a4835b533b01b99",
+    "reference_heldout_predictions.tsv.gz": "d445d69e70d5ea154c49525922c333bf53130a443eaabf06da59b746502b7c90"
+  },
+  "source_label_capability": {
+    "Granulosa": "supported",
+    "Immune": "supported",
+    "Stromal": "supported",
+    "Epithelial/mesothelial": "not_evaluable",
+    "Theca": "not_evaluable",
+    "Vascular/endothelial": "not_evaluable"
+  },
+  "release_broad_capability": {
+    "Granulosa": "supported",
+    "Immune": "supported",
+    "Stromal/mesenchymal": "supported",
+    "Oocyte": "unsupported",
+    "Theca": "not_evaluable",
+    "Luteal": "unsupported",
+    "Epithelial/mesothelial": "not_evaluable",
+    "Endothelial": "not_evaluable",
+    "Pericyte/mural": "not_evaluable",
+    "Smooth muscle": "not_evaluable"
+  },
+  "legacy_source_labels": [
+    "Vascular/endothelial"
+  ],
+  "legacy_source_labels_may_be_released": false,
+  "runtime_policy": {
+    "mapping_scope": "complete_analysis_set",
+    "writeback_scope": "unlabeled_after_broad_merge_only",
+    "defined_label_conflict_action": "biological_review_only_no_overwrite",
+    "fine_label_authority": false,
+    "unsupported_or_not_evaluable_action": "log_only_no_rescue_no_challenge"
+  },
+  "provenance_note": "Deprecated merged-wall bundle retained only to resume an already frozen review. New mappings must use the split-wall v2 bundle reconstructed from original GSE233801 reference clusters."
+}

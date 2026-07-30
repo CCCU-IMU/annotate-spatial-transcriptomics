@@ -36,6 +36,7 @@
     "minority_min_seed_fraction": 0.01,
     "minority_min_deg_contrast": 0.75,
     "rare_watch_min_fraction": 0.005,
+    "pairwise_min_exclusive_direct_fraction": 0.01,
     "cross_resolution_stability_minimum": 0.50,
     "combined_analysis_split_fraction_review_trigger": 0.50
   },

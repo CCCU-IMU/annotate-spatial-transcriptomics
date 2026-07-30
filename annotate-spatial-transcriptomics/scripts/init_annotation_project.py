@@ -46,7 +46,7 @@ def main() -> int:
     )
     completion_policy = controller_thresholds["completion_policy"]
     root = args.project_root.resolve()
-    for d in ["config", "state", "inputs", "runs", "tables", "figures", "spatial_nodes", "spatial_genes", "review", "report", "provenance", "provenance/incidents", "logs"]:
+    for d in ["input", "config", "state", "runs", "review", "deliverables", "provenance", "provenance/incidents", "logs"]:
         (root / d).mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).isoformat()
     config = {
@@ -147,6 +147,18 @@ def main() -> int:
             f"# {args.sample} annotation state\n\n- framework: 2.0.0\n- modality: {args.modality}\n"
             f"- observation unit: {args.observation_unit}\n- status: initialized\n- created: {now}\n\n"
             "## Current gate\n\nInput discovery and immutable snapshot are pending.\n",
+            encoding="utf-8",
+        )
+    current_stage = root / "state/current_stage.json"
+    if not current_stage.exists():
+        current_stage.write_text(
+            json.dumps({
+                "schema_version": "1.0",
+                "phase": "bootstrap",
+                "controller_status": "REVIEW_REQUIRED",
+                "next_action": "freeze_input_and_build_annotation_contract",
+                "updated_at_utc": now,
+            }, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
     print(root)

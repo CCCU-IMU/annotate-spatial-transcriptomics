@@ -33,11 +33,39 @@ def main() -> int:
     ap.add_argument("--transform", required=True, type=Path)
     ap.add_argument("--prototypes", required=True, type=Path)
     ap.add_argument("--reference-heldout", required=True, type=Path)
+    ap.add_argument(
+        "--atlas-bundle-manifest", type=Path,
+        default=(
+            Path(__file__).resolve().parents[1]
+            / "references/atlases/sheep_ovary_GSE233801_split_wall_v2.json"
+        ),
+    )
     ap.add_argument("--query-source", required=True, type=Path)
     ap.add_argument("--query-source-sha256-record", type=Path)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
+    bundle = json.loads(args.atlas_bundle_manifest.read_text(encoding="utf-8"))
+    canonical_bundle = (
+        Path(__file__).resolve().parents[1]
+        / "references/atlases/sheep_ovary_GSE233801_split_wall_v2.json"
+    )
+    if (
+        args.atlas_bundle_manifest.resolve() != canonical_bundle.resolve()
+        or sha256(args.atlas_bundle_manifest) != sha256(canonical_bundle)
+        or bundle.get("bundle_id") != "sheep_ovary_GSE233801_split_wall_v2"
+        or bundle.get("immutable") is not True
+    ):
+        raise SystemExit("projection requires the fixed GSE233801 Atlas bundle")
+    assets = bundle.get("asset_hashes", {})
+    for path, name in (
+        (args.transform, "feature_transform.joblib"),
+        (args.prototypes, "reference_prototypes.npz"),
+        (args.features, "fixed_features.tsv"),
+        (args.reference_heldout, "reference_heldout_predictions.tsv.gz"),
+    ):
+        if sha256(path) != str(assets.get(name, "")):
+            raise SystemExit(f"fixed Atlas asset differs from bundle: {name}")
 
     if args.matrix.suffix == ".gz":
         with gzip.open(args.matrix, "rb") as handle:
@@ -97,6 +125,12 @@ def main() -> int:
         "status": "PASS",
         "schema_version": "2.2",
         "mode": "fixed_reference_fresh_query_projection",
+        "atlas_bundle": {
+            "path": str(args.atlas_bundle_manifest.resolve()),
+            "sha256": sha256(args.atlas_bundle_manifest),
+            "bundle_id": bundle["bundle_id"],
+            "reference_id": bundle["reference_id"],
+        },
         "n_query": len(mapped),
         "n_features": len(features),
         "query_matrix": {"path": str(args.matrix.resolve()), "sha256": sha256(args.matrix)},

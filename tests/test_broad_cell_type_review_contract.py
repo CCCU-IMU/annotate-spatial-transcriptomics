@@ -25,6 +25,57 @@ def write_tsv(path: Path, rows: list[dict[str, object]]) -> None:
         writer.writeheader(); writer.writerows(rows)
 
 
+def bind_single_active_review(
+    root: Path, review: Path, queue: Path, packet_index: Path,
+    packet_manifest: Path,
+) -> tuple[Path, str]:
+    with queue.open(encoding="utf-8") as handle:
+        queued = next(csv.DictReader(handle, delimiter="\t"))
+    payload = {
+        "review_id": queued["review_id"],
+        "target_broad_label": queued["target_broad_label"],
+        "literature_boundary": {
+            "candidate_rules": [{"candidate_id": "fixture", "release_rule": "fixture"}],
+            "catalog_literature_basis": ["fixture"],
+        },
+    }
+    packet_sha = hashlib.sha256(json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    with packet_index.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle, delimiter="\t"))
+    rows[0]["evidence_packet_sha256"] = packet_sha
+    write_tsv(packet_index, rows)
+    payload_path = root / "active_packet.json"
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    manifest = json.loads(packet_manifest.read_text())
+    manifest.update({
+        "active_review_id": queued["review_id"],
+        "formal_batch_packet_generation_forbidden": True,
+        "active_evidence_packet": {
+            "path": str(payload_path.resolve()), "sha256": sha(payload_path),
+        },
+        "packet_index": {
+            "path": str(packet_index.resolve()), "sha256": sha(packet_index),
+        },
+    })
+    packet_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+    state = root / "state.json"
+    state.write_text(json.dumps({
+        "status": "REVIEW_REQUIRED",
+        "artifact_role": "sequential_cell_type_review_state",
+        "active_review_n": 1,
+        "formal_batch_closure_forbidden": True,
+        "review_manifest": {"path": str(review.resolve()), "sha256": sha(review)},
+        "active_cell_type_review": {
+            "review_id": queued["review_id"],
+            "target_broad_label": queued["target_broad_label"],
+            "unit_signature": queued["unit_signature"],
+        },
+    }), encoding="utf-8")
+    return state, packet_sha
+
+
 class BroadCellTypeReviewContractTests(unittest.TestCase):
     def test_marker_manifest_includes_complete_broad_families_not_subtypes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -78,6 +129,9 @@ class BroadCellTypeReviewContractTests(unittest.TestCase):
                 "review_manifest": {"path": str(review.resolve()), "sha256": sha(review)},
                 "packet_index": {"path": str(packet_index.resolve()), "sha256": sha(packet_index)},
             }), encoding="utf-8")
+            state, packet_sha = bind_single_active_review(
+                root, review, queue, packet_index, packet_manifest
+            )
             decisions = root / "decisions.tsv"
             write_tsv(decisions, [{
                 "review_id": "r1", "review_mode": "broad_lineage_review",
@@ -90,6 +144,7 @@ class BroadCellTypeReviewContractTests(unittest.TestCase):
             result = subprocess.run([
                 sys.executable, str(SCRIPTS / "validate_catalog_wide_lineage_review_decisions.py"),
                 "--review-manifest", str(review), "--decisions", str(decisions),
+                "--review-state", str(state),
                 "--evidence-packet-manifest", str(packet_manifest),
                 "--out", str(root / "out"),
             ], capture_output=True, text=True)
@@ -138,6 +193,9 @@ class BroadCellTypeReviewContractTests(unittest.TestCase):
                 "review_manifest": {"path": str(review.resolve()), "sha256": sha(review)},
                 "packet_index": {"path": str(packet_index.resolve()), "sha256": sha(packet_index)},
             }), encoding="utf-8")
+            state, packet_sha = bind_single_active_review(
+                root, review, queue, packet_index, packet_manifest
+            )
             decisions = root / "decisions.tsv"
             write_tsv(decisions, [{
                 "review_id": "r1", "review_mode": "broad_lineage_review",
@@ -157,6 +215,7 @@ class BroadCellTypeReviewContractTests(unittest.TestCase):
                 sys.executable,
                 str(SCRIPTS / "validate_catalog_wide_lineage_review_decisions.py"),
                 "--review-manifest", str(review),
+                "--review-state", str(state),
                 "--evidence-packet-manifest", str(packet_manifest),
                 "--decisions", str(decisions), "--out", str(root / "out"),
             ], capture_output=True, text=True)
@@ -165,7 +224,7 @@ class BroadCellTypeReviewContractTests(unittest.TestCase):
                 (root / "out/catalog_wide_lineage_decision_validation.json").read_text()
             )
             self.assertTrue(any(
-                "exact patch or targeted review" in error
+                "challenger resolution" in error
                 for error in validation["errors"]
             ))
 
@@ -217,6 +276,9 @@ class BroadCellTypeReviewContractTests(unittest.TestCase):
                     "path": str(packet_index), "sha256": sha(packet_index),
                 },
             }))
+            state, packet_sha = bind_single_active_review(
+                root, review, queue, packet_index, packet_manifest
+            )
             decisions = root / "decisions.tsv"
             write_tsv(decisions, [{
                 "review_id": "r1", "review_mode": "missing_broad_review",
@@ -237,6 +299,7 @@ class BroadCellTypeReviewContractTests(unittest.TestCase):
                 sys.executable,
                 str(SCRIPTS / "validate_catalog_wide_lineage_review_decisions.py"),
                 "--review-manifest", str(review),
+                "--review-state", str(state),
                 "--evidence-packet-manifest", str(packet_manifest),
                 "--decisions", str(decisions), "--out", str(root / "out"),
             ], capture_output=True, text=True)

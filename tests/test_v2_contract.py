@@ -246,7 +246,7 @@ class V2ContractTests(unittest.TestCase):
             ])
             mapping = root / "mapping.tsv.gz"
             write_tsv(mapping, ["cell_id", "predicted_label", "mapping_tier", "out_of_distribution", "ontology_conflict"], [
-                {"cell_id": "a", "predicted_label": "Stromal", "mapping_tier": "moderate_only", "out_of_distribution": "false", "ontology_conflict": "false"},
+                {"cell_id": "a", "predicted_label": "Stromal/mesenchymal", "mapping_tier": "moderate_only", "out_of_distribution": "false", "ontology_conflict": "false"},
                 {"cell_id": "b", "predicted_label": "Immune", "mapping_tier": "moderate_only", "out_of_distribution": "false", "ontology_conflict": "false"},
             ])
             origin = root / "origin.json"; origin.write_text(json.dumps({
@@ -255,7 +255,7 @@ class V2ContractTests(unittest.TestCase):
             }))
             cumulative = root / "heldout.tsv"
             write_tsv(cumulative, ["predicted_label", "cumulative_tier", "validation_n", "validation_precision", "expected_calibration_error", "target_precision"], [
-                {"predicted_label": "Stromal", "cumulative_tier": "moderate_or_higher", "validation_n": 40, "validation_precision": 0.9003, "expected_calibration_error": 0.04, "target_precision": 0.9},
+                {"predicted_label": "Stromal/mesenchymal", "cumulative_tier": "moderate_or_higher", "validation_n": 40, "validation_precision": 0.9003, "expected_calibration_error": 0.04, "target_precision": 0.9},
                 {"predicted_label": "Immune", "cumulative_tier": "moderate_or_higher", "validation_n": 40, "validation_precision": 0.899, "expected_calibration_error": 0.04, "target_precision": 0.9},
             ])
             target_mapping = root / "target_mapping.tsv.gz"
@@ -298,7 +298,7 @@ class V2ContractTests(unittest.TestCase):
                     "final_broad_label": primary, "final_fine_label": "", "source_cluster": "mixed_1",
                 })
                 mapping_rows.append({
-                    "cell_id": f"c{index}", "predicted_label": "Stromal", "mapping_tier": "high",
+                    "cell_id": f"c{index}", "predicted_label": "Stromal/mesenchymal", "mapping_tier": "high",
                     "out_of_distribution": "true" if index < 2 else "false", "ontology_conflict": "false",
                 })
             write_tsv(ledger, list(ledger_rows[0]), ledger_rows)
@@ -311,7 +311,7 @@ class V2ContractTests(unittest.TestCase):
             }))
             cumulative = root / "heldout.tsv"
             write_tsv(cumulative, ["predicted_label", "cumulative_tier", "validation_n", "validation_precision"], [{
-                "predicted_label": "Stromal", "cumulative_tier": "moderate_or_higher",
+                "predicted_label": "Stromal/mesenchymal", "cumulative_tier": "moderate_or_higher",
                 "validation_n": 40, "validation_precision": 0.95,
             }])
             target_mapping = root / "target_mapping.tsv.gz"

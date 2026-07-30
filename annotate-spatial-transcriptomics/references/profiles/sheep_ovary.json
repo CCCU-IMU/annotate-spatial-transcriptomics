@@ -5,7 +5,7 @@
   "profile_role": "biological_evidence",
   "profile_schema_version": "2.0",
   "reference_scope": {
-    "GSE233801": "adult estrus sheep somatic anchors; does not sufficiently define Oocyte, Theca or Epithelial and preserves unknown clusters",
+    "GSE233801": "adult estrus sheep somatic anchors; split-wall reconstruction supports Granulosa, Stromal/mesenchymal, Endothelial, Pericyte/mural, Smooth muscle and Immune, while small Epithelial and steroidogenic-Theca components remain challenge-only; no reliable Oocyte or Luteal anchor and unknown clusters are preserved",
     "iScience_2025_sheep_ovarian_development": "developmental sheep reference with Oocyte, Theca and Epithelial programs; stage and sampling dependent",
     "MBE_2024_tibetan_sheep_ovary": "111548-cell whole-ovary atlas with seven broad types including perivascular but without mandatory standalone Theca, Mesenchymal or Smooth muscle; high-weight adult sheep taxonomy evidence",
     "Advanced_Science_2026_sheep_human_reproductive_atlas": "large cross-tissue conservation reference for sheep-human reproductive lineages; not a one-section label quota",

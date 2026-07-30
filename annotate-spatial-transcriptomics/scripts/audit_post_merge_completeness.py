@@ -14,6 +14,7 @@ from lineage_controller_lib import (
     deterministic_cell_id_set_hash, deterministic_membership_hash,
     group_candidate_detected, read_tsv, write_tsv,
 )
+from membership_transform_lib import load_and_validate_chain
 
 
 def detected(row: dict[str, str], candidate: dict) -> bool:
@@ -55,6 +56,13 @@ def main() -> int:
     ap.add_argument(
         "--catalog-wide-review-manifest", action="append", type=Path, default=[],
         help="validated catalog-wide review apply manifests in chronological order",
+    )
+    ap.add_argument(
+        "--membership-transform-chain", type=Path,
+        help=(
+            "canonical ordered transform chain ending at --membership; preferred "
+            "over stage-specific provenance arguments"
+        ),
     )
     ap.add_argument(
         "--defer-canonical-zero-to-biological-review",
@@ -174,6 +182,35 @@ def main() -> int:
             )
             if all(key):
                 supported_local_remainders.add(key)
+    supported_transform_cells: set[tuple[str, str, str]] = set()
+    supported_transform_programs: set[tuple[str, str, str]] = set()
+    transform_operation_census: Counter[str] = Counter()
+    transform_chain = None
+    if args.membership_transform_chain:
+        transform_chain = load_and_validate_chain(
+            args.membership_transform_chain, args.membership.resolve()
+        )
+        for entry in transform_chain.get("transforms", []):
+            operation = str(entry.get("operation", ""))
+            transform_operation_census[operation] += 1
+            if operation in {
+                "atlas_unlabeled_broad_rescue", "source_unit_sync",
+                "final_release_materialization",
+            }:
+                continue
+            delta_path = Path(str(entry.get("delta", {}).get("path", "")))
+            transform_id = str(entry.get("transform_id", ""))
+            for row in read_tsv(delta_path):
+                cell_id = str(row.get("cell_id", ""))
+                candidate_id = str(row.get("candidate_id", ""))
+                broad = str(row.get("new_broad_label", ""))
+                if cell_id and candidate_id and broad:
+                    supported_transform_cells.add(
+                        (cell_id, candidate_id, broad)
+                    )
+                    supported_transform_programs.add(
+                        (transform_id, candidate_id, broad)
+                    )
     supported_post_merge_cells: set[tuple[str, str, str]] = set()
     supported_post_merge_programs: set[tuple[str, str, str]] = set()
     post_merge_review_membership_path: Path | None = None
@@ -420,6 +457,10 @@ def main() -> int:
             source_supported = (
                 str(row.get("cell_id", "")), candidate_id, broad
             ) in supported_catalog_review_cells
+        if (
+            str(row.get("cell_id", "")), candidate_id, broad
+        ) in supported_transform_cells:
+            source_supported = True
         supported = bool(
             candidate
             and candidate_can_release(candidate)
@@ -466,6 +507,10 @@ def main() -> int:
         local_positive_n += sum(
             candidate_id in eligible_candidate_ids and component_broad == broad
             for _, candidate_id, component_broad in supported_catalog_review_programs
+        )
+        local_positive_n += sum(
+            candidate_id in eligible_candidate_ids and component_broad == broad
+            for _, candidate_id, component_broad in supported_transform_programs
         )
         positive_program_n = len(positive) + local_positive_n
         n_final = broad_census[broad]
@@ -678,6 +723,19 @@ def main() -> int:
         ),
         "supported_catalog_wide_review_observation_n": len(
             supported_catalog_review_cells
+        ),
+        "supported_membership_transform_observation_n": len(
+            supported_transform_cells
+        ),
+        "membership_transform_operation_census": dict(
+            sorted(transform_operation_census.items())
+        ),
+        "membership_transform_chain": (
+            {
+                "path": str(args.membership_transform_chain.resolve()),
+                "sha256": sha256(args.membership_transform_chain),
+            }
+            if args.membership_transform_chain else None
         ),
         "catalog_wide_review_apply_manifests": [
             {"path": str(path.resolve()), "sha256": sha256(path)}

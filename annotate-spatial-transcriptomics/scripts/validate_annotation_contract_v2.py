@@ -11,6 +11,17 @@ from pathlib import Path
 
 from controller_thresholds import load_controller_thresholds
 from evidence_schema_lib import sha256, validate_artifact_ref, validate_json_against_schema
+from runtime_dependency_registry import (
+    CANONICAL_DEPENDENCIES,
+    CANONICAL_SCRIPTS,
+    PHASE_ORDER,
+    REGISTRY_VERSION,
+)
+from validate_fixed_atlas_bundle import (
+    ACTIVE_BUNDLE_ID,
+    LEGACY_BUNDLE_ID,
+    validate as validate_fixed_atlas,
+)
 
 
 def main() -> int:
@@ -24,12 +35,31 @@ def main() -> int:
     resolved = {}
     for key in (
         "project_config", "workflow_profile", "biological_profile",
-        "candidate_catalog", "threshold_registry",
+        "candidate_catalog", "threshold_registry", "atlas_bundle",
     ):
         path, artifact_errors = validate_artifact_ref(root, contract.get(key, {}), key)
         errors.extend(artifact_errors)
         if path:
             resolved[key] = path
+    if "atlas_bundle" in resolved:
+        atlas_id = str(contract.get("atlas_routing", {}).get("bundle_id", ""))
+        atlas_name = {
+            ACTIVE_BUNDLE_ID: "sheep_ovary_GSE233801_split_wall_v2.json",
+            LEGACY_BUNDLE_ID: "sheep_ovary_GSE233801_v1.json",
+        }.get(atlas_id, "")
+        canonical_atlas = (
+            Path(__file__).resolve().parents[1] / "references/atlases" / atlas_name
+        )
+        if (
+            not atlas_name
+            or
+            resolved["atlas_bundle"].resolve() != canonical_atlas.resolve()
+            or contract.get("atlas_bundle", {}).get("sha256") != sha256(canonical_atlas)
+        ):
+            errors.append("annotation contract substituted the fixed GSE233801 Atlas")
+        else:
+            atlas_doc = json.loads(canonical_atlas.read_text(encoding="utf-8"))
+            errors.extend(validate_fixed_atlas(atlas_doc))
     context_record = contract.get("candidate_context_evidence")
     if context_record:
         path, artifact_errors = validate_artifact_ref(
@@ -38,6 +68,30 @@ def main() -> int:
         errors.extend(artifact_errors)
         if path:
             resolved["candidate_context_evidence"] = path
+    input_audit_record = contract.get("query_input_audit")
+    if input_audit_record:
+        path, artifact_errors = validate_artifact_ref(
+            root, input_audit_record, "query input audit"
+        )
+        errors.extend(artifact_errors)
+        if path:
+            resolved["query_input_audit"] = path
+            audit = json.loads(path.read_text(encoding="utf-8"))
+            if audit.get("status") != "PASS":
+                errors.append("query input audit did not PASS")
+            if audit.get("sample_id") != contract.get("sample_id"):
+                errors.append("query input audit sample differs from contract")
+            if (
+                audit.get("input_sha256")
+                != contract.get("selected_input_snapshot", {}).get("sha256")
+            ):
+                errors.append("query input audit is not bound to selected snapshot")
+            if audit.get("raw_count_assay") != input_audit_record.get("raw_count_assay"):
+                errors.append("query input audit raw-count assay differs from contract")
+            if str(audit.get("raw_count_assay", "")).upper() == "SCT":
+                errors.append("query input audit selected SCT as raw-count assay")
+            if audit.get("scoring_exports_historical_columns") is not False:
+                errors.append("query input audit exposes historical columns to scoring")
     scope = contract.get("input_scope", {})
     scope_paths: dict[str, Path] = {}
     for key in ("full_object", "analysis_set", "excluded_initial_qc"):
@@ -128,11 +182,7 @@ def main() -> int:
         and remainder_policy.get("unselected_member_is_qc") is False
     ):
         errors.append("annotation contract permits invalid first-round remainder closure")
-    expected_phases = [
-        "whole_tissue_partition", "cluster_cohort_recluster",
-        "local_mixed_subcluster_split", "merge_and_freeze_broad",
-        "atlas_and_completeness_review", "materialize_final_release",
-    ]
+    expected_phases = list(PHASE_ORDER)
     if controller.get("phase_order") != expected_phases:
         errors.append("annotation contract phase order differs from v2.2 architecture")
     if controller.get("phase_authority") != {
@@ -146,6 +196,15 @@ def main() -> int:
         "materialize_final_release": "final_broad_fine_state_release",
     }:
         errors.append("annotation contract phase authority differs from v2.2 architecture")
+    atlas_policy = contract.get("atlas_routing", {})
+    if not (
+        atlas_policy.get("bundle_id") in {ACTIVE_BUNDLE_ID, LEGACY_BUNDLE_ID}
+        and atlas_policy.get("capability_matrix_enforced") is True
+        and atlas_policy.get("runtime_atlas_substitution_forbidden") is True
+        and atlas_policy.get("writeback_scope") == "unlabeled_after_broad_merge_only"
+        and atlas_policy.get("fine_anchor_eligible") is False
+    ):
+        errors.append("annotation contract does not enforce the fixed Atlas capability boundary")
     context_policy = contract.get("candidate_context_policy", {})
     if context_policy != {
         "scope": "evaluation_permission_only",
@@ -154,41 +213,12 @@ def main() -> int:
         "all_candidate_release_outlets_must_recheck": True,
     }:
         errors.append("annotation contract does not fail closed for context-gated candidates")
-    for name in (
-        "validate_phase_runtime.py",
-        "plan_cohort_resources.py",
-        "run_observation_lineage_scoring.R",
-        "derive_candidate_local_subsets.R",
-        "close_exact_remainders.py",
-        "build_whole_tissue_cohort_plan.py",
-        "adjudicate_second_round_subclusters.py",
-        "build_candidate_context_evidence.py",
-        "merge_and_freeze_broad_membership.py",
-        "route_global_atlas_v2.py",
-        "validate_global_atlas_v2.py",
-        "apply_post_merge_atlas_routing.py",
-        "review_post_merge_unresolved_components.py",
-        "audit_post_merge_completeness.py",
-        "audit_catalog_wide_lineage_challengers.py",
-        "build_cell_type_review_marker_manifest.py",
-        "export_cell_type_review_counts.R",
-        "build_broad_cell_type_review_evidence.py",
-        "export_broad_cell_type_review_pseudobulk.R",
-        "summarize_broad_cell_type_review_pseudobulk.py",
-        "build_broad_cell_type_review_packet_index.py",
-        "validate_catalog_wide_lineage_review_decisions.py",
-        "apply_catalog_wide_lineage_review.py",
-        "validate_sheep_ovary_biological_quality.py",
-        "apply_sheep_ovary_follicle_roi_repair.py",
-        "screen_rare_cell_programs.R",
-        "screen_spatial_foci.py",
-        "materialize_oocyte_cluster_membership.py",
-        "apply_cell_id_membership_patch.py",
-        "materialize_parent_locked_fine_proposals.py",
-        "materialize_final_release_v2_2.py",
-        "evaluate_annotation_robustness.py",
-        "run_lineage_controller.py",
-    ):
+    if controller.get("runtime_dependency_registry_version") != REGISTRY_VERSION:
+        errors.append("annotation contract runtime dependency registry version is stale")
+    bound_script_names = set(controller.get("scripts", {}))
+    if bound_script_names != set(CANONICAL_SCRIPTS):
+        errors.append("annotation contract script set differs from the canonical registry")
+    for name in CANONICAL_SCRIPTS:
         expected = script_dir / name
         record = controller.get("scripts", {}).get(name, {})
         try:
@@ -199,9 +229,10 @@ def main() -> int:
             errors.append(f"canonical lineage controller path differs for {name}")
         elif not expected.is_file() or record.get("sha256") != sha256(expected):
             errors.append(f"canonical lineage controller hash differs for {name}")
-    for dependency_name in (
-        "controller_thresholds.py", "lineage_controller_lib.py"
-    ):
+    bound_dependency_names = set(controller.get("dependencies", {}))
+    if bound_dependency_names != set(CANONICAL_DEPENDENCIES):
+        errors.append("annotation contract dependency set differs from the canonical registry")
+    for dependency_name in CANONICAL_DEPENDENCIES:
         dependency = script_dir / dependency_name
         dependency_record = controller.get("dependencies", {}).get(
             dependency_name, {}

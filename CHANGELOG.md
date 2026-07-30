@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- 修复二级亚簇 `mixed` 过度触发：候选可见、共享类固醇/ECM/收缩背景或局部平滑信号不再等同于混合身份。清晰 specific parent 仅在另一候选同时具有独立亚簇级多基因、DEG/pseudobulk、相邻分辨率证据，并且双方形成实质性互斥直接身份组件时才重开；specific-in-generic 仍可从直接身份组件触发有界拆分。局部阶段优先复用相邻 Leiden 分区，完全共表达且不可分的强程序保留 `unresolved_biological`。脱敏真实故障重放把局部拆分负载从全部 47 个二级亚簇、100% observations 降至 6 个亚簇、7.9%，同时保留 Granulosa、Theca 和 Epithelial 等真实少数组件。
+- 收拢执行链入口：新增 canonical SCT+BANKSY bootstrap，可从单个 Seurat RDS 自动审计常见 BANKSY 网格、非 SCT raw-count assay、坐标和 analysis boundary，并一次生成固定 Atlas annotation contract；raw-count assay 及 input-audit SHA 同时写入 contract，最终绝对值 dotplot 只能从该 assay 读取 counts。受控暂停统一物化为 `current_stage.json`/`next_action_manifest.json`，调度器只把 `FAILED_RUNTIME` 视为失败。最终 broad/fine/state/QC 与公开 `final_cell_type` 物化现已作为 `final_release_materialization` 接入有序 membership transform chain；最终 RDS 使用经过真实 Seurat 写回验证的 `pigz` 并行压缩和原子替换。
+- 修正固定 GSE233801 Atlas 的能力边界：旧 v1 把 c1/c3/c6/c10/c15/c16/c17 合并为 `Vascular/endothelial`，并把 c8 Smooth muscle、c12 Pericyte 与 c2 Stroma 合并。新 split-wall v2 从原始独立审阅 cluster 重建 Granulosa、Immune、Stromal/mesenchymal、Endothelial、Pericyte/mural 与 Smooth muscle 原型；Epithelial/mesothelial、Theca 仅可挑战，Oocyte、Luteal 不可映射。旧 v1 只允许已冻结任务断点续跑，不得通过别名盲拆。
+
 ## 2.5.0 — 2026-07-29
 
 - 修复长流程反复救援问题：Atlas 的 moderate/high 类别校准分别按 90%/95% 精度并独立检查 ECE；中高置信、非 OOD 的无标签/QC observation 可一次性 broad-only 回归。0.5%–1% 稳定痕迹只记为 watch，超过全 analysis set 50% 的局部拆分工作量在投递前强制返回二级分辨率/触发条件复核。完成有界 Atlas、unresolved、ROI 与最多两轮逐大类复核后，超阈值 remainder 物化为 `PENDING_USER_REVIEW_HIGH_UNRESOLVED`，不得再启动全局 residual/QC-anchor 重聚类。

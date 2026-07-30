@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ordered membership transform chain",
+  "type": "object",
+  "required": [
+    "schema_version", "status", "artifact_role", "initial_membership",
+    "current_membership", "transform_n", "transforms"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "status": {"const": "PASS"},
+    "artifact_role": {"const": "membership_transform_chain"},
+    "initial_membership": {"$ref": "#/$defs/membership"},
+    "current_membership": {"$ref": "#/$defs/membership"},
+    "transform_n": {"type": "integer", "minimum": 0},
+    "transforms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "transform_id", "operation", "identity_neutral",
+          "target_cell_type", "source_membership", "result_membership",
+          "delta", "delta_semantic_sha256", "changed_observation_n",
+          "evidence_manifest"
+        ],
+        "properties": {
+          "transform_id": {"pattern": "^T[0-9]{4}$"},
+          "operation": {
+            "enum": [
+              "atlas_unlabeled_broad_rescue", "post_merge_unresolved_return",
+              "follicle_roi_assignment", "follicle_roi_depublication",
+              "follicle_roi_reconciliation",
+              "source_unit_sync", "cell_type_review_patch",
+              "final_release_materialization"
+            ]
+          },
+          "identity_neutral": {"type": "boolean"},
+          "target_cell_type": {"type": "string"},
+          "source_membership": {"$ref": "#/$defs/membership"},
+          "result_membership": {"$ref": "#/$defs/membership"},
+          "delta": {"$ref": "#/$defs/artifact"},
+          "delta_semantic_sha256": {"pattern": "^[0-9a-f]{64}$"},
+          "changed_observation_n": {"type": "integer", "minimum": 0},
+          "evidence_manifest": {"$ref": "#/$defs/artifact"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256", "n_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"pattern": "^[0-9a-f]{64}$"},
+        "n_bytes": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "membership": {
+      "type": "object",
+      "required": [
+        "path", "sha256", "n_bytes", "semantic_sha256",
+        "cell_id_set_sha256", "n_observations"
+      ],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"pattern": "^[0-9a-f]{64}$"},
+        "n_bytes": {"type": "integer", "minimum": 0},
+        "semantic_sha256": {"pattern": "^[0-9a-f]{64}$"},
+        "cell_id_set_sha256": {"pattern": "^[0-9a-f]{64}$"},
+        "n_observations": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    }
+  }
+}

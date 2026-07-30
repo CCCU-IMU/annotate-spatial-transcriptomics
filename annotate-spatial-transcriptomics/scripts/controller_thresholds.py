@@ -89,6 +89,7 @@ def load_controller_thresholds(path: Path | None = None) -> dict:
         "minority_min_seed_fraction",
         "minority_min_deg_contrast",
         "rare_watch_min_fraction",
+        "pairwise_min_exclusive_direct_fraction",
         "cross_resolution_stability_minimum",
         "combined_analysis_split_fraction_review_trigger",
     }

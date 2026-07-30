@@ -6,7 +6,7 @@ Use this reference only after the biological context resolves to sheep ovary. It
 
 1. Current-query full-feature marker, anti-marker, stability and spatial evidence remains authoritative.
 2. A matched count-level sheep single-cell object is the strongest external channel after auditing its labels and provenance.
-3. Without such an object, GSE233801 is the primary public adult-sheep somatic atlas. Its scope is mainly Granulosa, Stromal/mesenchymal, endothelial/perivascular candidates and Immune; its low-resolution vascular labels cannot directly release Endothelial or Pericyte/mural, and it is not a sufficient source for Oocyte, steroidogenic Theca or surface Epithelium.
+3. Without such an object, GSE233801 is the primary public adult-sheep somatic atlas. The released labels are shallow, but an independent full-feature `res0.4` reconstruction separates endothelial, pericyte and mature smooth-muscle components. The fixed split-wall v2 reference therefore provides independent broad prototypes for Granulosa, Stromal/mesenchymal, Endothelial, Pericyte/mural, Smooth muscle and Immune, subject to current-query classwise calibration. Its small epithelial and steroidogenic-theca-like components remain challenge-only, and it is not a sufficient source for Oocyte or Luteal.
 4. Sheep developmental atlases and the 2026 sheep-human atlas provide complementary lineage and state evidence.
 5. Human/mouse ovary studies provide conserved boundary, anti-marker and morphology hypotheses only. They cannot transfer cells or require the sheep section to contain the same classes or subtypes.
 

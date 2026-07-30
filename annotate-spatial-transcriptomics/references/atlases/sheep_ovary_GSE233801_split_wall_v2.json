@@ -1,0 +1,66 @@
+{
+  "schema_version": "2.0",
+  "bundle_id": "sheep_ovary_GSE233801_split_wall_v2",
+  "reference_id": "GSE233801_independent_R_res0p4_split_wall_v002",
+  "artifact_role": "external_reference",
+  "legacy_resume_only": false,
+  "new_routing_authority": true,
+  "immutable": true,
+  "reusable_across_queries": true,
+  "query_reference_joint_retraining": false,
+  "reference_labels_reconstructed": true,
+  "released_cell_labels_available": false,
+  "reference_n_available": 39496,
+  "reference_n_train": 20202,
+  "reference_n_heldout": 3106,
+  "mapping_engine": "fixed_projection_prototype",
+  "feature_transform_provenance": "query-independent GSE233801 v1 unsupervised fixed-feature/SVD transform; all class prototypes and held-out truth rebuilt from original res0.4 reference clusters",
+  "asset_hashes": {
+    "fixed_features.tsv": "17417a2b6f5da25c3e42b1b154c3ef8a16e2afd834bcb14b5a4835b533b01b99",
+    "feature_transform.joblib": "bc9b50560556d2a3488dfcea3d6c007cb060f8e9078a394b89a16ed6c90bde2b",
+    "reference_prototypes.npz": "b0222c7b79af6f7c273b85b957eaec688318dfd83a893072951da9ba37b30ad6",
+    "reference_heldout_predictions.tsv.gz": "7f48cefa5eaf6de00b5e058405b2db692da92cb3cc126bb08e7d0aadf1e3e731",
+    "reference_cluster_crosswalk.tsv": "3f67dba14acc062542a8c213016dd22e06be639e1aa915b6771d08e6a8898434",
+    "reference_split.tsv": "54649c436b09e15463a4d44c457d7b38e9c40a9893d95ab1822e8d3840ef99d7"
+  },
+  "source_label_capability": {
+    "Granulosa": "supported",
+    "Immune": "supported",
+    "Stromal/mesenchymal": "supported",
+    "Smooth muscle": "supported",
+    "Pericyte/mural": "supported",
+    "Endothelial": "supported",
+    "Epithelial/mesothelial": "challenge_only",
+    "Theca": "challenge_only"
+  },
+  "release_broad_capability": {
+    "Granulosa": "supported",
+    "Oocyte": "unsupported",
+    "Theca": "challenge_only",
+    "Luteal": "unsupported",
+    "Stromal/mesenchymal": "supported",
+    "Smooth muscle": "supported",
+    "Pericyte/mural": "supported",
+    "Endothelial": "supported",
+    "Immune": "supported",
+    "Epithelial/mesothelial": "challenge_only",
+    "Glial/Schwann-like": "not_evaluable"
+  },
+  "legacy_source_labels": [
+    "Vascular/endothelial",
+    "Stromal/perivascular"
+  ],
+  "legacy_source_labels_may_be_released": false,
+  "fine_label_authority": false,
+  "lymphatic_component_policy": "GSE233801 c15 contributes only to broad Endothelial; Lymphatic endothelial requires current-query fine evidence after broad freeze",
+  "runtime_policy": {
+    "mapping_scope": "complete_analysis_set",
+    "writeback_scope": "unlabeled_after_broad_merge_only",
+    "defined_label_conflict_action": "biological_review_only_no_overwrite",
+    "fine_label_authority": false,
+    "supported_action": "classwise_query_calibration_then_unlabeled_broad_rescue",
+    "challenge_only_action": "log_or_reopen_biological_review_no_rescue",
+    "unsupported_or_not_evaluable_action": "log_only_no_rescue_no_challenge"
+  },
+  "provenance_note": "Split-wall fixed public adult-sheep Atlas rebuilt from original independently reviewed GSE233801 res0.4 clusters. It creates independent Endothelial, Pericyte/mural and Smooth-muscle prototypes and never derives those labels by aliasing a merged prototype."
+}

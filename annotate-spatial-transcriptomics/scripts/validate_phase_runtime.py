@@ -65,6 +65,7 @@ def main() -> int:
     ap.add_argument("--python", required=True)
     ap.add_argument("--rscript")
     ap.add_argument("--python-script", action="append", type=Path, default=[])
+    ap.add_argument("--r-script", action="append", type=Path, default=[])
     ap.add_argument("--python-import", action="append", default=[])
     ap.add_argument("--r-package", action="append", default=[])
     ap.add_argument("--semantic-input", action="append", default=[])
@@ -101,11 +102,25 @@ def main() -> int:
     rscript_path = ""
     r_version = ""
     r_package_records: list[dict[str, object]] = []
+    r_script_records: list[dict[str, object]] = []
     if args.rscript:
         rscript_path = shutil.which(args.rscript) or args.rscript
         ok, r_version = run([rscript_path, "--version"])
         if not ok:
             errors.append("exact Rscript executable is unavailable")
+        for script in args.r_script:
+            script = script.resolve()
+            if not script.is_file():
+                errors.append(f"R script is missing: {script}")
+                continue
+            ok, message = run([
+                rscript_path, "-e", f"parse(file={json.dumps(str(script))})",
+            ])
+            if not ok:
+                errors.append(f"R cannot parse {script.name}: {message}")
+            r_script_records.append({
+                "path": str(script), "sha256": sha256(script), "parsed": ok,
+            })
         for package in sorted(set(args.r_package)):
             ok, message = run([
                 rscript_path, "-e",
@@ -138,6 +153,7 @@ def main() -> int:
         "rscript": {"path": str(Path(rscript_path).resolve()), "version": r_version}
         if rscript_path else None,
         "r_packages": r_package_records,
+        "r_scripts": r_script_records,
         "semantic_inputs": input_records,
         "errors": errors,
     }

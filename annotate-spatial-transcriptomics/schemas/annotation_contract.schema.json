@@ -6,7 +6,7 @@
   "required": [
     "schema_version", "framework_version", "skill_release_version", "project_id", "sample_id",
     "observation_unit",
-    "project_config", "workflow_profile", "biological_profile", "candidate_catalog",
+    "project_config", "workflow_profile", "biological_profile", "candidate_catalog", "atlas_bundle",
     "threshold_registry", "candidate_context_policy",
     "selected_input_snapshot", "input_scope", "artifact_role_policy", "expression_ancestry_policy",
     "whole_tissue_partition", "query_reclustering", "broad_family_evidence",
@@ -24,6 +24,7 @@
     "workflow_profile": {"$ref": "#/$defs/artifact"},
     "biological_profile": {"$ref": "#/$defs/artifact"},
     "candidate_catalog": {"$ref": "#/$defs/artifact"},
+    "atlas_bundle": {"$ref": "#/$defs/artifact"},
     "threshold_registry": {"$ref": "#/$defs/artifact"},
     "candidate_context_evidence": {
       "oneOf": [{"type": "null"}, {"$ref": "#/$defs/artifact"}]
@@ -53,6 +54,35 @@
         "path": {"type": "string", "minLength": 1},
         "artifact_role": {"const": "runtime_input"}
       }
+    },
+    "query_input_audit": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "allOf": [
+            {"$ref": "#/$defs/artifact"},
+            {
+              "type": "object",
+              "required": [
+                "raw_count_assay", "coordinate_columns", "expression_boundary"
+              ],
+              "properties": {
+                "raw_count_assay": {
+                  "type": "string", "minLength": 1,
+                  "not": {"pattern": "^(?i:SCT)$"}
+                },
+                "coordinate_columns": {
+                  "type": "array", "minItems": 2, "maxItems": 2,
+                  "items": {"type": "string", "minLength": 1}
+                },
+                "expression_boundary": {
+                  "const": "project-local non-SCT raw counts"
+                }
+              }
+            }
+          ]
+        }
+      ]
     },
     "input_scope": {
       "type": "object",
@@ -142,7 +172,8 @@
         "phase_authority", "random_seed", "resolution_selector",
         "resolution_evidence_builder", "unmodeled_discovery",
         "cohort_reclustering", "scripts", "dependencies", "scoring_policy",
-        "subset_policy", "remainder_policy", "catalog_wide_review_policy"
+        "subset_policy", "remainder_policy", "catalog_wide_review_policy",
+        "runtime_dependency_registry_version"
       ],
       "properties": {
         "controller_version": {"const": "2.2.0"},
@@ -176,88 +207,16 @@
         "resolution_selector": {"$ref": "#/$defs/artifact"},
         "resolution_evidence_builder": {"$ref": "#/$defs/artifact"},
         "unmodeled_discovery": {"$ref": "#/$defs/artifact"},
+        "runtime_dependency_registry_version": {"type": "string", "minLength": 1},
         "scripts": {
           "type": "object",
-          "required": [
-            "validate_phase_runtime.py",
-            "plan_cohort_resources.py",
-            "run_observation_lineage_scoring.R",
-            "derive_candidate_local_subsets.R",
-            "close_exact_remainders.py",
-            "build_whole_tissue_cohort_plan.py",
-            "adjudicate_second_round_subclusters.py",
-            "build_candidate_context_evidence.py",
-            "merge_and_freeze_broad_membership.py",
-            "route_global_atlas_v2.py",
-            "validate_global_atlas_v2.py",
-            "apply_post_merge_atlas_routing.py",
-            "review_post_merge_unresolved_components.py",
-            "audit_post_merge_completeness.py",
-            "audit_catalog_wide_lineage_challengers.py",
-            "build_cell_type_review_marker_manifest.py",
-            "export_cell_type_review_counts.R",
-            "build_broad_cell_type_review_evidence.py",
-            "export_broad_cell_type_review_pseudobulk.R",
-            "summarize_broad_cell_type_review_pseudobulk.py",
-            "build_broad_cell_type_review_packet_index.py",
-            "validate_catalog_wide_lineage_review_decisions.py",
-            "apply_catalog_wide_lineage_review.py",
-            "validate_sheep_ovary_biological_quality.py",
-            "apply_sheep_ovary_follicle_roi_repair.py",
-            "screen_rare_cell_programs.R",
-            "screen_spatial_foci.py",
-            "materialize_oocyte_cluster_membership.py",
-            "apply_cell_id_membership_patch.py",
-            "materialize_parent_locked_fine_proposals.py",
-            "materialize_final_release_v2_2.py",
-            "evaluate_annotation_robustness.py",
-            "run_lineage_controller.py"
-          ],
-          "properties": {
-            "validate_phase_runtime.py": {"$ref": "#/$defs/artifact"},
-            "plan_cohort_resources.py": {"$ref": "#/$defs/artifact"},
-            "run_observation_lineage_scoring.R": {"$ref": "#/$defs/artifact"},
-            "derive_candidate_local_subsets.R": {"$ref": "#/$defs/artifact"},
-            "close_exact_remainders.py": {"$ref": "#/$defs/artifact"},
-            "build_whole_tissue_cohort_plan.py": {"$ref": "#/$defs/artifact"},
-            "adjudicate_second_round_subclusters.py": {"$ref": "#/$defs/artifact"},
-            "build_candidate_context_evidence.py": {"$ref": "#/$defs/artifact"},
-            "merge_and_freeze_broad_membership.py": {"$ref": "#/$defs/artifact"},
-            "route_global_atlas_v2.py": {"$ref": "#/$defs/artifact"},
-            "validate_global_atlas_v2.py": {"$ref": "#/$defs/artifact"},
-            "apply_post_merge_atlas_routing.py": {"$ref": "#/$defs/artifact"},
-            "review_post_merge_unresolved_components.py": {"$ref": "#/$defs/artifact"},
-            "audit_post_merge_completeness.py": {"$ref": "#/$defs/artifact"},
-            "audit_catalog_wide_lineage_challengers.py": {"$ref": "#/$defs/artifact"},
-            "build_cell_type_review_marker_manifest.py": {"$ref": "#/$defs/artifact"},
-            "export_cell_type_review_counts.R": {"$ref": "#/$defs/artifact"},
-            "build_broad_cell_type_review_evidence.py": {"$ref": "#/$defs/artifact"},
-            "export_broad_cell_type_review_pseudobulk.R": {"$ref": "#/$defs/artifact"},
-            "summarize_broad_cell_type_review_pseudobulk.py": {"$ref": "#/$defs/artifact"},
-            "build_broad_cell_type_review_packet_index.py": {"$ref": "#/$defs/artifact"},
-            "validate_catalog_wide_lineage_review_decisions.py": {"$ref": "#/$defs/artifact"},
-            "apply_catalog_wide_lineage_review.py": {"$ref": "#/$defs/artifact"},
-            "validate_sheep_ovary_biological_quality.py": {"$ref": "#/$defs/artifact"},
-            "apply_sheep_ovary_follicle_roi_repair.py": {"$ref": "#/$defs/artifact"},
-            "screen_rare_cell_programs.R": {"$ref": "#/$defs/artifact"},
-            "screen_spatial_foci.py": {"$ref": "#/$defs/artifact"},
-            "materialize_oocyte_cluster_membership.py": {"$ref": "#/$defs/artifact"},
-            "apply_cell_id_membership_patch.py": {"$ref": "#/$defs/artifact"},
-            "materialize_parent_locked_fine_proposals.py": {"$ref": "#/$defs/artifact"},
-            "materialize_final_release_v2_2.py": {"$ref": "#/$defs/artifact"},
-            "evaluate_annotation_robustness.py": {"$ref": "#/$defs/artifact"},
-            "run_lineage_controller.py": {"$ref": "#/$defs/artifact"}
-          },
-          "additionalProperties": false
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/artifact"}
         },
         "dependencies": {
           "type": "object",
-          "required": ["controller_thresholds.py", "lineage_controller_lib.py"],
-          "properties": {
-            "controller_thresholds.py": {"$ref": "#/$defs/artifact"},
-            "lineage_controller_lib.py": {"$ref": "#/$defs/artifact"}
-          },
-          "additionalProperties": false
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/artifact"}
         },
         "cohort_reclustering": {
           "type": "object",
@@ -384,9 +343,16 @@
     },
     "atlas_routing": {
       "type": "object",
-      "required": ["authoritative_router", "mapping_scope", "writeback_scope", "fine_anchor_eligible"],
+      "required": [
+        "authoritative_router", "bundle_id", "capability_matrix_enforced",
+        "runtime_atlas_substitution_forbidden", "mapping_scope",
+        "writeback_scope", "fine_anchor_eligible"
+      ],
       "properties": {
         "authoritative_router": {"const": "route_global_atlas_v2.py"},
+        "bundle_id": {"enum": ["sheep_ovary_GSE233801_split_wall_v2", "sheep_ovary_GSE233801_v1"]},
+        "capability_matrix_enforced": {"const": true},
+        "runtime_atlas_substitution_forbidden": {"const": true},
         "mapping_scope": {"const": "complete_analysis_set"},
         "writeback_scope": {"const": "unlabeled_after_broad_merge_only"},
         "fine_anchor_eligible": {"const": false}

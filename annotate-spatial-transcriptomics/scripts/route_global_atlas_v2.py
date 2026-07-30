@@ -14,6 +14,7 @@ from evidence_schema_lib import sha256, validate_artifact_ref
 from lineage_controller_lib import (
     apply_candidate_context, candidate_can_release, catalog_candidates,
 )
+from validate_fixed_atlas_bundle import validate as validate_fixed_atlas
 
 
 ACCEPTED_TIERS = {"high", "moderate_only"}
@@ -181,6 +182,13 @@ def main() -> int:
     ap.add_argument("--atlas-mapping", required=True, type=Path)
     ap.add_argument("--calibration-manifest", required=True, type=Path)
     ap.add_argument("--workflow-profile", required=True, type=Path)
+    ap.add_argument(
+        "--atlas-bundle-manifest", type=Path,
+        default=(
+            Path(__file__).resolve().parents[1]
+            / "references/atlases/sheep_ovary_GSE233801_split_wall_v2.json"
+        ),
+    )
     ap.add_argument("--catalog", required=True, type=Path)
     ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--out", required=True, type=Path)
@@ -200,6 +208,24 @@ def main() -> int:
     args = ap.parse_args()
 
     profile = json.loads(args.workflow_profile.read_text(encoding="utf-8"))
+    atlas_bundle = json.loads(
+        args.atlas_bundle_manifest.read_text(encoding="utf-8")
+    )
+    canonical_bundle = (
+        Path(__file__).resolve().parents[1]
+        / "references/atlases/sheep_ovary_GSE233801_split_wall_v2.json"
+    )
+    if (
+        args.atlas_bundle_manifest.resolve() != canonical_bundle.resolve()
+        or sha256(args.atlas_bundle_manifest) != sha256(canonical_bundle)
+        or atlas_bundle.get("bundle_id") != "sheep_ovary_GSE233801_split_wall_v2"
+        or atlas_bundle.get("immutable") is not True
+        or atlas_bundle.get("legacy_source_labels_may_be_released") is not False
+        or validate_fixed_atlas(atlas_bundle)
+    ):
+        raise SystemExit("Atlas routing requires the fixed GSE233801 capability bundle")
+    source_capabilities = atlas_bundle.get("source_label_capability", {})
+    release_capabilities = atlas_bundle.get("release_broad_capability", {})
     policy = profile.get("external_reference_policy", {})
     crosswalk = {str(k): str(v) for k, v in policy.get("primary_public_atlas_label_crosswalk", {}).items()}
     allowed_returns = set(policy.get("primary_public_atlas_scope", []))
@@ -258,6 +284,8 @@ def main() -> int:
         primary = current.get(args.broad_col, "").strip()
         source_label = atlas.get(args.atlas_label_col, "").strip()
         mapped = crosswalk.get(source_label, "")
+        source_capability = str(source_capabilities.get(source_label, "unsupported"))
+        release_capability = str(release_capabilities.get(mapped, "unsupported"))
         tier = atlas.get(args.atlas_tier_col, "").strip()
         ood = truth(atlas.get(args.ood_col, ""))
         ontology = truth(atlas.get(args.ontology_conflict_col, ""))
@@ -266,8 +294,27 @@ def main() -> int:
         )
         profile_scope = mapped in allowed_returns and mapped not in excluded_returns
         context_eligible = mapped in context_eligible_broad
-        in_scope = profile_scope and context_eligible
+        capability_supported = (
+            source_capability == "supported"
+            and release_capability == "supported"
+        )
+        capability_can_challenge = (
+            source_capability in {"supported", "challenge_only"}
+            and release_capability in {"supported", "challenge_only"}
+        )
+        in_scope = profile_scope and context_eligible and capability_supported
+        challenge_in_scope = (
+            profile_scope and context_eligible and capability_can_challenge
+        )
         accepted = tier in ACCEPTED_TIERS and class_calibrated and bool(mapped) and not ood and not ontology and in_scope
+        challenge_accepted = (
+            tier in ACCEPTED_TIERS
+            and class_calibrated
+            and bool(mapped)
+            and not ood
+            and not ontology
+            and challenge_in_scope
+        )
         is_qc = not primary and state in QC_STATES
         is_unresolved = not primary and state in UNRESOLVED_STATES
         if is_qc and accepted:
@@ -279,18 +326,24 @@ def main() -> int:
             proposed_state, proposed_broad = "defined_broad_only", mapped
             review = False
         elif is_qc:
-            route = "retain_qc"
+            route = (
+                "retain_qc_atlas_challenge_only"
+                if challenge_accepted else "retain_qc"
+            )
             proposed_state, proposed_broad = state, ""
             review = False
         elif is_unresolved:
-            route = "retain_unresolved_biological"
+            route = (
+                "retain_unresolved_atlas_challenge_only"
+                if challenge_accepted else "retain_unresolved_biological"
+            )
             proposed_state, proposed_broad = state, ""
             review = False
         elif primary:
             proposed_state, proposed_broad = state, primary
-            if accepted and mapped == primary:
+            if challenge_accepted and mapped == primary:
                 route, review = "defined_label_atlas_agreement", False
-            elif accepted and mapped != primary:
+            elif challenge_accepted and mapped != primary:
                 route, review = "defined_label_disagreement_candidate", False
                 key = ("broad_disagreement", boundary, cluster, primary, mapped)
                 review_candidates[key].append(cell)
@@ -326,6 +379,9 @@ def main() -> int:
             "atlas_class_ece_status": class_calibration.get("ece_status", ""),
             "atlas_class_calibrated": str(class_calibrated).lower(),
             "atlas_scope_pass": str(in_scope).lower(),
+            "atlas_challenge_scope_pass": str(challenge_in_scope).lower(),
+            "atlas_source_capability": source_capability,
+            "atlas_release_capability": release_capability,
             "atlas_profile_scope_pass": str(profile_scope).lower(),
             "candidate_context_release_eligible": str(context_eligible).lower(),
             "out_of_distribution": str(ood).lower(),
@@ -383,6 +439,11 @@ def main() -> int:
         "atlas_mapping": {"path": str(args.atlas_mapping.resolve()), "sha256": sha256(args.atlas_mapping)},
         "calibration_manifest": {"path": str(args.calibration_manifest.resolve()), "sha256": sha256(args.calibration_manifest)},
         "workflow_profile": {"path": str(args.workflow_profile.resolve()), "sha256": sha256(args.workflow_profile)},
+        "atlas_bundle": {
+            "path": str(args.atlas_bundle_manifest.resolve()),
+            "sha256": sha256(args.atlas_bundle_manifest),
+            "bundle_id": atlas_bundle["bundle_id"],
+        },
         "candidate_catalog": {"path": str(args.catalog.resolve()), "sha256": sha256(args.catalog)},
         "context_evidence": (
             {"path": str(args.context_evidence.resolve()), "sha256": sha256(args.context_evidence)}

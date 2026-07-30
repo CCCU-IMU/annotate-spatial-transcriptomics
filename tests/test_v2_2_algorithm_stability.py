@@ -28,9 +28,11 @@ from lineage_controller_lib import (  # noqa: E402
     hard_contradiction,
     independent_group_program,
     local_split_worthy_group_program,
+    pairwise_separable_identity_components,
     rare_group_program_watch,
     index_scores,
     rank_supported,
+    specific_component_embedded_in_generic_parent,
     supported_seed,
     validate_subset,
     validate_canonical_identity_component,
@@ -124,6 +126,7 @@ def row(cell: str, candidate: str, supported: bool, score: float | None = None) 
         "positive_families": "family_a;family_b" if supported else "",
         "positive_gene_count": "4" if supported else "0",
         "family_coherent": "true" if supported else "false",
+        "identity_core_direct": "true" if supported else "false",
         "release_family_coherent": "true" if supported else "false",
         "candidate_seed": "true" if supported else "false",
         "direct_signal": "0.4" if supported else "0",
@@ -131,6 +134,7 @@ def row(cell: str, candidate: str, supported: bool, score: float | None = None) 
         "direct_anti_gene_count": "0",
         "direct_anti_family_count": "0",
         "hard_contradiction": "false",
+        "ambient_suspect": "false",
         "specificity_priority": str(CANDIDATES[candidate]["specificity_priority"]),
         "cross_resolution_support_count": "3" if supported else "0",
         "local_seed_fraction": "0.8" if supported else "0",
@@ -150,6 +154,60 @@ def score_fixture(assignments: dict[str, str], candidates: list[str]) -> tuple[
 
 
 class V22AlgorithmStabilityTests(unittest.TestCase):
+    def test_pairwise_mixedness_requires_material_exclusive_direct_cores(self) -> None:
+        cells = [f"c{i}" for i in range(20)]
+        score_index = {}
+        for cell in cells:
+            for candidate_id in ("smooth_muscle", "pericyte_mural"):
+                supported = (
+                    cell in {f"c{i}" for i in range(10)}
+                    if candidate_id == "smooth_muscle"
+                    else cell in {f"c{i}" for i in range(10, 20)}
+                )
+                score_index[(cell, candidate_id)] = row(
+                    cell, candidate_id, supported
+                )
+        result = pairwise_separable_identity_components(
+            cells, "smooth_muscle", "pericyte_mural",
+            score_index, CANDIDATES,
+        )
+        self.assertTrue(result["separable"])
+        self.assertEqual(result["left_only_n"], 10)
+        self.assertEqual(result["right_only_n"], 10)
+
+    def test_nested_shared_program_is_not_pairwise_mixed(self) -> None:
+        cells = [f"c{i}" for i in range(20)]
+        score_index = {}
+        for cell in cells:
+            score_index[(cell, "smooth_muscle")] = row(
+                cell, "smooth_muscle", True
+            )
+            score_index[(cell, "pericyte_mural")] = row(
+                cell, "pericyte_mural", int(cell[1:]) < 12
+            )
+        result = pairwise_separable_identity_components(
+            cells, "smooth_muscle", "pericyte_mural",
+            score_index, CANDIDATES,
+        )
+        self.assertFalse(result["separable"])
+        self.assertEqual(result["right_only_n"], 0)
+        self.assertEqual(result["reason"], "coexpressed_or_nested_direct_identity")
+
+    def test_specific_direct_component_can_split_only_inside_generic_parent(self) -> None:
+        cells = [f"c{i}" for i in range(20)]
+        score_index = {
+            (cell, "smooth_muscle"): row(
+                cell, "smooth_muscle", int(cell[1:]) < 7
+            )
+            for cell in cells
+        }
+        result = specific_component_embedded_in_generic_parent(
+            cells, "smooth_muscle", score_index, CANDIDATES
+        )
+        self.assertTrue(result["separable"])
+        self.assertEqual(result["direct_identity_n"], 7)
+        self.assertEqual(result["complement_n"], 13)
+
     def test_canonical_cluster_challenger_survives_diluted_required_family_and_somatic_anti(self) -> None:
         aggregate = {
             "candidate_id": "oocyte",
@@ -1721,7 +1779,11 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
                 "--partitions", str(dummy), "--out", str(root / "out"),
             ], capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("installed canonical", result.stderr)
+            self.assertTrue(
+                "installed canonical" in result.stderr
+                or "stale runtime dependency registry" in result.stderr,
+                result.stderr,
+            )
 
     def test_contract_builder_binds_identity_core_and_parent_lock_policy(self) -> None:
         source = (SCRIPTS / "build_annotation_contract_v2.py").read_text(

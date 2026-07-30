@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply one validated catalog-wide review round and preserve exact provenance."""
+"""Apply one validated decision for the single active cell-type review."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ def main() -> int:
     ap.add_argument("--stage-authority", required=True, type=Path)
     ap.add_argument("--membership", required=True, type=Path)
     ap.add_argument("--review-manifest", required=True, type=Path)
+    ap.add_argument("--review-state", required=True, type=Path)
     ap.add_argument("--decision-validation", required=True, type=Path)
     ap.add_argument("--catalog", required=True, type=Path)
     ap.add_argument("--context-evidence", type=Path)
@@ -42,8 +43,22 @@ def main() -> int:
     ):
         raise SystemExit("stage authority does not permit catalog-wide review apply")
     review = json.loads(args.review_manifest.read_text(encoding="utf-8"))
+    state = json.loads(args.review_state.read_text(encoding="utf-8"))
     validation = json.loads(args.decision_validation.read_text(encoding="utf-8"))
-    if validation.get("status") != "PASS":
+    active = state.get("active_cell_type_review") or {}
+    if (
+        validation.get("status") != "PASS"
+        or validation.get("formal_batch_closure_performed") is not False
+        or int(validation.get("decision_n", -1)) != 1
+        or state.get("artifact_role") != "sequential_cell_type_review_state"
+        or int(state.get("active_review_n", -1)) != 1
+        or state.get("formal_batch_closure_forbidden") is not True
+        or validation.get("active_review_id") != active.get("review_id")
+        or validation.get("active_cell_type") != active.get("target_broad_label")
+        or Path(str(validation.get("review_state", {}).get("path", ""))).resolve()
+        != args.review_state.resolve()
+        or validation.get("review_state", {}).get("sha256") != sha256(args.review_state)
+    ):
         raise SystemExit("catalog-wide review decisions are not fully resolved")
     packet_record = validation.get("evidence_packet_manifest", {})
     packet_path = Path(str(packet_record.get("path", "")))
@@ -91,6 +106,7 @@ def main() -> int:
     authority_records = {
         "post_atlas_membership": args.membership,
         "catalog_review_manifest": args.review_manifest,
+        "cell_type_review_state": args.review_state,
         "catalog_decision_validation": args.decision_validation,
         "candidate_catalog": args.catalog,
     }
@@ -144,6 +160,11 @@ def main() -> int:
     }
     queue = {str(row.get("review_id", "")): row for row in read_tsv(queue_path)}
     decisions = read_tsv(decision_path)
+    if (
+        len(decisions) != 1
+        or str(decisions[0].get("review_id", "")) != str(active.get("review_id", ""))
+    ):
+        raise SystemExit("apply may modify only the single active cell type")
     component_members: dict[str, list[dict[str, str]]] = {}
     for row in read_tsv(component_membership_path):
         component_members.setdefault(str(row.get("component_id", "")), []).append(row)
@@ -313,6 +334,9 @@ def main() -> int:
         "schema_version": "2.2",
         "status": "PASS_REQUIRES_NEXT_REVIEW_ROUND",
         "stage": "catalog_wide_lineage_review_apply",
+        "active_cell_type": active.get("target_broad_label", ""),
+        "active_review_id": active.get("review_id", ""),
+        "formal_batch_closure_performed": False,
         "review_round": round_index,
         "formal_membership_written": False,
         "membership": artifact(membership_path),
@@ -320,6 +344,7 @@ def main() -> int:
         "annotation_contract": artifact(args.contract),
         "stage_authority": artifact(args.stage_authority),
         "review_manifest": artifact(args.review_manifest),
+        "review_state": artifact(args.review_state),
         "decision_validation": artifact(args.decision_validation),
         "candidate_catalog": artifact(args.catalog),
         "context_evidence": artifact(args.context_evidence) if args.context_evidence else None,
@@ -333,7 +358,8 @@ def main() -> int:
         },
         "membership_semantic_sha256": deterministic_membership_hash(output),
         "membership_transform": {
-            "operation": "catalog_wide_exact_cell_id_patch",
+            "operation": "cell_type_review_patch",
+            "target_cell_type": active.get("target_broad_label", ""),
             "source_physical_sha256": sha256(args.membership),
             "source_semantic_sha256": deterministic_membership_hash(source),
             "result_physical_sha256": sha256(membership_path),
@@ -343,7 +369,9 @@ def main() -> int:
             "delta_physical_sha256": sha256(changes_path),
             "changed_observation_n": len(changes),
         },
-        "next_required_action": "rerun_complete_catalog_wide_double_sided_review",
+        "next_required_action": (
+            "rerun_same_cell_type_if_membership_changed_otherwise_activate_next_cell_type"
+        ),
     }
     manifest_path = args.out / "catalog_wide_lineage_review_apply_manifest.json"
     manifest_path.write_text(

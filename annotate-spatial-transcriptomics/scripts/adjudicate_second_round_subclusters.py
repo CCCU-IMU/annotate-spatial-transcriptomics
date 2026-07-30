@@ -11,12 +11,16 @@ from pathlib import Path
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
     apply_candidate_context, candidate_can_release, canonical_cluster_challenger, catalog_candidates,
+    contextual_parent_override_labels,
     dominant_generic_remainder_group,
     effective_broad_writeback_strategy, group_candidate_detected,
     group_candidate_score, group_identity_core_fraction,
     group_identity_core_direct_fraction,
+    independent_group_program,
     local_split_worthy_group_program,
+    pairwise_separable_identity_components,
     rare_group_program_watch,
+    specific_component_embedded_in_generic_parent,
     group_orthogonal_support_count, group_release_supported_fraction,
     number, read_tsv, write_tsv,
 )
@@ -81,8 +85,15 @@ def main() -> int:
     score_rows = read_tsv(args.scores)
     candidate_universe = sorted(candidates)
     per_cell_candidates: dict[str, set[str]] = defaultdict(set)
+    score_index: dict[tuple[str, str], dict[str, str]] = {}
     for row in score_rows:
-        per_cell_candidates[str(row.get("cell_id", ""))].add(str(row.get("candidate_id", "")))
+        cell_id = str(row.get("cell_id", ""))
+        candidate_id = str(row.get("candidate_id", ""))
+        key = (cell_id, candidate_id)
+        if key in score_index:
+            raise SystemExit("second-round scorer duplicated cell x candidate evidence")
+        score_index[key] = row
+        per_cell_candidates[cell_id].add(candidate_id)
     selected_ids = {cell for cells in members.values() for cell in cells}
     if (
         set(per_cell_candidates) != selected_ids
@@ -159,6 +170,15 @@ def main() -> int:
             item for item in positive
             if str(item[3].get("candidate_id", "")) != "stromal_mesenchymal"
         ]
+        specific_independent = [
+            item for item in specific_positive
+            if independent_group_program(item[2], item[3])
+        ]
+        parent_worthy_specific = [
+            item for item in specific_independent
+            if canonical_cluster_challenger(item[2], item[3])
+            or group_release_supported_fraction(item[2], item[3]) >= support_floor
+        ]
         specific_split_worthy = [
             item for item in specific_positive
             if local_split_worthy_group_program(item[2], item[3])
@@ -172,11 +192,26 @@ def main() -> int:
             item for item in positive
             if str(item[3].get("candidate_id", "")) == "stromal_mesenchymal"
         ]
+        contextual_parent_labels = {
+            label
+            for item in specific_positive
+            for label in contextual_parent_override_labels(item[3])
+        }
+        preferred_context_parents = [
+            item for item in parent_worthy_specific
+            if item[1] in contextual_parent_labels
+        ]
         winner = (
-            specific_split_worthy[0]
-            if specific_split_worthy
+            preferred_context_parents[0]
+            if preferred_context_parents
+            else parent_worthy_specific[0]
+            if parent_worthy_specific
             else generic_positive[0]
             if generic_positive
+            else specific_independent[0]
+            if specific_independent
+            else specific_split_worthy[0]
+            if specific_split_worthy
             else specific_positive[0]
             if specific_positive
             else positive[0]
@@ -189,15 +224,74 @@ def main() -> int:
             if winner else 0.0
         )
         contradiction = number(winner[2].get("hard_contradiction_fraction")) if winner else 1.0
-        split_worthy_competitors = []
-        for item in competing:
-            row, candidate = item[2], item[3]
-            if local_split_worthy_group_program(row, candidate):
-                split_worthy_competitors.append(item)
+        separable_competitors = []
+        coexpressed_independent_competitors = []
+        background_or_shared_programs = []
+        pairwise_audit: list[str] = []
+        embedded_specific_components = []
+        winner_id = str(winner[2].get("candidate_id", "")) if winner else ""
+        winner_is_generic = winner_id == "stromal_mesenchymal"
+        contender_by_id = {
+            str(item[2].get("candidate_id", "")): item
+            for item in specific_split_worthy + specific_independent
+            if item is not winner
+        }
+        if winner and not winner_is_generic:
+            for contender_id in sorted(contender_by_id):
+                item = contender_by_id[contender_id]
+                pair = pairwise_separable_identity_components(
+                    members[cluster], winner_id, contender_id,
+                    score_index, candidates,
+                )
+                pairwise_audit.append(
+                    f"{winner_id}:{contender_id}:"
+                    f"{pair['left_only_n']}:{pair['right_only_n']}:"
+                    f"{pair['both_n']}:{str(pair['separable']).lower()}"
+                )
+                # A clear specific parent is not reopened by a weaker shared
+                # trace merely because a small exclusive tail exists.  The
+                # challenger must itself be an independent subcluster-level
+                # identity.  This is the key distinction between biological
+                # mixedness and ubiquitous ovarian background programs.
+                challenger_independent = item in specific_independent
+                if pair["separable"] and (
+                    challenger_independent
+                    or winner not in parent_worthy_specific
+                ):
+                    separable_competitors.append(item)
+                    continue
+                contextual_trace = winner[1] in contextual_parent_override_labels(
+                    item[3]
+                )
+                if item in specific_independent and not contextual_trace:
+                    coexpressed_independent_competitors.append(item)
+                else:
+                    background_or_shared_programs.append(item)
+        elif winner_is_generic:
+            for contender_id in sorted(contender_by_id):
+                item = contender_by_id[contender_id]
+                component = specific_component_embedded_in_generic_parent(
+                    members[cluster], contender_id, score_index, candidates
+                )
+                pairwise_audit.append(
+                    f"stromal_mesenchymal:{contender_id}:"
+                    f"{component['complement_n']}:"
+                    f"{component['direct_identity_n']}:0:"
+                    f"{str(component['separable']).lower()}"
+                )
+                if component["separable"]:
+                    embedded_specific_components.append(item)
+                else:
+                    background_or_shared_programs.append(item)
+        blocking_competitors = (
+            separable_competitors
+            + coexpressed_independent_competitors
+            + embedded_specific_components
+        )
         runner_raw = max(
             (
                 group_release_supported_fraction(item[2], item[3])
-                for item in split_worthy_competitors
+                for item in blocking_competitors
             ),
             default=0.0,
         )
@@ -213,7 +307,7 @@ def main() -> int:
             and target_raw - runner_raw >= margin_floor
             and contradiction <= contradiction_ceiling
             and orthogonal_support_count(winner[2], winner[3]) >= 3
-            and not split_worthy_competitors
+            and not blocking_competitors
         )
         dominant_whole_pass = bool(
             winner
@@ -228,21 +322,24 @@ def main() -> int:
             and group_identity_core_fraction(winner[2]) >= dominant_core_floor
             and contradiction <= dominant_contradiction_ceiling
             and orthogonal_support_count(winner[2], winner[3]) >= 3
-            and not split_worthy_competitors
+            and not blocking_competitors
         )
         generic_remainder_whole_pass = bool(
             winner
             and whole_strategy_ok
             and dominant_generic_remainder_group(winner[2], winner[3])
-            and not split_worthy_competitors
-            and not specific_split_worthy
+            and not blocking_competitors
+            and not embedded_specific_components
         )
         whole_pass = (
             strict_whole_pass
             or dominant_whole_pass
             or generic_remainder_whole_pass
         )
-        if whole_pass and not split_worthy_competitors:
+        true_local_split = bool(
+            separable_competitors or embedded_specific_components
+        )
+        if whole_pass and not blocking_competitors:
             target_label = winner[1]
             target_candidate = str(winner[2].get("candidate_id", ""))
             if args.provisional_status == "unknown" or not args.provisional_broad:
@@ -271,18 +368,27 @@ def main() -> int:
                 if dominant_whole_pass
                 else "dominant_generic_remainder"
             )
-        elif winner and specific_split_worthy:
+        elif winner and true_local_split:
             outcome = "local_split_required"
             target_label = ""
             target_candidate = ""
             local_split = True
-            whole_subcluster_route = "local_split_specific_programs"
+            whole_subcluster_route = (
+                "local_split_pairwise_exclusive_identity_components"
+                if separable_competitors
+                else "local_split_specific_component_in_generic_parent"
+            )
+            pending_reason = (
+                "pairwise_separable_direct_identity_components"
+                if separable_competitors
+                else "specific_direct_identity_component_in_generic_parent"
+            )
             for cell in sorted(members[cluster]):
                 pending_membership.append({
                     "cell_id": cell,
                     "source_boundary": args.cohort_id,
                     "source_cluster": cluster,
-                    "pending_reason": "competing_separable_lineage_programs",
+                    "pending_reason": pending_reason,
                 })
         else:
             outcome = "unresolved_biological"
@@ -313,6 +419,23 @@ def main() -> int:
             "provisional_broad_after_score_freeze": args.provisional_broad,
             "local_split_required": str(local_split).lower(),
             "competing_candidate_ids": ";".join(str(item[2].get("candidate_id", "")) for item in positive),
+            "independent_identity_candidate_ids": ";".join(
+                str(item[2].get("candidate_id", ""))
+                for item in specific_independent
+            ),
+            "separable_competitor_candidate_ids": ";".join(
+                str(item[2].get("candidate_id", ""))
+                for item in separable_competitors + embedded_specific_components
+            ),
+            "coexpressed_unresolved_candidate_ids": ";".join(
+                str(item[2].get("candidate_id", ""))
+                for item in coexpressed_independent_competitors
+            ),
+            "background_or_shared_candidate_ids": ";".join(
+                str(item[2].get("candidate_id", ""))
+                for item in background_or_shared_programs
+            ),
+            "pairwise_direct_component_audit": ";".join(pairwise_audit),
             "rare_watch_candidate_ids": ";".join(
                 str(item[2].get("candidate_id", "")) for item in rare_watch
             ),

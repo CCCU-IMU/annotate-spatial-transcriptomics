@@ -2,7 +2,7 @@
 
 [![Validate](https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/actions/workflows/validate.yml/badge.svg)](https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/actions/workflows/validate.yml)
 
-面向 Codex Agent 的空间转录组/单细胞转录组迭代式注释 Skill。v2.5 采用“第一轮只划分 cohort、第二轮重聚类负责正式注释”的哈希绑定控制器：每个初始 cluster 都从项目自身 raw counts 独立执行 SCT/PCA/SNN/Leiden，完整扫描开放候选目录；只有二级 mixed subcluster 才进行局部 observation 拆分。全部 cohort 合并后才冻结 broad，再执行全细胞 Atlas、羊卵巢三终点组织学复核以及对每个可评估 broad 的双侧精度/召回复核。稳定分区默认复用，只有原 source subcluster 确实不可评估时才重聚类。项目自编 scorer 或 subset writer 只能产生 experimental 结果，不能写正式标签。
+面向 Codex Agent 的空间转录组/单细胞转录组迭代式注释 Skill。v2.5 采用“第一轮只划分 cohort、第二轮重聚类负责正式注释”的哈希绑定控制器：每个初始 cluster 都从项目自身 raw counts 独立执行 SCT/PCA/SNN/Leiden，完整扫描开放候选目录；只有二级 mixed subcluster 才进行局部 observation 拆分。全部 cohort 合并后才冻结 broad，再执行一次固定 GSE233801 Atlas、羊卵巢三终点组织学复核，最后严格串行地对每个可评估 broad 执行独立的过召回、欠召回、分子、空间与文献边界复核。同一时刻只有一个 active cell type；一个类型闭环后才进入下一个。稳定分区默认复用，只有原 source subcluster 确实不可评估时才重聚类。项目自编 scorer 或 subset writer 只能产生 experimental 结果，不能写正式标签。
 
 适配 Seurat RDS、AnnData/H5AD、SingleCellExperiment、BANKSY、Scanpy/Leiden、Seurat 聚类和外部 cluster table。空间数据以可靠的大类为主要终点，亚群只在证据充分时定义。
 
@@ -49,6 +49,19 @@ rm -rf "${CODEX_HOME:-$HOME/.codex}/skills/annotate-spatial-transcriptomics"
 
 Seurat 用户要特别注意表达边界：SCT+BANKSY 对象可以提供第一轮空间分区，但每个第二轮 cohort 必须从同一项目的非 SCT raw-count assay 重新执行 `SCT v2/glmGamPoi → PCA → SNN → Leiden`。同一 raw-count assay 可在 cohort 内建立全基因 LogNormalize 数据层用于 DEG/marker 证据；禁止对 SCT corrected counts 再做 SCTransform，也禁止复用其他注释项目的表达对象。极小 cohort 记录为 `underpowered_not_evaluable` 并进入 Atlas/unresolved 路径，不能静默继承第一轮 provisional 标签。
 
+已经完成 SCT+BANKSY 的羊卵巢 Seurat RDS 使用唯一 bootstrap；只给输入、项目目录和样本名即可自动审计非 SCT raw counts、坐标与常见 BANKSY resolution 列，冻结 analysis set、标准 partition grid、固定 GSE233801 Atlas 和唯一 annotation contract。自动推断含糊时才要求显式 `--cluster-mapping`，不再为每个样本临时编写 input audit 或 contract adapter：
+
+```bash
+python annotate-spatial-transcriptomics/scripts/bootstrap_sct_banksy_project.py \
+  --sample SAMPLE_ID \
+  --rds /absolute/path/to/SAMPLE_sct_BANKSY_preprocessed_seurat.rds \
+  --project-root /absolute/path/to/SP_ANNO/SAMPLE \
+  --observation-unit cellbin \
+  --rscript /absolute/path/to/the/validated/Rscript
+```
+
+每个正式 controller 调用都会原子写出 `current_stage.json` 和 `next_action_manifest.json`。`REVIEW_REQUIRED`/`ITERATION_REQUIRED` 是可恢复的成功暂停，不再在调度器中伪装成软件崩溃；只有 `FAILED_RUNTIME` 才表示输入、环境、资源或代码失败。bootstrap 还会把非 SCT raw-count assay 和 input-audit SHA 写入 contract；最终归一化 dotplot 使用当前表达 assay，绝对值检测率则固定从 contract 绑定的 raw-count assay 读取。
+
 多样本并行时，每个调度作业必须使用 `样本__P阶段_任务[_队列或目标]__A尝试号`，例如 `SAMPLE1__P10_SCT__A01`、`SAMPLE1__P40_COHORT_stromal__A02`。Skill 内的生成器会限制阶段码和长度，并把名称写入 run registry/报告；禁止继续使用 `sct_preprocess_v0` 这类无法从调度页面判断阶段的名称。
 
 ### 1. 首次消息一次给全背景
@@ -80,7 +93,7 @@ primary_questions=主要生物学问题
 priority_lineages=需要严格验证的稀有或关键谱系
 runtime=可用的 R/Python 环境与调度资源
 
-请自主发现输入、选择聚类强度、投递并监控任务、修复失败、维护状态并持续迭代。不要复制示例参数或标签。初次大类解释前先冻结 label-blind 的全候选正反证据、winner/runner-up 与矛盾；论文 marker 只能事后解释，不能缩窄候选集。所有大类和定向判断结束并冻结 QC 后，对 analysis set 做一次 Atlas Broad-only 映射：QC 通过多通道门后直接回填大类；已定义大类只做一致性/OOD 比较，群体性差异才复核，不能被 Atlas 直接覆盖。最终只发布一套注释：大类至少中等置信度、亚群仅高置信度。
+请自主发现输入、选择聚类强度、投递并监控任务、修复失败、维护状态并持续迭代。不要复制示例参数或标签。初次大类解释前先冻结 label-blind 的全候选正反证据、winner/runner-up 与矛盾；论文 marker 只能事后解释，不能缩窄候选集。Broad freeze 后对 analysis set 只做一次 contract-bound GSE233801 Broad-only 映射：原本未标注且在 Atlas 能力矩阵内的中高置信、非 OOD 观测可回填大类；已定义大类只做一致性/OOD 比较，不能被 Atlas 直接覆盖。完成羊卵巢三终点后，对每个大类一次只开启一个专项复核，关闭后才进入下一类。最终只发布一套注释：大类至少中等置信度、亚群仅高置信度。
 ```
 
 如果输入是 BANKSY 参数网格，明确要求 Agent 自主比较候选结果，不要预先指定某个 resolution/k 值：
@@ -136,7 +149,8 @@ runtime=可用的 R/Python 环境与调度资源
      -> provisional 与历史标签不可见时，逐二级 subcluster 扫描完整 broad/fine/state/exploratory 目录
      -> 高纯度亚簇整体 parent/cross-lineage/missing-broad return
      -> 只能定义大类时保留 Broad-only；亚型证据不足时 fine 留空
-     -> 真正 mixed 的二级亚簇才启动局部 observation 拆分和 exact local remainder
+     -> 只有具有互斥直接身份组件的真正 mixed 亚簇，或 specific-in-generic 组件，才启动局部拆分
+     -> 优先检查相邻 Leiden 分区，仍不可分才使用局部 observation 组件和 exact remainder
      -> 未进入局部 subset 的成员重新评估 parent/unresolved，不能自动变为 QC
   -> 合并全部 cohort 为 analysis set 的互斥精确覆盖，并首次冻结正式 broad
   -> 在已冻结 broad parent 内物化高置信 fine；state 使用独立列
@@ -144,12 +158,16 @@ runtime=可用的 R/Python 环境与调度资源
      -> 未标注成员：校准后中高置信、非 OOD、scope/ontology 兼容才直接回填 broad
      -> 已有大类且一致：关闭；低置信差异：记录
      -> 已有大类存在群体性可信差异或 coherent OOD：完整 source subcluster/cohort 复核一次
-  -> 在暂定 broad 上完成逐谱系双侧复核
-     -> 每个已注释 broad 形成一个复核任务
+  -> 完成羊卵巢三终点后，严格串行地执行逐大类全样本专项复核
+     -> 同一时刻只允许一个 active cell type，Agent 先输出“现在开始对 <cell type> 进行专项复核。”
+     -> 当前 broad 形成一个唯一证据包和一个决策
         -> precision：检查该类型现有成员是否过召回
         -> recall：在全组织其余细胞中检查是否欠召回
+        -> molecular：检查多基因、DEG/pseudobulk、竞争谱系与替代解释
+        -> spatial/literature：检查全切片空间一致性和文献边界
         -> source subcluster / 空间组件 / group watch 仅作内部证据与 patch 边界
-     -> 最多两轮精确证据决策；任何改动后必须完整重审所有可评估 broad
+     -> 每个类型最多两轮精确证据决策；修订只重开 membership/召回/watch signature 被影响的类型
+     -> 当前类型关闭后才进入下一个，禁止一次产生或决策多个大类的正式复核包
      -> 默认复用稳定分区，不把复核变成全组织逐 cellbin 分类器
   -> 缺失谱系、未建模程序、空间合理性与 residual QC 最终闭环
   -> 构建单一最终注释（中等及以上大类；仅高置信亚群）
@@ -187,7 +205,7 @@ runtime=可用的 R/Python 环境与调度资源
 
 | 证据层 | 近年研究与用途 | 对自动注释的约束 |
 |---|---|---|
-| 羊整卵巢主参考 | [成年发情湖羊/GSE233801（J Anim Sci Biotechnol, 2023）](https://pubmed.ncbi.nlm.nih.gov/37964337/)、[西藏羊整卵巢图谱（Mol Biol Evol, 2024）](https://pmc.ncbi.nlm.nih.gov/articles/PMC10980521/)、[五个发育时间点羊卵巢图谱（iScience, 2025）](https://pubmed.ncbi.nlm.nih.gov/40641558/) | 无可用配对 count-level 参考时，GSE233801 是成年羊体细胞**残余 QC** Atlas 救回的主参考，主要覆盖颗粒、基质、血管/壁细胞候选和免疫；不同文章的 5、7、9 类结果只用于候选审查与 negative audit。 |
+| 羊整卵巢主参考 | [成年发情湖羊/GSE233801（J Anim Sci Biotechnol, 2023）](https://pubmed.ncbi.nlm.nih.gov/37964337/)、[西藏羊整卵巢图谱（Mol Biol Evol, 2024）](https://pmc.ncbi.nlm.nih.gov/articles/PMC10980521/)、[五个发育时间点羊卵巢图谱（iScience, 2025）](https://pubmed.ncbi.nlm.nih.gov/40641558/) | 无可用配对 count-level 参考时，唯一正式 Atlas 为 contract-bound 固定 `sheep_ovary_GSE233801_split_wall_v2`。它从原始 GSE233801 `res0.4` cluster 重新建立 Granulosa、Immune、Stromal/mesenchymal、Endothelial、Pericyte/mural 和 Smooth muscle 原型；Epithelial/mesothelial 与 Theca 仅有 challenge authority，Oocyte、Luteal 无映射权限。所有直接救回仍要求当前 query 独立的类别级校准。旧合并 v1 只允许断点续跑。完整对应见 [GSE233801 crosswalk](docs/GSE233801_to_skill_broad_taxonomy_crosswalk_v2.md)。 |
 | 跨物种/多组织验证 | [九物种卵巢图谱（J Anim Sci Biotechnol, 2026）](https://pubmed.ncbi.nlm.nih.gov/41975518/)、羊–人 15 组织生殖与中枢图谱（Advanced Science, 2026, DOI 10.1002/advs.202517633）、人鼠卵巢衰老比较（Science, 2025, DOI 10.1126/science.adx0659） | 用于检查跨物种保守的大类边界、羊基因符号及 glia/平滑肌/壁细胞等候选；theca、pericyte、epithelial 细分具有物种差异，不能直接把参考标签写回 query。 |
 | 成人卵巢方法学边界 | 成人卵巢单细胞专家综述（AJOG, 2025, DOI 10.1016/j.ajog.2024.05.046） | 强调取样/过滤造成的谱系缺失、表面上皮难捕获、单 marker 不可靠和“无限亚型”风险，支持以可靠浅层大类为终点。 |
 | 谱系专项证据 | [羊巨噬细胞–颗粒细胞互作（FASEB J, 2026）](https://pubmed.ncbi.nlm.nih.gov/41801067/)、[人卵泡 theca–stroma 连续轨迹](https://pubmed.ncbi.nlm.nih.gov/36599970/)、[人卵巢空间图谱](https://pubmed.ncbi.nlm.nih.gov/38578993/) | 用于解决 macrophage、theca/stroma、血管/壁细胞和空间界面等竞争假设；专项论文不能越过当前样本的 marker、anti-marker 与空间门。 |
@@ -208,7 +226,7 @@ Skill 内置一份[脱敏羊卵巢 R-first forward-test 参考](annotate-spatial
 
 - **第一轮只建 cohort。** 选择保留主要组织结构、不过度技术碎裂的全组织分辨率；仅记录 provisional broad/mixed/unknown 与 lineage watch，不产生正式 broad/fine/QC。
 - **第二轮负责注释。** 每个初始 cluster 独立运行完整 `0.1,0.2,0.3,0.4,0.6` 网格并扫描全部候选。能可靠定义亚型才写 fine；亚型证据不足时保留 supported broad，不能为了目录完整而强行命名。
-- **跨谱系与局部混合。** 二级亚簇出现另一个完整谱系时直接 cross-lineage return；只有两个可分离身份程序确实共存时才启动局部拆分。未进入局部子集的成员重新评估 parent/remainder，不自动进入 QC。
+- **跨谱系与局部混合。** 一个清晰完整谱系直接 parent/cross-lineage return；多个候选可见或共享背景信号不等于 mixed。清晰 specific parent 只有在另一谱系也具备独立亚簇级多基因、DEG/pseudobulk、稳定性证据，且双方形成实质性互斥直接身份组件时才重开。通用 Stromal 背景中的少数 specific 组件可单独触发有界拆分。先检查相邻 Leiden 分区，仍不可分才进入 observation 组件；强信号完全共表达且无法消歧时保留 unresolved。未进入局部子集的成员重新评估 parent/remainder，不自动进入 QC。
 - **语义修复不重跑稳定分区。** 输入、cohort membership、grid、seed 与聚类脚本哈希均未变化时，复用 controller 生成的 derived partition，只重算 scorer、边界和写回。任何修复 proposal 必须用 `apply_cell_id_membership_patch.py` 按唯一 `cell_id` 连接，禁止按行序赋值。
 - **全细胞 Atlas 与逐细胞类型复核。** broad 冻结后才运行全细胞 broad mapping；Atlas 只能直接救回 unlabeled、非 OOD 的中高置信成员，不能静默覆盖已有 broad 或生成 fine。随后以“一个 broad 细胞类型”为一级单位逐个复核：在同一次复核中检查现有成员的过召回、全组织其余细胞中的欠召回，以及整个切片上的空间分布。每个已注释 broad 必须分别给出成员纯度、全组织召回、分子身份和空间合理性结论，缺一项不能关闭。source subcluster、严格逐细胞空间组件和亚簇级信号缺口 watch 只作为内部证据与 patch 边界，不拆成大量用户任务；group watch 只能触发原始 counts 定位，不能整簇写回。
 - **上下文只控制能否评估。** 阶段、处理或解剖背景不能充当身份分数。`not_evaluable` 候选不得形成完整性阳性、Atlas 救回、fine 或最终标签，也不能因为其阳性程序计数而阻断一个合理的零 census；若最终 membership 已含该标签则必须失败并回到来源复核。

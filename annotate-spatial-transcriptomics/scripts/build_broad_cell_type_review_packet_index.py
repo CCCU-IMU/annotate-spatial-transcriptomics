@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bind one complete, machine-readable evidence packet to every broad review."""
+"""Bind one complete evidence packet to the single active cell-type review."""
 
 from __future__ import annotations
 
@@ -57,6 +57,10 @@ def main() -> int:
     ap.add_argument("--pseudobulk-summary-manifest", required=True, type=Path)
     ap.add_argument("--threshold-registry", required=True, type=Path)
     ap.add_argument("--biological-quality-review", type=Path)
+    ap.add_argument(
+        "--active-review-id", required=True,
+        help="the only queue item that may receive a formal evidence packet",
+    )
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
@@ -70,6 +74,14 @@ def main() -> int:
     ]
     minimum_markers = int(thresholds["minimum_evaluable_positive_markers"])
     minimum_families = int(thresholds["minimum_evaluable_positive_families"])
+    catalog_record = broad.get("catalog", {})
+    catalog_path = Path(str(catalog_record.get("path", "")))
+    if (
+        not catalog_path.is_file()
+        or catalog_record.get("sha256") != sha256(catalog_path)
+    ):
+        raise SystemExit("broad review evidence does not bind its literature catalog")
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     if (
         review.get("stage") != "post_atlas_catalog_wide_lineage_review"
         or review.get("status") != "ITERATION_REQUIRED"
@@ -123,7 +135,13 @@ def main() -> int:
     ):
         raise SystemExit("broad review spatial evidence is missing or stale")
 
-    queue = read_tsv(queue_path)
+    full_queue = read_tsv(queue_path)
+    queue = [
+        row for row in full_queue
+        if str(row.get("review_id", "")) == args.active_review_id
+    ]
+    if len(queue) != 1:
+        raise SystemExit("active review ID does not identify exactly one queued cell type")
     controller_review_rows = read_tsv(
         controller_artifact_paths["broad_lineage_review_summary"]
     )
@@ -197,9 +215,10 @@ def main() -> int:
     if (
         "" in spatial_by_review
         or len(spatial_by_review) != len(spatial_rows)
-        or len(spatial_rows) != len(queue)
+        or len(spatial_rows) != 1
+        or set(spatial_by_review) != {args.active_review_id}
     ):
-        raise SystemExit("broad review spatial plots do not cover the queue exactly")
+        raise SystemExit("broad review spatial plot is not restricted to the active cell type")
     for row in spatial_rows:
         path = Path(str(row.get("path", "")))
         if not path.is_file() or row.get("sha256") != sha256(path):
@@ -241,6 +260,7 @@ def main() -> int:
 
     errors: list[str] = []
     packet_rows: list[dict[str, object]] = []
+    packet_payloads: list[dict[str, object]] = []
     for queued in queue:
         review_id = str(queued.get("review_id", ""))
         broad_label = str(queued.get("target_broad_label", ""))
@@ -324,7 +344,8 @@ def main() -> int:
         )
         spatial_evaluable = bool(
             broad.get("membership_cell_id_semantic_sha256")
-            and broad.get("review_queue_n") == len(queue)
+            and broad.get("reviewed_broad_n") == 1
+            and broad.get("active_review_id") == args.active_review_id
             and spatial
         )
         ovary_spatial_status = "not_applicable"
@@ -402,6 +423,34 @@ def main() -> int:
             "oocyte_review_status": oocyte_review_status,
             "oocyte_canonical_bound": oocyte_canonical_bound,
             "follicle_histology_status": follicle_histology_status,
+            "literature_boundary": {
+                "candidate_rules": [
+                    {
+                        "candidate_id": candidate.get("candidate_id", ""),
+                        "candidate_role": candidate.get("candidate_role", ""),
+                        "release_rule": candidate.get("release_rule", ""),
+                        "required_positive_families": candidate.get(
+                            "required_positive_families", []
+                        ),
+                        "hard_anti_families": candidate.get(
+                            "hard_anti_families", []
+                        ),
+                        "soft_anti_families": candidate.get(
+                            "soft_anti_families", []
+                        ),
+                    }
+                    for candidate in catalog.get("candidate_boundaries", [])
+                    if str(candidate.get("release_broad_label", ""))
+                    == broad_label
+                ],
+                "catalog_literature_basis": catalog.get(
+                    "literature_basis", []
+                ),
+                "policy": (
+                    "literature defines candidate boundaries and alternatives; "
+                    "current-query multichannel evidence determines identity"
+                ),
+            },
             "broad_evidence_manifest_sha256": sha256(
                 args.broad_evidence_manifest
             ),
@@ -413,6 +462,7 @@ def main() -> int:
                 for key, path in sorted(controller_artifact_paths.items())
             },
         }
+        packet_payloads.append(payload)
         packet_rows.append({
             "review_id": review_id,
             "review_mode": queued.get("review_mode", ""),
@@ -445,9 +495,17 @@ def main() -> int:
             ),
         })
 
-    if len(packet_rows) != len(queue):
-        errors.append("evidence packets do not cover the review queue exactly once")
+    if len(packet_rows) != 1:
+        errors.append("the active cell type did not receive exactly one evidence packet")
     args.out.mkdir(parents=True, exist_ok=True)
+    payload_path = args.out / "active_cell_type_review_packet.json"
+    payload_path.write_text(
+        json.dumps(
+            packet_payloads[0] if len(packet_payloads) == 1 else {},
+            ensure_ascii=False, indent=2,
+        ) + "\n",
+        encoding="utf-8",
+    )
     index_path = args.out / "broad_cell_type_review_packet_index.tsv"
     write_tsv(index_path, packet_rows, fields=[
         "review_id", "review_mode", "target_broad_label", "unit_signature",
@@ -476,7 +534,11 @@ def main() -> int:
         "threshold_registry": artifact(args.threshold_registry),
         "biological_quality_review": quality_artifact,
         "review_queue": artifact(queue_path),
+        "active_review_id": args.active_review_id,
+        "formal_batch_packet_generation_forbidden": True,
+        "review_queue_total_n": len(full_queue),
         "packet_index": artifact(index_path),
+        "active_evidence_packet": artifact(payload_path),
         "packet_n": len(packet_rows),
         "errors": errors,
     }

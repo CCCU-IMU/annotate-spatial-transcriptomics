@@ -13,6 +13,18 @@ from pathlib import Path
 from evidence_schema_lib import sha256
 from controller_thresholds import REGISTRY_PATH, load_controller_thresholds
 from lineage_decision_lib import observation_writeback_policy
+from runtime_dependency_registry import (
+    CANONICAL_DEPENDENCIES,
+    CANONICAL_SCRIPTS,
+    PHASE_ORDER,
+    REGISTRY_VERSION,
+)
+
+
+FIXED_SHEEP_OVARY_ATLAS = (
+    Path(__file__).resolve().parents[1]
+    / "references/atlases/sheep_ovary_GSE233801_split_wall_v2.json"
+)
 
 
 def artifact(path: Path, role: str = "runtime_input") -> dict[str, str]:
@@ -147,6 +159,14 @@ def main() -> int:
     ap.add_argument("--snapshot-id", required=True)
     ap.add_argument("--analysis-membership", required=True, type=Path)
     ap.add_argument("--excluded-initial-qc", required=True, type=Path)
+    ap.add_argument(
+        "--input-audit-manifest",
+        type=Path,
+        help=(
+            "optional frozen SCT+BANKSY input audit; canonical bootstrap always "
+            "binds this so the non-SCT raw-count assay is explicit"
+        ),
+    )
     ap.add_argument("--whole-tissue-method", choices=["BANKSY", "Seurat", "Scanpy", "external"], required=True)
     ap.add_argument("--whole-tissue-grid", required=True)
     ap.add_argument("--whole-tissue-grid-artifact", type=Path)
@@ -193,6 +213,34 @@ def main() -> int:
         raise SystemExit("selected runtime snapshot is missing or stale")
     if any(selected_path == failed or failed in selected_path.parents for failed in failed_roots):
         raise SystemExit("selected input snapshot is inside failed_diagnostic artifacts")
+    input_audit_record = None
+    if args.input_audit_manifest:
+        input_audit_path = args.input_audit_manifest.resolve()
+        input_audit = json.loads(input_audit_path.read_text(encoding="utf-8"))
+        raw_count_assay = str(input_audit.get("raw_count_assay", "")).strip()
+        coordinate_columns = input_audit.get("coordinate_columns", [])
+        if input_audit.get("status") != "PASS":
+            raise SystemExit("input audit did not PASS")
+        if input_audit.get("sample_id") != project["sample_id"]:
+            raise SystemExit("input audit sample differs from project")
+        if input_audit.get("input_sha256") != matches[0]["sha256"]:
+            raise SystemExit("input audit is not bound to selected snapshot")
+        if not raw_count_assay or raw_count_assay.upper() == "SCT":
+            raise SystemExit("input audit lacks a project-local non-SCT raw-count assay")
+        if input_audit.get("scoring_exports_historical_columns") is not False:
+            raise SystemExit("input audit permits historical columns in label-blind scoring")
+        if (
+            not isinstance(coordinate_columns, list)
+            or len(coordinate_columns) != 2
+            or any(not str(value).strip() for value in coordinate_columns)
+        ):
+            raise SystemExit("input audit lacks one explicit spatial coordinate pair")
+        input_audit_record = {
+            **artifact(input_audit_path, "runtime_input"),
+            "raw_count_assay": raw_count_assay,
+            "coordinate_columns": [str(value) for value in coordinate_columns],
+            "expression_boundary": str(input_audit.get("expression_boundary", "")),
+        }
     biological = json.loads(args.biological_profile.read_text(encoding="utf-8"))
     controller_thresholds = load_controller_thresholds()
     scoring_policy = controller_thresholds["scoring_policy"]
@@ -231,6 +279,7 @@ def main() -> int:
         "candidate_catalog": freeze_artifact(
             args.candidate_catalog, root, "candidate_catalog", args.contract_id
         ),
+        "atlas_bundle": artifact(FIXED_SHEEP_OVARY_ATLAS, "external_reference"),
         "threshold_registry": freeze_artifact(
             REGISTRY_PATH, root, "controller_threshold_registry", args.contract_id
         ),
@@ -256,6 +305,7 @@ def main() -> int:
             "path": str(selected_path),
             "artifact_role": "runtime_input",
         },
+        "query_input_audit": input_audit_record,
         "input_scope": {
             "full_object": {
                 "path": str(selected_path),
@@ -306,14 +356,7 @@ def main() -> int:
             "controller_version": "2.2.0",
             "formal_release_requires_canonical_chain": True,
             "historical_labels_blinded_until_membership_freeze": True,
-            "phase_order": [
-                "whole_tissue_partition",
-                "cluster_cohort_recluster",
-                "local_mixed_subcluster_split",
-                "merge_and_freeze_broad",
-                "atlas_and_completeness_review",
-                "materialize_final_release",
-            ],
+            "phase_order": list(PHASE_ORDER),
             "phase_authority": {
                 "whole_tissue_partition": "provisional_only_no_release_membership",
                 "cluster_cohort_recluster": "candidate_only_no_release_membership",
@@ -346,49 +389,14 @@ def main() -> int:
                 "sct_input_boundary": "project_local_non_sct_raw_counts",
                 "clustering_path": "SCT_PCA_SNN_Leiden",
             },
+            "runtime_dependency_registry_version": REGISTRY_VERSION,
             "scripts": {
                 name: artifact(Path(__file__).resolve().parent / name)
-                for name in (
-                    "validate_phase_runtime.py",
-                    "plan_cohort_resources.py",
-                    "run_observation_lineage_scoring.R",
-                    "derive_candidate_local_subsets.R",
-                    "close_exact_remainders.py",
-                    "build_whole_tissue_cohort_plan.py",
-                    "adjudicate_second_round_subclusters.py",
-                    "build_candidate_context_evidence.py",
-                    "merge_and_freeze_broad_membership.py",
-                    "route_global_atlas_v2.py",
-                    "validate_global_atlas_v2.py",
-                    "apply_post_merge_atlas_routing.py",
-                    "review_post_merge_unresolved_components.py",
-                    "audit_post_merge_completeness.py",
-                    "audit_catalog_wide_lineage_challengers.py",
-                    "build_cell_type_review_marker_manifest.py",
-                    "export_cell_type_review_counts.R",
-                    "build_broad_cell_type_review_evidence.py",
-                    "export_broad_cell_type_review_pseudobulk.R",
-                    "summarize_broad_cell_type_review_pseudobulk.py",
-                    "build_broad_cell_type_review_packet_index.py",
-                    "validate_catalog_wide_lineage_review_decisions.py",
-                    "apply_catalog_wide_lineage_review.py",
-                    "validate_sheep_ovary_biological_quality.py",
-                    "apply_sheep_ovary_follicle_roi_repair.py",
-                    "screen_rare_cell_programs.R",
-                    "screen_spatial_foci.py",
-                    "materialize_oocyte_cluster_membership.py",
-                    "apply_cell_id_membership_patch.py",
-                    "materialize_parent_locked_fine_proposals.py",
-                    "materialize_final_release_v2_2.py",
-                    "evaluate_annotation_robustness.py",
-                    "run_lineage_controller.py",
-                )
+                for name in CANONICAL_SCRIPTS
             },
             "dependencies": {
                 name: artifact(Path(__file__).resolve().parent / name)
-                for name in (
-                    "controller_thresholds.py", "lineage_controller_lib.py"
-                )
+                for name in CANONICAL_DEPENDENCIES
             },
             "scoring_policy": {
                 "gene_scale": "query_nonzero_q95_capped",
@@ -463,6 +471,9 @@ def main() -> int:
         },
         "atlas_routing": {
             "authoritative_router": "route_global_atlas_v2.py",
+            "bundle_id": "sheep_ovary_GSE233801_split_wall_v2",
+            "capability_matrix_enforced": True,
+            "runtime_atlas_substitution_forbidden": True,
             "mapping_scope": "complete_analysis_set",
             "writeback_scope": "unlabeled_after_broad_merge_only",
             "fine_anchor_eligible": False,

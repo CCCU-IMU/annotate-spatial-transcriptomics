@@ -15,12 +15,14 @@ from lineage_controller_lib import (
     canonical_cluster_challenger,
     candidate_can_release,
     catalog_candidates,
+    contextual_parent_override_labels,
     dominant_generic_remainder_group,
     effective_broad_writeback_strategy,
     group_candidate_detected,
     group_candidate_score,
     group_identity_core_fraction,
     group_identity_core_direct_fraction,
+    independent_group_program,
     group_orthogonal_support_count,
     group_pseudobulk_contrast,
     group_release_supported_fraction,
@@ -220,6 +222,18 @@ def main() -> int:
                 value for value in positive
                 if str(value[2].get("candidate_id", "")) != "stromal_mesenchymal"
             ]
+            specific_independent = [
+                value for value in specific_positive
+                if independent_group_program(value[1], value[2])
+            ]
+            parent_worthy_specific = [
+                value for value in specific_independent
+                if canonical_cluster_challenger(value[1], value[2])
+                or group_release_supported_fraction(value[1], value[2])
+                >= writeback[
+                    "whole_subcluster_min_raw_two_family_supported_fraction"
+                ]
+            ]
             specific_split_worthy = [
                 value for value in specific_positive
                 if local_split_worthy_group_program(value[1], value[2])
@@ -228,10 +242,23 @@ def main() -> int:
                 value for value in positive
                 if str(value[2].get("candidate_id", "")) == "stromal_mesenchymal"
             ]
+            contextual_parent_labels = {
+                label
+                for value in specific_positive
+                for label in contextual_parent_override_labels(value[2])
+            }
+            preferred_context_parents = [
+                value for value in parent_worthy_specific
+                if str(value[2].get("release_broad_label", ""))
+                in contextual_parent_labels
+            ]
             ranked = sorted(
                 (
-                    specific_split_worthy
+                    preferred_context_parents
+                    or parent_worthy_specific
                     or generic_positive
+                    or specific_independent
+                    or specific_split_worthy
                     or specific_positive
                     or positive
                 ),
@@ -247,18 +274,23 @@ def main() -> int:
                 unresolved_n += group_n
                 continue
             winner_core = group_release_supported_fraction(winner[1], winner[2])
+            independent_competitors = [
+                value for value in competitors
+                if independent_group_program(value[1], value[2])
+                and not (
+                    winner
+                    and str(winner[2].get("release_broad_label", ""))
+                    in contextual_parent_override_labels(value[2])
+                )
+            ]
             runner_core = max(
                 (
                     group_release_supported_fraction(value[1], value[2])
-                    for value in competitors
+                    for value in independent_competitors
                 ),
                 default=0.0,
             )
             winner_margin = max(0.0, winner_core - runner_core)
-            split_worthy_competitors = [
-                value for value in competitors
-                if local_split_worthy_group_program(value[1], value[2])
-            ]
             whole_strategy_ok = bool(
                 effective_broad_writeback_strategy(winner[2])
                 != "candidate_local_component_never_parent_expansion"
@@ -274,7 +306,7 @@ def main() -> int:
                 and number(winner[1].get("hard_contradiction_fraction"))
                 <= writeback["maximum_contradiction_fraction"]
                 and group_orthogonal_support_count(winner[1], winner[2]) >= 3
-                and not split_worthy_competitors
+                and not independent_competitors
             )
             dominant_whole_pass = (
                 whole_strategy_ok
@@ -296,13 +328,13 @@ def main() -> int:
                     "whole_subcluster_dominant_max_contradiction_fraction"
                 ]
                 and group_orthogonal_support_count(winner[1], winner[2]) >= 3
-                and not split_worthy_competitors
+                and not independent_competitors
             )
             generic_whole_pass = (
                 whole_strategy_ok
                 and dominant_generic_remainder_group(winner[1], winner[2])
-                and not split_worthy_competitors
-                and not specific_split_worthy
+                and not independent_competitors
+                and not specific_independent
             )
             whole_pass = (
                 strict_whole_pass
@@ -311,7 +343,11 @@ def main() -> int:
             )
             if whole_pass:
                 directly_resolved_n += group_n
-            elif specific_split_worthy:
+            elif (
+                independent_competitors
+                and str(winner[2].get("candidate_id", ""))
+                != "stromal_mesenchymal"
+            ):
                 mixed_n += group_n
             else:
                 unresolved_n += group_n

@@ -91,6 +91,10 @@ def main() -> int:
     ap.add_argument("--marker-manifest", required=True, type=Path)
     ap.add_argument("--membership", required=True, type=Path)
     ap.add_argument("--review-manifest", required=True, type=Path)
+    ap.add_argument(
+        "--active-review-id", required=True,
+        help="the single cell type for which evidence may be materialized",
+    )
     ap.add_argument("--coordinates", type=Path)
     ap.add_argument("--catalog", required=True, type=Path)
     ap.add_argument("--threshold-registry", required=True, type=Path)
@@ -130,11 +134,16 @@ def main() -> int:
     queue_path = Path(str(queue_record.get("path", "")))
     if not queue_path.is_file() or queue_record.get("sha256") != sha256(queue_path):
         raise SystemExit("cell-type review queue is missing or stale")
-    queue = pd.read_csv(queue_path, sep="\t", dtype=str).fillna("")
-    if queue.empty or queue.review_id.eq("").any() or queue.review_id.duplicated().any():
+    full_queue = pd.read_csv(queue_path, sep="\t", dtype=str).fillna("")
+    if full_queue.empty or full_queue.review_id.eq("").any() or full_queue.review_id.duplicated().any():
         raise SystemExit("cell-type review queue must contain unique nonempty review_id")
-    if queue.target_broad_label.eq("").any() or queue.target_broad_label.duplicated().any():
+    if full_queue.target_broad_label.eq("").any() or full_queue.target_broad_label.duplicated().any():
         raise SystemExit("one open review round must contain exactly one task per broad type")
+    queue = full_queue.loc[
+        full_queue.review_id.eq(args.active_review_id)
+    ].copy()
+    if len(queue) != 1:
+        raise SystemExit("active review ID does not select exactly one cell type")
 
     marker_manifest = pd.read_csv(args.marker_manifest, sep="\t", dtype=str).fillna("")
     gene_map = pd.read_csv(args.count_export / "cell_type_review_gene_map.tsv", sep="\t", dtype=str).fillna("")
@@ -622,6 +631,8 @@ def main() -> int:
         "schema_version": "2.2", "status": "PASS_REVIEW_EVIDENCE_ONLY",
         "artifact_role": "broad_cell_type_targeted_review_evidence",
         "primary_review_unit": "one_annotated_broad_cell_type",
+        "active_review_id": args.active_review_id,
+        "simultaneous_cell_type_evidence_packets": 1,
         "source_subclusters_are_internal_evidence_only": True,
         "whole_query_recall_scanned_per_type": True,
         "formal_membership_written": False,
@@ -639,8 +650,8 @@ def main() -> int:
         "catalog": artifact(args.catalog),
         "threshold_registry": artifact(args.threshold_registry),
         "context_release_eligibility": context,
+        "review_queue_n": len(full_queue),
         "reviewed_broad_n": len(summary_rows),
-        "review_queue_n": len(queue),
         "artifacts": {
             "summary": artifact(summary_path), "precision": artifact(precision_path),
             "recall_components": artifact(component_path),

@@ -82,10 +82,13 @@ if (inherits(obj, "Seurat")) {
   assay_name <- if (!is.null(arg$assay)) arg$assay else DefaultAssay(obj)
   if (!assay_name %in% Assays(obj)) stop("Assay not present: ", assay_name)
   assay <- obj[[assay_name]]
+  count_assay_name <- if (!is.null(arg$`count-assay`)) arg$`count-assay` else assay_name
+  if (!count_assay_name %in% Assays(obj)) stop("Count assay not present: ", count_assay_name)
+  count_assay <- obj[[count_assay_name]]
   data_layer <- ifelse(is.null(arg$`data-layer`), "data", arg$`data-layer`)
   count_layer <- ifelse(is.null(arg$`count-layer`), "counts", arg$`count-layer`)
   data_mat <- safe_layer(assay, data_layer)[, common, drop = FALSE]
-  count_mat <- safe_layer(assay, count_layer)[, common, drop = FALSE]
+  count_mat <- safe_layer(count_assay, count_layer)[, common, drop = FALSE]
 } else if (inherits(obj, "SingleCellExperiment") || inherits(obj, "SummarizedExperiment")) {
   if (!requireNamespace("SummarizedExperiment", quietly = TRUE)) stop("SummarizedExperiment package is required for SCE input")
   available <- SummarizedExperiment::assayNames(obj)

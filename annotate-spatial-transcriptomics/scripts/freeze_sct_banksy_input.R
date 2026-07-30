@@ -10,12 +10,12 @@ suppressPackageStartupMessages({
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 6L) {
-  stop("Usage: freeze_sct_banksy_input.R <rds> <sha256sum> <cluster_mapping.tsv> <preprocess_manifest.json> <sample_id> <out>")
+  stop("Usage: freeze_sct_banksy_input.R <rds> <sha256sum> <cluster_mapping.tsv|AUTO> <preprocess_manifest.json|AUTO> <sample_id> <out>")
 }
 input_rds <- normalizePath(args[[1L]], mustWork = TRUE)
 sha256_record <- normalizePath(args[[2L]], mustWork = TRUE)
-mapping_path <- normalizePath(args[[3L]], mustWork = TRUE)
-preprocess_manifest_path <- normalizePath(args[[4L]], mustWork = TRUE)
+mapping_arg <- args[[3L]]
+preprocess_manifest_arg <- args[[4L]]
 sample_id <- args[[5L]]
 out <- args[[6L]]
 dir.create(out, recursive = TRUE, showWarnings = FALSE)
@@ -42,7 +42,43 @@ if (length(sha_parts) < 2L || nchar(sha_parts[[1L]]) != 64L ||
 
 obj <- readRDS(input_rds)
 if (!inherits(obj, "Seurat")) stop("input is not a Seurat object")
-mapping <- fread(mapping_path, colClasses = "character")
+metadata <- as.data.table(obj[[]], keep.rownames = "cell_id")
+
+infer_banksy_mapping <- function(columns) {
+  candidates <- columns[
+    grepl("banksy", columns, ignore.case = TRUE) &
+      grepl("res|resolution|cluster|snn", columns, ignore.case = TRUE)
+  ]
+  if (length(candidates) < 3L) {
+    stop(paste0(
+      "AUTO cluster mapping found fewer than three BANKSY resolution columns; ",
+      "provide an explicit mapping TSV with resolution and cluster_column"
+    ))
+  }
+  values <- vapply(candidates, function(column) {
+    hits <- regmatches(column, gregexpr("[0-9]+(?:\\.[0-9]+)?", column, perl = TRUE))[[1L]]
+    if (!length(hits)) return(NA_real_)
+    as.numeric(tail(hits, 1L))
+  }, numeric(1L))
+  keep <- is.finite(values) & values > 0 & values <= 5
+  candidates <- candidates[keep]; values <- values[keep]
+  if (length(candidates) < 3L || anyDuplicated(values)) {
+    stop(paste0(
+      "AUTO BANKSY resolution inference is absent or ambiguous; ",
+      "provide an explicit mapping TSV"
+    ))
+  }
+  data.table(resolution = as.character(values), cluster_column = candidates)
+}
+
+if (identical(toupper(mapping_arg), "AUTO")) {
+  mapping <- infer_banksy_mapping(names(metadata))
+  mapping_path <- file.path(out, "inferred_banksy_cluster_mapping.tsv")
+  fwrite(mapping, mapping_path, sep = "\t")
+} else {
+  mapping_path <- normalizePath(mapping_arg, mustWork = TRUE)
+  mapping <- fread(mapping_path, colClasses = "character")
+}
 if (!all(c("resolution", "cluster_column") %in% names(mapping))) {
   stop("cluster mapping must contain resolution and cluster_column")
 }
@@ -51,11 +87,21 @@ if (nrow(mapping) < 3L || any(!is.finite(mapping$resolution_numeric)) ||
     anyDuplicated(mapping$resolution_numeric)) stop("invalid whole-tissue resolution grid")
 setorder(mapping, resolution_numeric)
 
-metadata <- as.data.table(obj[[]], keep.rownames = "cell_id")
 if (!all(mapping$cluster_column %in% names(metadata))) {
   stop("input metadata lacks one or more bound BANKSY cluster columns")
 }
-if (!all(c("x", "y") %in% names(metadata))) stop("input metadata lacks x/y coordinates")
+coordinate_pairs <- list(c("x", "y"), c("sdimx", "sdimy"),
+                         c("spatial_x", "spatial_y"))
+coordinate_pair <- NULL
+for (pair in coordinate_pairs) {
+  if (all(pair %in% names(metadata))) {
+    coordinate_pair <- pair
+    break
+  }
+}
+if (is.null(coordinate_pair)) stop("input metadata lacks a supported x/y coordinate pair")
+x_values <- as.numeric(metadata[[coordinate_pair[[1L]]]])
+y_values <- as.numeric(metadata[[coordinate_pair[[2L]]]])
 assays <- Assays(obj)
 count_backed <- assays[vapply(assays, function(assay) {
   assay != "SCT" && "counts" %in% Layers(obj[[assay]])
@@ -78,15 +124,15 @@ if (!identical(colnames(counts), metadata$cell_id)) {
 
 ncount <- Matrix::colSums(counts)
 nfeature <- Matrix::colSums(counts > 0)
-finite_xy <- is.finite(as.numeric(metadata$x)) & is.finite(as.numeric(metadata$y))
+finite_xy <- is.finite(x_values) & is.finite(y_values)
 analysis_flag <- ncount >= 100 & nfeature >= 75 & finite_xy
 analysis <- data.table(
-  cell_id = metadata$cell_id[analysis_flag], x = as.numeric(metadata$x[analysis_flag]),
-  y = as.numeric(metadata$y[analysis_flag]), analysis_scope = "analysis_set"
+  cell_id = metadata$cell_id[analysis_flag], x = x_values[analysis_flag],
+  y = y_values[analysis_flag], analysis_scope = "analysis_set"
 )
 excluded <- data.table(
-  cell_id = metadata$cell_id[!analysis_flag], x = as.numeric(metadata$x[!analysis_flag]),
-  y = as.numeric(metadata$y[!analysis_flag]), analysis_scope = "excluded_initial_qc",
+  cell_id = metadata$cell_id[!analysis_flag], x = x_values[!analysis_flag],
+  y = y_values[!analysis_flag], analysis_scope = "excluded_initial_qc",
   exclusion_reason = ifelse(
     !finite_xy[!analysis_flag], "invalid_spatial_coordinate",
     ifelse(ncount[!analysis_flag] < 100, "nCount_below_100", "nFeature_below_75")
@@ -109,6 +155,18 @@ partitions <- rbindlist(lapply(seq_len(nrow(mapping)), function(index) {
 }))
 write_tsv(partitions, file.path(out, "partition_grid.tsv.gz"))
 
+if (identical(toupper(preprocess_manifest_arg), "AUTO")) {
+  preprocess_manifest_path <- file.path(out, "inferred_upstream_preprocess_manifest.json")
+  write_json(list(
+    schema_version = "1.0", sample_id = sample_id,
+    source_rds = input_rds, source_rds_sha256 = tolower(sha_parts[[1L]]),
+    declared_preprocessing = "SCT+BANKSY already present in supplied object",
+    inference_scope = "assay/layer and BANKSY metadata audit only",
+    biological_labels_read = FALSE
+  ), preprocess_manifest_path, pretty = TRUE, auto_unbox = TRUE)
+} else {
+  preprocess_manifest_path <- normalizePath(preprocess_manifest_arg, mustWork = TRUE)
+}
 preprocess_manifest <- fromJSON(preprocess_manifest_path, simplifyVector = FALSE)
 if (!identical(as.character(preprocess_manifest$sample_id), sample_id)) {
   stop("preprocessing manifest sample differs from runtime sample")
@@ -137,7 +195,7 @@ write_json(list(
   n_features_raw = nrow(counts), raw_count_assay = raw_assay,
   default_assay = DefaultAssay(obj), assays = assays,
   layers = setNames(lapply(assays, function(assay) Layers(obj[[assay]])), assays),
-  coordinate_columns = c("x", "y"), whole_tissue_partitions = per_resolution,
+  coordinate_columns = coordinate_pair, whole_tissue_partitions = per_resolution,
   metadata_columns = names(metadata),
   historical_like_metadata_columns = grep(label_pattern, names(metadata), ignore.case = TRUE, value = TRUE),
   scoring_exports_historical_columns = FALSE,

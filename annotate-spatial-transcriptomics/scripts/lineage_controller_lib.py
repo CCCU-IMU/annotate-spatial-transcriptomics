@@ -468,10 +468,171 @@ def independent_group_program(
     )
 
 
+def contextual_parent_override_labels(candidate: dict | None = None) -> set[str]:
+    """Return broad parents that absorb a non-separable lineage-origin program.
+
+    These relationships do not suppress a genuinely separable competing cell
+    identity.  They only prevent a shared/contextual program (for example a
+    Theca lineage-of-origin trace inside a coherent Luteal compartment) from
+    making the entire second-round subcluster look mixed.
+    """
+    candidate = candidate or {}
+    return {
+        str(rule.get("writeback_broad_label", "") or rule.get(
+            "context_broad_label", ""
+        )).strip()
+        for rule in candidate.get("contextual_parent_overrides", [])
+        if isinstance(rule, dict)
+        and str(rule.get("writeback_broad_label", "") or rule.get(
+            "context_broad_label", ""
+        )).strip()
+    }
+
+
+def observation_direct_identity_seed(
+    row: dict[str, str] | None,
+    candidate: dict | None = None,
+) -> bool:
+    """Require a direct, multi-family identity core for mixedness testing.
+
+    Candidate visibility, local smoothing and a shared marker family are not
+    sufficient.  This deliberately uses the scorer's frozen direct evidence;
+    it is a separability probe and never releases an individual observation.
+    """
+    row = row or {}
+    candidate = candidate or {}
+    if str(candidate.get("candidate_id", row.get("candidate_id", ""))) in GENERIC_REMAINDER_IDS:
+        return False
+    return (
+        truth(row.get("identity_core_direct"))
+        and truth(row.get("release_family_coherent"))
+        and int(number(row.get("positive_family_count"))) >= 2
+        and int(number(row.get("positive_gene_count"))) >= 2
+        and number(row.get("direct_signal")) >= 0.03
+        and not truth(row.get("ambient_suspect"))
+        and not hard_contradiction(row)
+    )
+
+
+def direct_identity_members(
+    members: Iterable[str],
+    candidate_id: str,
+    score_index: dict[tuple[str, str], dict[str, str]],
+    candidates: dict[str, dict],
+) -> set[str]:
+    candidate = candidates.get(candidate_id, {})
+    return {
+        str(cell_id)
+        for cell_id in members
+        if observation_direct_identity_seed(
+            score_index.get((str(cell_id), candidate_id)), candidate
+        )
+    }
+
+
+def minimum_exclusive_component_members(n_observations: int) -> int:
+    return max(
+        5,
+        int(math.ceil(
+            max(0, n_observations)
+            * _LOCAL_SPLIT_DEFAULTS["pairwise_min_exclusive_direct_fraction"]
+        )),
+    )
+
+
+def pairwise_separable_identity_components(
+    members: Iterable[str],
+    left_candidate_id: str,
+    right_candidate_id: str,
+    score_index: dict[tuple[str, str], dict[str, str]],
+    candidates: dict[str, dict],
+) -> dict[str, object]:
+    """Test whether two broad programs contain mutually exclusive direct cores.
+
+    A pair is separable only when both sides contain a material exclusive
+    component.  Near-total nesting therefore records coexpression/background
+    rather than routing the complete subcluster into observation-level split.
+    """
+    member_ids = [str(value) for value in members]
+    left = candidates.get(left_candidate_id, {})
+    right = candidates.get(right_candidate_id, {})
+    left_label = str(left.get("release_broad_label", ""))
+    right_label = str(right.get("release_broad_label", ""))
+    minimum = minimum_exclusive_component_members(len(member_ids))
+    result: dict[str, object] = {
+        "left_candidate_id": left_candidate_id,
+        "right_candidate_id": right_candidate_id,
+        "n_observations": len(member_ids),
+        "minimum_exclusive_members": minimum,
+        "left_direct_n": 0,
+        "right_direct_n": 0,
+        "left_only_n": 0,
+        "right_only_n": 0,
+        "both_n": 0,
+        "separable": False,
+        "reason": "",
+    }
+    if (
+        not left_label
+        or not right_label
+        or left_label == right_label
+        or left_candidate_id in GENERIC_REMAINDER_IDS
+        or right_candidate_id in GENERIC_REMAINDER_IDS
+    ):
+        result["reason"] = "not_two_independent_broad_identities"
+        return result
+    left_members = direct_identity_members(
+        member_ids, left_candidate_id, score_index, candidates
+    )
+    right_members = direct_identity_members(
+        member_ids, right_candidate_id, score_index, candidates
+    )
+    left_only = left_members - right_members
+    right_only = right_members - left_members
+    both = left_members & right_members
+    result.update({
+        "left_direct_n": len(left_members),
+        "right_direct_n": len(right_members),
+        "left_only_n": len(left_only),
+        "right_only_n": len(right_only),
+        "both_n": len(both),
+    })
+    if len(left_only) >= minimum and len(right_only) >= minimum:
+        result["separable"] = True
+        result["reason"] = "mutually_exclusive_direct_identity_components"
+    elif left_members and right_members:
+        result["reason"] = "coexpressed_or_nested_direct_identity"
+    else:
+        result["reason"] = "one_or_both_direct_identity_components_absent"
+    return result
+
+
+def specific_component_embedded_in_generic_parent(
+    members: Iterable[str],
+    candidate_id: str,
+    score_index: dict[tuple[str, str], dict[str, str]],
+    candidates: dict[str, dict],
+) -> dict[str, object]:
+    """Detect a bounded specific component inside a generic remainder parent."""
+    member_ids = [str(value) for value in members]
+    direct = direct_identity_members(
+        member_ids, candidate_id, score_index, candidates
+    )
+    minimum = minimum_exclusive_component_members(len(member_ids))
+    complement_n = len(member_ids) - len(direct)
+    return {
+        "candidate_id": candidate_id,
+        "direct_identity_n": len(direct),
+        "complement_n": complement_n,
+        "minimum_component_members": minimum,
+        "separable": len(direct) >= minimum and complement_n >= minimum,
+    }
+
+
 def local_split_worthy_group_program(
     row: dict[str, str], candidate: dict | None = None
 ) -> bool:
-    """Detect a specific program that requires a bounded separability check.
+    """Detect a specific program eligible for a bounded separability check.
 
     A mixed second-round subcluster can have a high contradiction fraction by
     construction: mutually exclusive identities are aggregated before the
@@ -482,7 +643,10 @@ def local_split_worthy_group_program(
     This detector therefore requires multi-family, direct identity-core,
     cross-resolution and orthogonal group support, while leaving actual
     separability and contradiction to candidate-local component construction
-    and validation.  A positive result authorizes a local test, not a label.
+    and validation.  A positive result is candidate visibility, not a mixed
+    subcluster trigger and not a label.  The adjudicator must additionally
+    prove either pairwise-exclusive direct identity components or a bounded
+    specific component inside a supported generic remainder.
     """
     candidate = candidate or {}
     candidate_id = str(candidate.get("candidate_id", row.get("candidate_id", "")))
