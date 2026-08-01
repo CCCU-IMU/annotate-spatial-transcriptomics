@@ -16,6 +16,7 @@ from membership_transform_lib import deterministic_membership_hash
 CLOSING_OUTCOMES = {
     "retain_current_cell_type",
     "confirm_absent_or_not_evaluable",
+    "apply_cell_type_membership_patch",
 }
 
 
@@ -56,7 +57,7 @@ def manual_closed_keys(
     adjudication_paths: list[Path], review: dict, queue: list[dict[str, str]],
     maximum_decisions: int,
 ) -> tuple[set[tuple[str, str, str]], list[dict]]:
-    """Validate user-authorized closure after the automatic two-round ceiling."""
+    """Validate a legacy/user-authorized non-mutating blocked-scope closure."""
     closed: set[tuple[str, str, str]] = set()
     records: list[dict] = []
     if not adjudication_paths:
@@ -215,8 +216,15 @@ def manual_closed_keys(
 
 def closed_keys(
     validation_paths: list[Path],
-) -> tuple[set[tuple[str, str, str]], Counter[str], list[dict]]:
-    closed: set[tuple[str, str, str]] = set()
+) -> tuple[set[str], Counter[str], list[dict]]:
+    """Return broad labels that completed their one authoritative review.
+
+    Closure is deliberately label-scoped rather than membership-signature
+    scoped.  A later review may transfer observations into or out of an
+    already reviewed type, but that bookkeeping change must not schedule a
+    second full-query biological review for the closed type.
+    """
+    closed: set[str] = set()
     decision_counts: Counter[str] = Counter()
     records: list[dict] = []
     for path in validation_paths:
@@ -238,14 +246,7 @@ def closed_keys(
             raise SystemExit("prior decision validation lacks a target cell type")
         decision_counts[target] += 1
         if str(decision.get("outcome", "")) in CLOSING_OUTCOMES:
-            key = (
-                str(queued.get("review_mode", "")),
-                str(queued.get("target_broad_label", "")),
-                str(queued.get("unit_signature", "")),
-            )
-            if not all(key):
-                raise SystemExit("closed cell-type decision lacks a stable scope")
-            closed.add(key)
+            closed.add(target)
         records.append(artifact(path))
     return closed, decision_counts, records
 
@@ -260,7 +261,7 @@ def main() -> int:
     ap.add_argument(
         "--manual-biological-adjudication", action="append", type=Path, default=[]
     )
-    ap.add_argument("--maximum-decisions-per-cell-type", type=int, default=2)
+    ap.add_argument("--maximum-decisions-per-cell-type", type=int, default=1)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
 
@@ -280,7 +281,7 @@ def main() -> int:
         args.manual_biological_adjudication, review, queue,
         args.maximum_decisions_per_cell_type,
     )
-    closed.update(manual_closed)
+    closed.update(key[1] for key in manual_closed)
 
     previous_by_label: dict[str, dict[str, str]] = {}
     previous_record = None
@@ -303,7 +304,17 @@ def main() -> int:
             str(row.get("target_broad_label", "")),
             str(row.get("unit_signature", "")),
         )
-        if key in closed and key not in manual_closed:
+        if key[1] in closed and key not in manual_closed:
+            tasks.append({
+                "queue_order": order,
+                "review_id": row.get("review_id", ""),
+                "review_mode": key[0],
+                "target_broad_label": key[1],
+                "unit_signature": key[2],
+                "status": "closed",
+                "decision_count": decision_counts[key[1]],
+                "required_progress_message": f"现在开始对 {key[1]} 进行专项复核。",
+            })
             continue
         if key in manual_closed:
             tasks.append({
@@ -322,12 +333,6 @@ def main() -> int:
         )
         if not exhausted:
             open_rows.append(row)
-        previous_task = previous_by_label.get(key[1], {})
-        reopened = bool(
-            previous_task
-            and str(previous_task.get("unit_signature", "")) != key[2]
-            and str(previous_task.get("status", "")) == "closed"
-        )
         tasks.append({
             "queue_order": order,
             "review_id": row.get("review_id", ""),
@@ -336,7 +341,7 @@ def main() -> int:
             "unit_signature": key[2],
             "status": (
                 "blocked_maximum_decisions"
-                if exhausted else "reopened" if reopened else "queued"
+                if exhausted else "queued"
             ),
             "decision_count": decision_counts[key[1]],
             "required_progress_message": f"现在开始对 {key[1]} 进行专项复核。",
@@ -377,7 +382,7 @@ def main() -> int:
         row["status"] == "blocked_maximum_decisions" for row in tasks
     )
     active = None if blocked else next(
-        (row for row in tasks if row["status"] in {"queued", "reopened"}),
+        (row for row in tasks if row["status"] == "queued"),
         None,
     )
     if active is not None:
@@ -437,7 +442,7 @@ def main() -> int:
             if active is not None else None
         ),
         "active_review_n": 0 if active is None else 1,
-        "queued_review_n": sum(row["status"] in {"queued", "reopened"} for row in tasks),
+        "queued_review_n": sum(row["status"] == "queued" for row in tasks),
         "closed_review_n": sum(
             row["status"] in {"closed", "closed_by_manual_adjudication"}
             for row in tasks
@@ -446,6 +451,10 @@ def main() -> int:
             row["status"] == "blocked_maximum_decisions" for row in tasks
         ),
         "maximum_decisions_per_cell_type": args.maximum_decisions_per_cell_type,
+        "single_pass_no_reopen": True,
+        "membership_changes_do_not_reopen_closed_types": True,
+        "closed_types_accept_bounded_incoming_writeback": True,
+        "closed_cell_type_labels": sorted(closed),
         "formal_batch_closure_forbidden": True,
         "next_action": (
             "manual_biological_adjudication_required"

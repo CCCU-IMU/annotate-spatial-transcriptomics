@@ -52,7 +52,7 @@
     "residual_qc_count_trigger": 50000
   },
   "catalog_wide_lineage_review_policy": {
-    "maximum_decision_rounds": 2,
+    "maximum_decision_rounds": 1,
     "minimum_current_label_observations_per_source_group": 5,
     "minimum_present_label_supported_fraction": 0.50,
     "minimum_present_label_competitor_fraction": 0.20,
@@ -73,7 +73,6 @@
     "minimum_raw_review_direct_genes": 3,
     "minimum_zero_census_direct_seed_observations": 3,
     "minimum_zero_census_direct_source_group_observations": 3,
-    "maximum_monotonic_subtraction_fraction_without_full_reopen": 0.10,
     "spatial_knn_k": 12,
     "generic_remainder_recall_components_enabled": false
   },

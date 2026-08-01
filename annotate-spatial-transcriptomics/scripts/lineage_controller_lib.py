@@ -307,6 +307,22 @@ def group_identity_core_direct_fraction(row: dict[str, str]) -> float:
     ))
 
 
+def group_required_joint_direct_fraction(row: dict[str, str]) -> float:
+    """Fraction with direct multigene evidence in every required family."""
+    return clamp(number(
+        row.get("observation_required_positive_joint_direct_fraction"),
+        number(row.get("observation_identity_core_direct_fraction")),
+    ))
+
+
+def group_split_discriminator_direct_fraction(row: dict[str, str]) -> float:
+    """Fraction with the candidate's direct identity discriminator."""
+    return clamp(number(
+        row.get("observation_split_discriminator_direct_fraction"),
+        number(row.get("observation_identity_core_direct_fraction")),
+    ))
+
+
 def group_release_supported_fraction(
     row: dict[str, str], candidate: dict | None = None
 ) -> float:
@@ -319,7 +335,55 @@ def group_release_supported_fraction(
     candidate = candidate or {}
     if str(candidate.get("writeback_strategy", "")) == "canonical_cluster_membership":
         return clamp(number(row.get("observation_coherent_fraction")))
+    if str(candidate.get("whole_subcluster_support_metric", "")) == "required_joint_direct":
+        return group_required_joint_direct_fraction(row)
     return group_identity_core_fraction(row)
+
+
+def candidate_specific_group_release_pass(
+    row: dict[str, str], candidate: dict | None = None,
+) -> bool:
+    """Enforce candidate-local release requirements without changing global gates.
+
+    Shared ovarian programs can be common, stable and spatially coherent while
+    still lacking lineage identity. Candidate-specific policies therefore add
+    direct-family and query-local enrichment requirements to those identities;
+    they never relax the controller-wide writeback thresholds.
+    """
+    candidate = candidate or {}
+    policy = candidate.get("whole_subcluster_release_policy", {})
+    if not isinstance(policy, dict) or not policy:
+        return True
+    marker_deg = number(row.get("marker_deg_log2fc_mean"))
+    anti_deg = max(0.0, number(row.get("anti_marker_deg_log2fc_mean")))
+    return (
+        group_release_supported_fraction(row, candidate)
+        >= number(policy.get("minimum_supported_fraction"), 0.0)
+        and group_split_discriminator_direct_fraction(row)
+        >= number(policy.get("minimum_discriminator_direct_fraction"), 0.0)
+        and marker_deg - anti_deg
+        >= number(policy.get("minimum_marker_deg_log2fc_mean"), 0.0)
+        and number(row.get("hard_contradiction_fraction"))
+        <= number(policy.get("maximum_contradiction_fraction"), 1.0)
+    )
+
+
+def candidate_whole_subcluster_margin_floor(
+    candidate: dict | None, default: float,
+) -> float:
+    policy = (candidate or {}).get("whole_subcluster_release_policy", {})
+    if not isinstance(policy, dict):
+        return default
+    return max(default, number(policy.get("minimum_purity_margin"), default))
+
+
+def candidate_allows_dominant_whole_subcluster(
+    candidate: dict | None = None,
+) -> bool:
+    policy = (candidate or {}).get("whole_subcluster_release_policy", {})
+    if not isinstance(policy, dict):
+        return True
+    return policy.get("allow_dominant_identity_route", True) is not False
 
 
 def group_supported_family_count(row: dict[str, str]) -> int:
@@ -503,8 +567,15 @@ def observation_direct_identity_seed(
     candidate = candidate or {}
     if str(candidate.get("candidate_id", row.get("candidate_id", ""))) in GENERIC_REMAINDER_IDS:
         return False
+    split_discriminator = row.get("split_discriminator_direct")
+    discriminator_pass = (
+        truth(split_discriminator)
+        if split_discriminator not in (None, "")
+        else True
+    )
     return (
         truth(row.get("identity_core_direct"))
+        and discriminator_pass
         and truth(row.get("release_family_coherent"))
         and int(number(row.get("positive_family_count"))) >= 2
         and int(number(row.get("positive_gene_count"))) >= 2
@@ -569,6 +640,7 @@ def pairwise_separable_identity_components(
         "left_only_n": 0,
         "right_only_n": 0,
         "both_n": 0,
+        "neighbor_partition_separable": False,
         "separable": False,
         "reason": "",
     }
@@ -597,9 +669,45 @@ def pairwise_separable_identity_components(
         "right_only_n": len(right_only),
         "both_n": len(both),
     })
-    if len(left_only) >= minimum and len(right_only) >= minimum:
+    neighbor_separable = False
+    for role in ("neighbor_1", "neighbor_2"):
+        grouped: dict[tuple[str, str], dict[str, int]] = {}
+        for cell_id in member_ids:
+            score = score_index.get((cell_id, left_candidate_id), {})
+            key = (
+                str(score.get(f"{role}_boundary", "")),
+                str(score.get(f"{role}_cluster", "")),
+            )
+            if not all(key):
+                continue
+            counts = grouped.setdefault(key, {"left": 0, "right": 0})
+            counts["left"] += int(cell_id in left_only)
+            counts["right"] += int(cell_id in right_only)
+        left_groups = [
+            counts for counts in grouped.values()
+            if counts["left"] >= minimum
+            and counts["left"] / max(1, counts["left"] + counts["right"]) >= 0.70
+        ]
+        right_groups = [
+            counts for counts in grouped.values()
+            if counts["right"] >= minimum
+            and counts["right"] / max(1, counts["left"] + counts["right"]) >= 0.70
+        ]
+        if left_groups and right_groups:
+            neighbor_separable = True
+            break
+    result["neighbor_partition_separable"] = neighbor_separable
+    if (
+        len(left_only) >= minimum
+        and len(right_only) >= minimum
+        and neighbor_separable
+    ):
         result["separable"] = True
-        result["reason"] = "mutually_exclusive_direct_identity_components"
+        result["reason"] = (
+            "mutually_exclusive_direct_identity_components_reproduced_in_neighbor_partition"
+        )
+    elif len(left_only) >= minimum and len(right_only) >= minimum:
+        result["reason"] = "exclusive_direct_tails_not_reproduced_by_reclustering"
     elif left_members and right_members:
         result["reason"] = "coexpressed_or_nested_direct_identity"
     else:
@@ -620,12 +728,36 @@ def specific_component_embedded_in_generic_parent(
     )
     minimum = minimum_exclusive_component_members(len(member_ids))
     complement_n = len(member_ids) - len(direct)
+    neighbor_separable = False
+    for role in ("neighbor_1", "neighbor_2"):
+        grouped: dict[tuple[str, str], tuple[int, int]] = {}
+        for cell_id in member_ids:
+            score = score_index.get((cell_id, candidate_id), {})
+            key = (
+                str(score.get(f"{role}_boundary", "")),
+                str(score.get(f"{role}_cluster", "")),
+            )
+            if not all(key):
+                continue
+            direct_n, total_n = grouped.get(key, (0, 0))
+            grouped[key] = (direct_n + int(cell_id in direct), total_n + 1)
+        if any(
+            direct_n >= minimum and direct_n / max(1, total_n) >= 0.50
+            for direct_n, total_n in grouped.values()
+        ):
+            neighbor_separable = True
+            break
     return {
         "candidate_id": candidate_id,
         "direct_identity_n": len(direct),
         "complement_n": complement_n,
         "minimum_component_members": minimum,
-        "separable": len(direct) >= minimum and complement_n >= minimum,
+        "neighbor_partition_separable": neighbor_separable,
+        "separable": (
+            len(direct) >= minimum
+            and complement_n >= minimum
+            and neighbor_separable
+        ),
     }
 
 
@@ -676,6 +808,22 @@ def local_split_worthy_group_program(
     )
     marker_deg = number(row.get("marker_deg_log2fc_mean"))
     anti_deg = max(0.0, number(row.get("anti_marker_deg_log2fc_mean")))
+    policy = candidate.get("whole_subcluster_release_policy", {})
+    if isinstance(policy, dict) and policy:
+        if (
+            group_required_joint_direct_fraction(row)
+            < number(candidate.get("minimum_required_family_fraction"), 0.03)
+            or group_split_discriminator_direct_fraction(row)
+            < min(
+                0.10,
+                number(
+                    policy.get("minimum_discriminator_direct_fraction"), 0.10
+                ),
+            )
+            or marker_deg - anti_deg
+            < number(policy.get("minimum_marker_deg_log2fc_mean"), 0.0)
+        ):
+            return False
     ordinary = (
         group_supported_family_count(row) >= 2
         and core >= max(0.05, core_min)
@@ -935,7 +1083,11 @@ def aggregate_program_supported(
     common = marker_deg >= 0.50 and coherent >= 0.05
     seeded_program = marker_deg >= 0.25 and seeded >= 0.05 and coherent >= 0.10
     anti_compatible = anti_deg <= 0 or marker_deg - anti_deg >= 0.50
-    return (canonical or common or seeded_program) and anti_compatible
+    return (
+        (canonical or common or seeded_program)
+        and anti_compatible
+        and candidate_specific_group_release_pass(row, candidate)
+    )
 
 
 def group_family_support(
@@ -1015,9 +1167,10 @@ def validate_subset(
 ) -> dict[str, object]:
     if not members:
         return {"status": "FAIL", "reason": "empty_subset"}
+    target_meta = (catalog or {}).get(target, {})
     target_rows = [score_index[(cell, target)] for cell in members]
     family_evidence = group_family_support(
-        target_rows, (catalog or {}).get(target, {})
+        target_rows, target_meta
     )
     if aggregate_evidence:
         supported_fraction = group_release_supported_fraction(
@@ -1033,14 +1186,19 @@ def validate_subset(
                 aggregate_evidence.get("hard_contradiction_fraction")
             )
     else:
-        supported_fraction = sum(
-            candidate_anchor(row) for row in target_rows
-        ) / len(members)
+        if str(target_meta.get("whole_subcluster_support_metric", "")) == "required_joint_direct":
+            supported_fraction = sum(
+                truth(row.get("required_positive_families_joint_direct"))
+                for row in target_rows
+            ) / len(members)
+        else:
+            supported_fraction = sum(
+                candidate_anchor(row) for row in target_rows
+            ) / len(members)
         contradiction_fraction = (
             sum(hard_contradiction(row) for row in target_rows) / len(members)
         )
     competitor_fractions: dict[str, float] = {}
-    target_meta = (catalog or {}).get(target, {})
     target_broad = str(target_meta.get("release_broad_label", ""))
     target_role = str(target_meta.get("candidate_role", ""))
     parent_candidate_id = ""
@@ -1133,6 +1291,12 @@ def validate_subset(
             or aggregate_program_supported(
                 aggregate_evidence, (catalog or {}).get(target, {}),
                 family_evidence,
+            )
+        )
+        and (
+            not aggregate_evidence
+            or candidate_specific_group_release_pass(
+                aggregate_evidence, (catalog or {}).get(target, {})
             )
         )
     )

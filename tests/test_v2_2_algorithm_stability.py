@@ -127,6 +127,7 @@ def row(cell: str, candidate: str, supported: bool, score: float | None = None) 
         "positive_gene_count": "4" if supported else "0",
         "family_coherent": "true" if supported else "false",
         "identity_core_direct": "true" if supported else "false",
+        "split_discriminator_direct": "true" if supported else "false",
         "release_family_coherent": "true" if supported else "false",
         "candidate_seed": "true" if supported else "false",
         "direct_signal": "0.4" if supported else "0",
@@ -167,6 +168,16 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
                 score_index[(cell, candidate_id)] = row(
                     cell, candidate_id, supported
                 )
+                score_index[(cell, candidate_id)].update({
+                    "neighbor_1_boundary": "b1_n1",
+                    "neighbor_1_cluster": (
+                        "smooth" if int(cell[1:]) < 10 else "pericyte"
+                    ),
+                    "neighbor_2_boundary": "b1_n2",
+                    "neighbor_2_cluster": (
+                        "smooth" if int(cell[1:]) < 10 else "pericyte"
+                    ),
+                })
         result = pairwise_separable_identity_components(
             cells, "smooth_muscle", "pericyte_mural",
             score_index, CANDIDATES,
@@ -201,6 +212,17 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
             )
             for cell in cells
         }
+        for cell in cells:
+            score_index[(cell, "smooth_muscle")].update({
+                "neighbor_1_boundary": "b1_n1",
+                "neighbor_1_cluster": (
+                    "smooth" if int(cell[1:]) < 7 else "remainder"
+                ),
+                "neighbor_2_boundary": "b1_n2",
+                "neighbor_2_cluster": (
+                    "smooth" if int(cell[1:]) < 7 else "remainder"
+                ),
+            })
         result = specific_component_embedded_in_generic_parent(
             cells, "smooth_muscle", score_index, CANDIDATES
         )

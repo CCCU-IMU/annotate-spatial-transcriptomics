@@ -156,6 +156,15 @@ class ReviewHardeningContractTests(unittest.TestCase):
         self.assertEqual(luteal["required_positive_families"], [
             "luteal_steroidogenic_core", "corpus_luteum_identity",
         ])
+        self.assertEqual(
+            luteal["seed_required_positive_families"],
+            ["corpus_luteum_identity"],
+        )
+        self.assertEqual(luteal["required_family_minimum_direct_genes"], 2)
+        self.assertEqual(luteal["whole_subcluster_support_metric"], "required_joint_direct")
+        self.assertFalse(
+            luteal["whole_subcluster_release_policy"]["allow_dominant_identity_route"]
+        )
         self.assertIn(
             "OXT",
             profile["lineages"]["luteal_steroidogenic"]

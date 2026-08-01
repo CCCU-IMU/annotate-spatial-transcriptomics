@@ -8,6 +8,8 @@
     "active_cell_type_review", "active_review_n", "queued_review_n",
     "closed_review_n", "blocked_review_n",
     "maximum_decisions_per_cell_type", "formal_batch_closure_forbidden",
+    "single_pass_no_reopen", "membership_changes_do_not_reopen_closed_types",
+    "closed_types_accept_bounded_incoming_writeback", "closed_cell_type_labels",
     "next_action"
   ],
   "properties": {
@@ -38,8 +40,16 @@
     "queued_review_n": {"type": "integer", "minimum": 0},
     "closed_review_n": {"type": "integer", "minimum": 0},
     "blocked_review_n": {"type": "integer", "minimum": 0},
-    "maximum_decisions_per_cell_type": {"type": "integer", "minimum": 1},
+    "maximum_decisions_per_cell_type": {"const": 1},
     "formal_batch_closure_forbidden": {"const": true},
+    "single_pass_no_reopen": {"const": true},
+    "membership_changes_do_not_reopen_closed_types": {"const": true},
+    "closed_types_accept_bounded_incoming_writeback": {"const": true},
+    "closed_cell_type_labels": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
     "next_action": {"type": "string", "minLength": 1}
   },
   "additionalProperties": true

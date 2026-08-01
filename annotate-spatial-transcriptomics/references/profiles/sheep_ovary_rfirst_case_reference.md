@@ -64,7 +64,7 @@ A fine candidate is only a parent-bound proposal at this stage. It is not formal
 - Do not let an aggregate winner suppress a smaller independent candidate program.
 - Treat a single anti-marker or local anti signal as a penalty. Require consistent direct multigene contradictions spanning independent anti-families for hard exclusion.
 
-Trigger observation-level splitting only when one second-round subcluster contains at least two independently supported identities that remain separable by expression or space.
+Trigger observation-level splitting only when one second-round subcluster contains candidate-specific direct identity components that recur as enriched, separable groups in at least one neighboring higher-resolution Leiden partition; candidate-local expression or space then defines the exact subset boundary.
 
 Within that local mixed subcluster:
 
@@ -109,7 +109,7 @@ Every released broad member must trace to a second-round whole-subcluster return
 - Never expand Epithelial/mesothelial from one keratin, one surface marker, or one spatial component to an entire mixed subcluster.
 - Separate Granulosa identity from fine subtype and state. Hypoxia, proliferation, atresia, and luteinization are states unless an independent stable identity program exists.
 - Release steroidogenic or androgenic Theca as broad when supported by its molecular program; use follicle ROI and distance only as post hoc anatomy checks, never as candidate membership gates. Keep structural or perifollicular programs provisional unless they establish an independent identity.
-- Release `Luteal` only when stage, a steroidogenic core, an independent corpus-luteum identity family and a mass-like compartment agree. Generic steroidogenesis or PGR/APOD/SFRP4 alone remains a program, not a broad identity.
+- Release `Luteal` only when stage, direct multigene joint steroidogenic/corpus-luteum identity, positive query-local DEG and a mass-like compartment agree. Generic steroidogenesis, globally prevalent OXT/PTGFR or PGR/APOD/SFRP4 alone remains a program, not a broad identity; the dominant whole-subcluster shortcut is forbidden.
 - Record a stable unmatched multigene, multiresolution, spatially coherent program as `Unmodeled lineage candidate`; do not force it into the nearest known class.
 
 ## Historical-result and release boundary

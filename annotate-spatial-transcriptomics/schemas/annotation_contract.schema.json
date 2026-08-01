@@ -296,7 +296,7 @@
             "primary_unit": {"const": "broad_cell_type"},
             "whole_object_per_cell_classifier": {"const": false},
             "stable_partition_reuse_default": {"const": true},
-            "maximum_decision_rounds": {"type": "integer", "minimum": 1, "maximum": 2}
+            "maximum_decision_rounds": {"const": 1}
           },
           "additionalProperties": false
         }

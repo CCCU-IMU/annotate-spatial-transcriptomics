@@ -232,7 +232,7 @@ class D05521A1ReviewEfficiencyArchitectureTests(unittest.TestCase):
                 "target_broad_label": "Granulosa",
                 "unit_signature": signature,
                 "status": "blocked_maximum_decisions",
-                "decision_count": 2,
+                "decision_count": 1,
             }])
             blocked_state = root / "blocked_state.json"
             blocked_state.write_text(json.dumps({
@@ -277,7 +277,7 @@ class D05521A1ReviewEfficiencyArchitectureTests(unittest.TestCase):
                 str(SCRIPTS / "manage_cell_type_review_queue.py"),
                 "--review-manifest", str(review),
                 "--manual-biological-adjudication", str(manual),
-                "--maximum-decisions-per-cell-type", "2",
+                "--maximum-decisions-per-cell-type", "1",
                 "--out", str(out),
             ], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
@@ -376,7 +376,7 @@ class D05521A1ReviewEfficiencyFunctionalTests(unittest.TestCase):
                 out / "zero_census_direct_multifamily_membership.tsv.gz"
             )), 3)
 
-    def test_small_monotonic_subtraction_does_not_reopen_closed_type(self) -> None:
+    def test_any_later_membership_delta_does_not_reopen_closed_type(self) -> None:
         sys.path.insert(0, str(SCRIPTS))
         from lineage_controller_lib import deterministic_membership_hash
 
@@ -510,9 +510,9 @@ class D05521A1ReviewEfficiencyFunctionalTests(unittest.TestCase):
                 row for row in summary if row["broad_label"] == "Granulosa"
             )
             self.assertEqual(
-                granulosa["status"], "closed_after_monotonic_subtraction"
+                granulosa["status"], "closed_after_single_cell_type_review"
             )
-            self.assertEqual(granulosa["monotonic_removed_n"], "1")
+            self.assertEqual(granulosa["monotonic_removed_n"], "0")
             queue_2 = read_tsv(out_2 / "catalog_wide_lineage_review_queue.tsv")
             self.assertNotIn(
                 "Granulosa", {row["target_broad_label"] for row in queue_2}

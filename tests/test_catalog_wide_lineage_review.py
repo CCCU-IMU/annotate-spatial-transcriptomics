@@ -20,6 +20,9 @@ HAS_RUNTIME = all(importlib.util.find_spec(name) for name in ("numpy", "pandas",
 sys.path.insert(0, str(SCRIPTS))
 
 from lineage_controller_lib import candidate_can_support_broad_review  # noqa: E402
+from apply_catalog_wide_lineage_review import (  # noqa: E402
+    validate_active_broad_transition,
+)
 
 
 def sha(path: Path) -> str:
@@ -436,10 +439,34 @@ class CatalogWideLineageReviewFunctionalTests(unittest.TestCase):
                 (review_2 / "catalog_wide_lineage_review_manifest.json").read_text()
             )
             self.assertEqual(manifest["status"], "ITERATION_REQUIRED")
-            self.assertEqual(manifest["review_queue_n"], 2)
+            self.assertEqual(manifest["review_queue_n"], 1)
+            queue_2 = read_tsv(
+                review_2 / "catalog_wide_lineage_review_queue.tsv"
+            )
+            self.assertNotIn(
+                "Granulosa",
+                {row["target_broad_label"] for row in queue_2},
+            )
 
 
 class CatalogWideLineageReviewArchitectureTests(unittest.TestCase):
+    def test_active_review_can_write_exact_member_to_closed_competitor(self) -> None:
+        # Closure removes a broad from the specialist queue; it does not make
+        # the label immutable when another active broad exposes a false member.
+        validate_active_broad_transition(
+            cell_id="c1", current_label="Smooth muscle",
+            target_label="Granulosa", review_target="Smooth muscle",
+            precision_question_ids={"c1"}, recall_question_ids=set(),
+        )
+
+    def test_active_review_cannot_relabel_unrelated_outside_member(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unrelated outside member"):
+            validate_active_broad_transition(
+                cell_id="c1", current_label="Theca",
+                target_label="Granulosa", review_target="Smooth muscle",
+                precision_question_ids={"c1"}, recall_question_ids={"c1"},
+            )
+
     def test_parent_locked_fine_program_cannot_reconstruct_broad(self) -> None:
         self.assertFalse(candidate_can_support_broad_review({
             "candidate_role": "fine", "release_broad_label": "Luteal",
@@ -466,13 +493,54 @@ class CatalogWideLineageReviewArchitectureTests(unittest.TestCase):
     def test_review_thresholds_are_centralized(self) -> None:
         thresholds = json.loads(THRESHOLDS.read_text(encoding="utf-8"))
         policy = thresholds["catalog_wide_lineage_review_policy"]
-        self.assertEqual(policy["maximum_decision_rounds"], 2)
+        self.assertEqual(policy["maximum_decision_rounds"], 1)
+        self.assertNotIn(
+            "maximum_monotonic_subtraction_fraction_without_full_reopen",
+            policy,
+        )
         self.assertEqual(policy["minimum_group_watch_identity_fraction"], 0.005)
         source = (SCRIPTS / "audit_catalog_wide_lineage_challengers.py").read_text(
             encoding="utf-8"
         )
         self.assertIn("catalog_wide_lineage_review_policy", source)
         self.assertIn("whole_object_per_cell_classifier_used", source)
+
+    def test_required_references_match_single_pass_review_contract(self) -> None:
+        required = [
+            PACKAGE / "SKILL.md",
+            PACKAGE / "references/direct-lineage-controller.md",
+            PACKAGE / "references/iterative-controller.md",
+            PACKAGE / "references/quality-standard.md",
+            PACKAGE / "references/state-schema.md",
+            PACKAGE / "references/profiles/sheep_ovary_standard_workflow.md",
+        ]
+        stale = (
+            "at most two rounds", "two-decision budget", "two exact decision",
+            "patch reopens", "monotonic subtraction",
+        )
+        for path in required:
+            text = path.read_text(encoding="utf-8").lower()
+            for phrase in stale:
+                self.assertNotIn(phrase, text, f"{path}: stale review contract")
+            self.assertTrue(
+                "exactly one" in text or "single" in text or "一次" in text,
+                f"{path}: single-pass closure is not documented",
+            )
+
+    def test_local_split_contract_requires_neighbor_partition_reproduction(self) -> None:
+        for relative in (
+            "SKILL.md",
+            "references/direct-lineage-controller.md",
+            "references/iterative-controller.md",
+            "references/observation-subset-writeback.md",
+            "references/profiles/sheep_ovary_standard_workflow.md",
+        ):
+            text = (PACKAGE / relative).read_text(encoding="utf-8").lower()
+            self.assertIn("neighbor", text, relative)
+            self.assertTrue(
+                "reproduce" in text or "复现" in text,
+                f"{relative}: neighboring partition is not a reproduction gate",
+            )
 
 
 if __name__ == "__main__":

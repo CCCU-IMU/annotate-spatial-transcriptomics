@@ -114,6 +114,7 @@ def prior_closed_units(paths: list[Path]) -> set[tuple[str, str, str]]:
                 "retain_current_label", "reject_shared_or_ambient",
                 "retain_current_parent",
                 "retain_current_cell_type", "confirm_absent_or_not_evaluable",
+                "apply_cell_type_membership_patch",
             }:
                 continue
             queued = queue.get(str(decision.get("review_id", "")), {})
@@ -125,6 +126,42 @@ def prior_closed_units(paths: list[Path]) -> set[tuple[str, str, str]]:
             if all(key):
                 closed.add(key)
     return closed
+
+
+def prior_reviewed_broad_labels(paths: list[Path]) -> set[str]:
+    """Broad labels with one validated, terminal full-query review.
+
+    This is the scheduling authority.  Exact signatures remain provenance for
+    the evidence packet, but changing membership later does not reopen a type.
+    """
+    labels: set[str] = set()
+    terminal = {
+        "retain_current_label", "reject_shared_or_ambient",
+        "retain_current_parent", "retain_current_cell_type",
+        "confirm_absent_or_not_evaluable", "apply_cell_type_membership_patch",
+    }
+    for path in paths:
+        validation = json.loads(path.read_text(encoding="utf-8"))
+        if validation.get("status") != "PASS":
+            raise SystemExit("prior catalog-wide decision validation is not PASS")
+        review_path = Path(str(validation.get("review_manifest", {}).get("path", "")))
+        decision_path = Path(str(validation.get("validated_decisions", {}).get("path", "")))
+        if not review_path.is_file() or not decision_path.is_file():
+            raise SystemExit("prior catalog-wide review decision is missing")
+        review = json.loads(review_path.read_text(encoding="utf-8"))
+        queue_path = Path(str(review.get("artifacts", {}).get("review_queue", {}).get("path", "")))
+        if not queue_path.is_file():
+            raise SystemExit("prior catalog-wide review queue is missing")
+        queue = {str(row.get("review_id", "")): row for row in read_tsv(queue_path)}
+        for decision in read_tsv(decision_path):
+            if str(decision.get("outcome", "")) not in terminal:
+                continue
+            label = str(queue.get(str(decision.get("review_id", "")), {}).get(
+                "target_broad_label", ""
+            ))
+            if label:
+                labels.add(label)
+    return labels
 
 
 def prior_broad_scopes(paths: list[Path]) -> dict[str, dict[str, object]]:
@@ -462,7 +499,9 @@ def main() -> int:
     if args.round_index < 1:
         raise SystemExit("catalog-wide review round index must be >=1")
     prior_closed = prior_closed_units(args.prior_decision_validation)
-    prior_scopes = prior_broad_scopes(args.prior_decision_validation)
+    prior_reviewed_broad = prior_reviewed_broad_labels(
+        args.prior_decision_validation
+    )
 
     membership = pd.read_csv(
         args.membership, sep="\t", dtype=str, low_memory=False
@@ -477,6 +516,7 @@ def main() -> int:
         args.manual_biological_adjudication, membership
     )
     prior_closed.update(manual_closed)
+    prior_reviewed_broad.update(key[1] for key in manual_closed)
     zero_direct_by_broad, zero_direct_summary, zero_direct_record = (
         load_zero_census_challengers(
             args.zero_census_direct_challenger_manifest, membership
@@ -497,7 +537,16 @@ def main() -> int:
         str(candidate.get("release_broad_label", ""))
         for candidate in candidates.values()
         if str(candidate.get("candidate_role", "")) == "broad"
-    })
+    }, key=lambda broad: (
+        broad == "Stromal/mesenchymal",
+        -max(
+            int(candidate.get("specificity_priority", 0))
+            for candidate in candidates.values()
+            if str(candidate.get("candidate_role", "")) == "broad"
+            and str(candidate.get("release_broad_label", "")) == broad
+        ),
+        broad,
+    ))
     eligible_broad_labels = {
         str(candidate.get("release_broad_label", ""))
         for candidate in candidates.values()
@@ -937,38 +986,16 @@ def main() -> int:
         )
         signature = unit_signature(review_mode, broad, signature_tokens)
         exact_key = (review_mode, broad, signature)
-        closed = exact_key in prior_closed
+        closed = broad in prior_reviewed_broad
         manual_closed_scope = exact_key in manual_closed
         monotonic_subtraction = False
         monotonic_removed_n = 0
         monotonic_removed_fraction = 0.0
-        previous_scope = prior_scopes.get(broad, {})
-        previous_current = set(previous_scope.get("current_ids", set()))
-        if (
-            not closed
-            and review_mode == "broad_lineage_review"
-            and current_ids
-            and previous_current
-            and current_ids < previous_current
-            and component_ids.issubset(set(previous_scope.get("component_ids", set())))
-            and watch_ids.issubset(set(previous_scope.get("watch_ids", set())))
-            and zero_direct_ids.issubset(
-                set(previous_scope.get("zero_direct_ids", set()))
-            )
-        ):
-            monotonic_removed_n = len(previous_current - current_ids)
-            monotonic_removed_fraction = monotonic_removed_n / len(previous_current)
-            monotonic_subtraction = monotonic_removed_fraction <= float(
-                policy[
-                    "maximum_monotonic_subtraction_fraction_without_full_reopen"
-                ]
-            )
-        # The review still scans the whole query, but closure is invalidated by
-        # a change to this target's current members, recall components or source
-        # watches.  An unrelated lineage patch must not reopen every already
-        # closed type.  Patches that move cells into or out of this target alter
-        # these tokens and therefore reopen it deterministically.
-        open_review = not closed and not monotonic_subtraction
+        # A broad type is reviewed exactly once, against the whole query.  Later
+        # transfers are recorded as post-closure deltas and are checked by the
+        # final non-mutating completeness audit; they never reopen this costly
+        # biological task.
+        open_review = not closed
         review_id = ""
         if open_review:
             review_index += 1
@@ -1013,8 +1040,7 @@ def main() -> int:
         status = (
             "review_required" if open_review
             else "closed_by_manual_adjudication" if manual_closed_scope
-            else "supported_after_exact_cell_type_review" if closed
-            else "closed_after_monotonic_subtraction" if monotonic_subtraction
+            else "closed_after_single_cell_type_review" if closed
             else "supported_after_membership_change_reaudit"
         )
         type_status_by_broad[broad] = status

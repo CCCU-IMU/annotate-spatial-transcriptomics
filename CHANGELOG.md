@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- 修复二级亚簇 `mixed` 过度触发：候选可见、共享类固醇/ECM/收缩背景或局部平滑信号不再等同于混合身份。清晰 specific parent 仅在另一候选同时具有独立亚簇级多基因、DEG/pseudobulk、相邻分辨率证据，并且双方形成实质性互斥直接身份组件时才重开；specific-in-generic 仍可从直接身份组件触发有界拆分。局部阶段优先复用相邻 Leiden 分区，完全共表达且不可分的强程序保留 `unresolved_biological`。脱敏真实故障重放把局部拆分负载从全部 47 个二级亚簇、100% observations 降至 6 个亚簇、7.9%，同时保留 Granulosa、Theca 和 Epithelial 等真实少数组件。
+- 修复 `Luteal` 整簇过度召回：共享 `STAR/CYP11A1/HSD3B1` 类固醇程序不再作为黄体 identity seed。正式 whole-subcluster、局部 subset 和 Theca→Luteal 上下文回归统一要求同一群体内 steroidogenic 与 corpus-luteum 两个家族的直接多基因联合覆盖、直接黄体 discriminator、当前 query 的正向 DEG 对比和阶段/结构证据；Luteal 禁用 dominant-identity 整簇捷径。二级 adjudication 与分辨率选择不再用上下文 parent 名称抢占分子 winner，空间父类回归只保留在 post-merge 有界组件复核中。
+- 将逐大类全样本复核改为严格单遍串行：每个可评估 broad 只允许一个全 query 证据包和一个 retain/absence/exact-patch 决策，任一结果均原子关闭该专项复核；后续其他 broad 的精确证据边界仍可把 cell ID 写入或移出已关闭类型，但只登记 post-closure membership delta，不因成员数量、signature 或新 challenger 反复重开。
+- 修复二级亚簇 `mixed` 过度触发：候选可见、共享类固醇/ECM/收缩背景或局部平滑信号不再等同于混合身份。候选必须具有声明的 direct discriminator，并且提议的互斥身份组件必须在至少一个相邻高分辨率 Leiden 分区中复现为富集且可分离的群体；随后 candidate-local observation 组件仅界定 selected mixed subcluster 内的精确写回边界。高分辨率不复现的散在尾部只记 watch，完全共表达且不可分的强程序保留 `unresolved_biological`。Theca–Luteal 竞争分别使用 androgenic identity 与 corpus-luteum identity，避免共享 steroidogenesis 把整个 cohort 送入逐 cellbin 拆分。
 - 收拢执行链入口：新增 canonical SCT+BANKSY bootstrap，可从单个 Seurat RDS 自动审计常见 BANKSY 网格、非 SCT raw-count assay、坐标和 analysis boundary，并一次生成固定 Atlas annotation contract；raw-count assay 及 input-audit SHA 同时写入 contract，最终绝对值 dotplot 只能从该 assay 读取 counts。受控暂停统一物化为 `current_stage.json`/`next_action_manifest.json`，调度器只把 `FAILED_RUNTIME` 视为失败。最终 broad/fine/state/QC 与公开 `final_cell_type` 物化现已作为 `final_release_materialization` 接入有序 membership transform chain；最终 RDS 使用经过真实 Seurat 写回验证的 `pigz` 并行压缩和原子替换。
 - 修正固定 GSE233801 Atlas 的能力边界：旧 v1 把 c1/c3/c6/c10/c15/c16/c17 合并为 `Vascular/endothelial`，并把 c8 Smooth muscle、c12 Pericyte 与 c2 Stroma 合并。新 split-wall v2 从原始独立审阅 cluster 重建 Granulosa、Immune、Stromal/mesenchymal、Endothelial、Pericyte/mural 与 Smooth muscle 原型；Epithelial/mesothelial、Theca 仅可挑战，Oocyte、Luteal 不可映射。旧 v1 只允许已冻结任务断点续跑，不得通过别名盲拆。
 

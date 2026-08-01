@@ -86,8 +86,9 @@
           "rationale": "A Theca lineage-of-origin program embedded in a coherent corpus-luteum compartment returns to the stage-defined Luteal broad parent rather than being released as free-standing Theca."
         }
       ],
-      "required_positive_families": ["steroidogenic_core", "theca_androgenic_support"],
-      "seed_required_positive_families": ["steroidogenic_core"],
+      "required_positive_families": ["steroidogenic_core", "theca_androgenic_identity"],
+      "seed_required_positive_families": ["theca_androgenic_identity"],
+      "split_discriminator_families": ["theca_androgenic_identity"],
       "minimum_identity_core_fraction": 0.10,
       "release_level": "evidence_dependent_broad_candidate",
       "profile_program": "lineages.theca_steroidogenic",
@@ -124,12 +125,26 @@
       "soft_anti_families": ["stromal_mesenchymal"],
       "context_requirements": ["stage compatibility", "corpus-luteum structure", "independent luteal program"],
       "required_positive_families": ["luteal_steroidogenic_core", "corpus_luteum_identity"],
-      "seed_required_positive_families": ["luteal_steroidogenic_core"],
+      "seed_required_positive_families": ["corpus_luteum_identity"],
+      "split_discriminator_families": ["corpus_luteum_identity"],
+      "required_family_minimum_direct_genes": 2,
+      "split_discriminator_minimum_direct_genes": 2,
+      "minimum_required_family_fraction": 0.10,
+      "minimum_identity_core_fraction": 0.15,
+      "whole_subcluster_support_metric": "required_joint_direct",
+      "whole_subcluster_release_policy": {
+        "minimum_supported_fraction": 0.40,
+        "minimum_discriminator_direct_fraction": 0.25,
+        "minimum_marker_deg_log2fc_mean": 0.50,
+        "minimum_purity_margin": 0.30,
+        "maximum_contradiction_fraction": 0.05,
+        "allow_dominant_identity_route": false
+      },
       "formal_context_evidence_required": true,
       "release_level": "stage_dependent_broad_candidate",
       "profile_program": "lineages.luteal_steroidogenic",
       "review_required": true,
-      "release_rule": "Release broad Luteal only with reproductive-stage compatibility, coherent steroidogenesis, an independent corpus-luteum identity family and a corpus-luteum-like structure. Generic steroidogenesis, PGR/APOD/SFRP4, granulosa/theca lineage-of-origin or a solid spatial component is insufficient alone; fine luteal labels remain optional."
+      "release_rule": "Release broad Luteal only when the same biological subcluster has direct multigene support from both steroidogenic and corpus-luteum identity families, positive query-local DEG contrast, reproductive-stage compatibility and a corpus-luteum-like structure. Generic steroidogenesis, globally abundant OXT/PTGFR, PGR/APOD/SFRP4, granulosa/theca lineage-of-origin or a solid spatial component is insufficient alone; the dominant-identity whole-subcluster shortcut is forbidden and fine luteal labels remain optional."
     },
     {
       "candidate_id": "stromal_mesenchymal",

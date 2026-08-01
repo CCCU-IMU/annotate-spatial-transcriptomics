@@ -415,6 +415,49 @@ aggregate_score <- function(row) {
     0.25 * max(0, row$anti_marker_deg_log2fc_mean)
 }
 
+candidate_group_release_support <- function(row, candidate_id) {
+  if (is.null(row) || !nrow(row)) return(0)
+  candidate <- catalog_by_id[[candidate_id]]
+  strategy <- as.character(or_value(candidate$writeback_strategy, ""))
+  if (identical(strategy, "canonical_cluster_membership")) {
+    return(as.numeric(row$observation_coherent_fraction))
+  }
+  metric <- as.character(or_value(
+    candidate$whole_subcluster_support_metric, "identity_core"
+  ))
+  if (
+    identical(metric, "required_joint_direct") &&
+      "observation_required_positive_joint_direct_fraction" %in% names(row)
+  ) {
+    return(as.numeric(
+      row$observation_required_positive_joint_direct_fraction
+    ))
+  }
+  as.numeric(row$observation_identity_core_fraction)
+}
+
+candidate_specific_aggregate_pass <- function(row, candidate_id) {
+  if (is.null(row) || !nrow(row)) return(FALSE)
+  candidate <- catalog_by_id[[candidate_id]]
+  policy <- candidate$whole_subcluster_release_policy
+  if (is.null(policy) || !length(policy)) return(TRUE)
+  discriminator <- if (
+    "observation_split_discriminator_direct_fraction" %in% names(row)
+  ) as.numeric(row$observation_split_discriminator_direct_fraction) else {
+    as.numeric(row$observation_identity_core_direct_fraction)
+  }
+  anti_deg <- max(0, as.numeric(row$anti_marker_deg_log2fc_mean))
+  candidate_group_release_support(row, candidate_id) >= as.numeric(or_value(
+    policy$minimum_supported_fraction, 0
+  )) && discriminator >= as.numeric(or_value(
+    policy$minimum_discriminator_direct_fraction, 0
+  )) && as.numeric(row$marker_deg_log2fc_mean) - anti_deg >= as.numeric(or_value(
+    policy$minimum_marker_deg_log2fc_mean, 0
+  )) && as.numeric(row$hard_contradiction_fraction) <= as.numeric(or_value(
+    policy$maximum_contradiction_fraction, 1
+  ))
+}
+
 canonical_cluster_challenger_supported <- function(row, candidate_id) {
   if (is.null(row) || !nrow(row)) return(FALSE)
   candidate <- catalog_by_id[[candidate_id]]
@@ -458,7 +501,8 @@ aggregate_program_supported <- function(row, candidate_id, family_evidence) {
   anti_compatible <- row$anti_marker_deg_log2fc_mean <= 0 ||
     row$marker_deg_log2fc_mean -
       row$anti_marker_deg_log2fc_mean >= 0.50
-  (canonical || common || seeded) && anti_compatible
+  (canonical || common || seeded) && anti_compatible &&
+    candidate_specific_aggregate_pass(row, candidate_id)
 }
 
 component_enrichment <- function(members, target_id, group_scores) {
@@ -580,13 +624,19 @@ validate_group <- function(
   }
   aggregate_override <- !is.null(aggregate_row) && nrow(aggregate_row)
   support <- if (aggregate_override) {
-    strategy <- as.character(or_value(
-      catalog_by_id[[target_id]]$writeback_strategy, ""
-    ))
-    if (identical(strategy, "canonical_cluster_membership")) {
-      aggregate_row$observation_coherent_fraction
+    candidate_group_release_support(aggregate_row, target_id)
+  } else if (identical(
+    as.character(or_value(
+      catalog_by_id[[target_id]]$whole_subcluster_support_metric, ""
+    )),
+    "required_joint_direct"
+  )) {
+    if (
+      "required_positive_families_joint_direct" %in% names(target)
+    ) {
+      mean(truth(target$required_positive_families_joint_direct))
     } else {
-      aggregate_row$observation_identity_core_fraction
+      0
     }
   } else {
     mean(target$anchor)
@@ -657,6 +707,9 @@ validate_group <- function(
     pass = support >= minimum_support &&
       support - competitor_fraction >= subset_margin_threshold &&
       contradiction <= maximum_contradiction_threshold && target_family$pass &&
+      (!aggregate_override || candidate_specific_aggregate_pass(
+        aggregate_row, target_id
+      )) &&
       parent_identity_status != "FAIL" &&
       (!require_component_enrichment || enrichment$pass)
   )

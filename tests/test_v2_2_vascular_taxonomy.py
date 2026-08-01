@@ -272,12 +272,16 @@ class V22VascularTaxonomyTests(unittest.TestCase):
             <= set(smooth["mature_contractile_core"])
         )
         self.assertTrue(
-            {"CYP17A1", "CYP11A1", "STAR", "HSD3B1"}
+            {"CYP11A1", "STAR", "HSD3B1"}
             <= set(theca["steroidogenic_core"])
         )
         self.assertTrue(
-            {"INSL3", "ANPEP", "NR5A1", "FDX1", "FDXR", "POR", "CYB5A"}
-            <= set(theca["theca_androgenic_support"])
+            {"CYP17A1", "INSL3", "ANPEP"}
+            <= set(theca["theca_androgenic_identity"])
+        )
+        self.assertTrue(
+            {"NR5A1", "FDX1", "FDXR", "POR", "CYB5A"}
+            <= set(theca["theca_metabolic_support"])
         )
 
     def test_legacy_final_builders_have_no_v22_release_authority(self) -> None:

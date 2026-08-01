@@ -16,7 +16,7 @@ Recompute SCT/PCA/SNN/Leiden from raw counts independently inside every cohort. 
 
 ## Round 3: resolve local mixtures
 
-Inside a triggered mixed subcluster, first reuse the selected resolution's neighboring Leiden partitions. Only unresolved mixtures proceed to candidate-local spatial observation components. Adjudicate overlaps and rescore the exact local remainder once. Unselected or ambiguous members are not technical QC. A missing broad can be reconstructed here even if it never appeared in Round 1.
+Inside a triggered mixed subcluster, require a candidate-specific direct discriminator and confirm that at least one neighboring higher-resolution Leiden partition reproduces the proposed identities as enriched, separable groups. Candidate-local spatial/expression observation components then define the exact boundary inside the selected mixed subcluster. A shared program or exclusive tail not reproduced by reclustering remains a watch. Adjudicate overlaps and rescore the exact local remainder once. Unselected or ambiguous members are not technical QC. A missing broad can be reconstructed here even if it never appeared in Round 1.
 
 ## Round 4: merge and freeze
 
@@ -28,7 +28,7 @@ Map all cells once at broad level. In sheep ovary, the active reference is the i
 
 ## Round 6: strictly serial per-broad whole-query review
 
-Expose exactly one active cell type. Announce `现在开始对 <cell type> 进行专项复核。`, then independently resolve its current-member precision, whole-query recall, molecular identity, whole-section spatial consistency and literature boundary. Apply only an exact cell-ID patch or a bounded source-cohort review when evidence requires it. Close that type before opening the next. Reuse shared raw-count/coordinate caches, but never use one batch calculation to close several biological types.
+Expose exactly one active cell type. Announce `现在开始对 <cell type> 进行专项复核。`, then independently resolve its current-member precision, whole-query recall, molecular identity, whole-section spatial consistency and literature boundary. Apply only an exact cell-ID patch or a bounded source-cohort review when evidence requires it. Retain, justified absence or exact patch atomically closes that type before opening the next. Later active reviews may transfer exact evidenced observations into or out of a closed type, but must record a post-closure delta without requeuing its specialist review. Reuse shared raw-count/coordinate caches, but never use one batch calculation to close several biological types.
 
 After all types close, audit present, missing and unmodeled lineages, then convert the remaining unresolved cells to typed QC during final materialization.
 

@@ -51,8 +51,9 @@
     },
     "theca_steroidogenic": {
       "positive_families": {
-        "steroidogenic_core": ["CYP17A1", "CYP11A1", "STAR", "HSD3B1"],
-        "theca_androgenic_support": ["INSL3", "ANPEP", "NR5A1", "FDX1", "FDXR", "POR", "CYB5A", "DHCR24"]
+        "steroidogenic_core": ["CYP11A1", "STAR", "HSD3B1"],
+        "theca_androgenic_identity": ["CYP17A1", "INSL3", "ANPEP"],
+        "theca_metabolic_support": ["NR5A1", "FDX1", "FDXR", "POR", "CYB5A", "DHCR24"]
       },
       "required_program": ["CYP17A1", "CYP11A1", "STAR", "HSD3B1", "INSL3", "ANPEP", "NR5A1", "FDX1", "FDXR", "POR", "CYB5A", "DHCR24"],
       "support_only": ["LHCGR"],
@@ -387,14 +388,14 @@
     "whole_tissue_partition": "select a stable initial clustering only to construct one second-round cohort per initial cluster. Record provisional broad, mixed or unknown plus watch signals; do not write formal broad, fine or QC membership.",
     "second_round_recluster": "restart every initial-cluster cohort from project-local non-SCT raw counts, run the complete active grid, score every subcluster against the full open catalog before reading provisional provenance, and allow missing-broad reconstruction",
     "subcluster_outcomes": ["parent_return", "cross_lineage_return", "missing_broad_reconstruction", "fine_candidate", "state_annotation", "unmodeled_lineage_candidate", "unresolved_biological", "underpowered_not_evaluable"],
-    "subcluster_writeback_policy": "the second-round Leiden subcluster is the main annotation unit. Whole-subcluster return is a high-purity fast path. Only a subcluster with two or more separable competing identity cores may be partitioned into local supported subsets. The exact local remainder is rescored once and may return to a common parent or unresolved biological state; it never inherits the provisional parent or aggregate winner and never becomes QC merely by nonselection.",
+    "subcluster_writeback_policy": "the second-round Leiden subcluster is the main annotation unit. Whole-subcluster return is a high-purity fast path. Local supported subsets require candidate-specific direct discriminators and reproduction of the proposed identities as enriched separable groups in at least one neighboring higher-resolution Leiden partition. The exact local remainder is rescored once and may return to a common parent or unresolved biological state; it never inherits the provisional parent or aggregate winner and never becomes QC merely by nonselection.",
     "fine_candidate_policy": "after every broad label is locked, audit every machine-actionable optional child under that parent across the selected and adjacent resolutions. Record supported, refuted or not_evaluable with evidence; zero fine labels is valid only after the complete parent-specific fine catalog was actually tested. State programs remain tags.",
     "cross_lineage_policy": "a source subcluster with coherent evidence for another broad/fine identity returns directly to that target while preserving source run/cluster/cohort provenance; do not create an intermediate cohort or automatically recluster it again",
-    "local_split_policy": "invoke observation-level splitting only inside an exact second-round mixed subcluster after a recorded multi-candidate trigger; never extend it to the whole tissue or whole cohort",
+    "local_split_policy": "invoke observation-level splitting only inside an exact second-round mixed subcluster after a candidate-specific direct discriminator and neighboring higher-resolution Leiden reproduction gate; never extend it to the whole tissue or whole cohort",
     "qc_holdout_recluster_forbidden": true,
     "atlas_scope": "map the complete analysis set once after all second-round outcomes merge and formal broad membership freezes",
     "atlas_acceptance": "an unlabeled post-merge observation with calibrated moderate-or-higher Atlas tier returns broad-only when non-OOD, ontology-compatible and within Atlas scope. Defined labels are challenge-only until orthogonal review; Atlas never writes fine labels.",
-    "large_residual_qc_policy": "residual QC at least 10% of analysis observations or 50000 observations may return only to the contributing second-round cohort or bounded post-merge biological problem while the fixed recovery budget remains. After one Atlas route, one bounded unresolved review, optional one ROI repair and at most two per-broad rounds, stop as PENDING_USER_REVIEW_HIGH_UNRESOLVED; never launch a global residual/QC-anchor loop or lower evidence merely to cross the threshold",
+    "large_residual_qc_policy": "residual QC at least 10% of analysis observations or 50000 observations may return only to the contributing second-round cohort or bounded post-merge biological problem while the fixed recovery budget remains. After one Atlas route, one bounded unresolved review, optional one ROI repair and exactly one full-query specialist decision per evaluable broad, stop as PENDING_USER_REVIEW_HIGH_UNRESOLVED; never launch a global residual/QC-anchor loop or lower evidence merely to cross the threshold",
     "atlas_open_set_policy": "coherent OOD groups trigger unknown-lineage review and are never forced to the nearest known class",
     "atlas_fine_labels_forbidden": true,
     "legacy_pool_registries": "migration provenance only; the active controller uses initial-cluster cohorts, conditional local mixed-subcluster splitting, post-merge broad freeze and terminal typed QC",

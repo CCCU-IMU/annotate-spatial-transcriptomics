@@ -166,7 +166,8 @@ runtime=可用的 R/Python 环境与调度资源
         -> molecular：检查多基因、DEG/pseudobulk、竞争谱系与替代解释
         -> spatial/literature：检查全切片空间一致性和文献边界
         -> source subcluster / 空间组件 / group watch 仅作内部证据与 patch 边界
-     -> 每个类型最多两轮精确证据决策；新增成员或新 challenger 才强制重开，≤10% 精确成员减法且无新 challenger 可增量关闭
+     -> 每个类型只做一次全样本专项复核；retain、absence 或精确 patch 均原子关闭该类型，不因后续数量/签名变化重新排队
+     -> 后续其他类型复核若发现明确属于已关闭类型的细胞，可按证据包约束的精确 cell ID 写入或移出，并记录 post-closure delta，但不重开整套专项复核
      -> 零 census 的直接两家族/三基因 identity-core 信号即使空间碎片化，也必须进入 bounded source-subcluster 复核
      -> 当前类型关闭后才进入下一个，禁止一次产生或决策多个大类的正式复核包
      -> 默认复用稳定分区和一次性 raw-count/坐标/稀疏 count 缓存；每轮只为 active broad 及其证据竞争者算 pseudobulk
@@ -212,7 +213,7 @@ runtime=可用的 R/Python 环境与调度资源
 | 成人卵巢方法学边界 | 成人卵巢单细胞专家综述（AJOG, 2025, DOI 10.1016/j.ajog.2024.05.046） | 强调取样/过滤造成的谱系缺失、表面上皮难捕获、单 marker 不可靠和“无限亚型”风险，支持以可靠浅层大类为终点。 |
 | 谱系专项证据 | [羊巨噬细胞–颗粒细胞互作（FASEB J, 2026）](https://pubmed.ncbi.nlm.nih.gov/41801067/)、[人卵泡 theca–stroma 连续轨迹](https://pubmed.ncbi.nlm.nih.gov/36599970/)、[人卵巢空间图谱](https://pubmed.ncbi.nlm.nih.gov/38578993/) | 用于解决 macrophage、theca/stroma、血管/壁细胞和空间界面等竞争假设；专项论文不能越过当前样本的 marker、anti-marker 与空间门。 |
 
-发布命名遵循“最浅且足够”的原则：`Stromal/mesenchymal` 是允许的诚实大类；只有 `CYP17A1/CYP11A1/STAR/HSD3B1` 甾体生成核心与 `INSL3/ANPEP/NR5A1/FDX1/FDXR/POR/CYB5A` 雄激素支持共同成立时才单列 `Theca`，`LHCGR` 仅作支持。Theca 必须先在完整分子候选空间中发现，卵泡 ROI 与距离只做事后解剖复核，不能用于缩小或扩张候选。`Luteal` 同时要求 `STAR/CYP11A1/HSD3B1` 类甾体生成核心、独立的 corpus-luteum identity（候选如 `OXT/PTGFR/PARM1/LDLR/PRLR`）、阶段兼容性和实性黄体样结构；一般 steroidogenic 只是功能程序，不作为 broad 名称。`Endothelial`、`Pericyte/mural` 与 `Smooth muscle` 是三个独立竞争大类：前者要求内皮连接骨架与独立血管支持，周细胞要求 mural identity backbone 与独立支持，平滑肌要求 `MYH11/CNN1/ACTG2/SMTN/LMOD1` 成熟收缩核心；`ACTA2/TAGLN/MYL9` 或血管邻近本身不能定类。高置信 `Lymphatic endothelial` 是 Endothelial 的内部 fine identity，公开唯一 `final_cell_type` 可直接显示该名称；旧 `Vascular-associated` 不再允许发布。`Oocyte` 以完整 canonical cluster 判定；常规二级扫描为零但全对象多模块起始候选非零时，允许一次标签不可见的 query-only targeted cohort，并纳入通过簇全部成员，仅排除客观输入 QC 或直接多家族体细胞硬矛盾。颗粒细胞仅在完整、稳定且有文献支持的功能程序通过时使用浅层亚型，否则保留 `Granulosa` 大类。
+发布命名遵循“最浅且足够”的原则：`Stromal/mesenchymal` 是允许的诚实大类；只有 `CYP17A1/CYP11A1/STAR/HSD3B1` 甾体生成核心与 `INSL3/ANPEP/NR5A1/FDX1/FDXR/POR/CYB5A` 雄激素支持共同成立时才单列 `Theca`，`LHCGR` 仅作支持。Theca 必须先在完整分子候选空间中发现，卵泡 ROI 与距离只做事后解剖复核，不能用于缩小或扩张候选。`Luteal` 同时要求同一生物学亚簇中 `STAR/CYP11A1/HSD3B1` 类甾体生成核心与独立 corpus-luteum identity（候选如 `OXT/PTGFR/PARM1/LDLR/PRLR`）的直接多基因联合覆盖、直接黄体 discriminator、当前 query 的正向 DEG、阶段兼容性和实性黄体样结构；一般 steroidogenic 或全组织普遍表达的 OXT/PTGFR 只是功能/背景程序，不作为 broad 名称，且 Luteal 禁止使用 dominant-identity 整簇捷径。`Endothelial`、`Pericyte/mural` 与 `Smooth muscle` 是三个独立竞争大类：前者要求内皮连接骨架与独立血管支持，周细胞要求 mural identity backbone 与独立支持，平滑肌要求 `MYH11/CNN1/ACTG2/SMTN/LMOD1` 成熟收缩核心；`ACTA2/TAGLN/MYL9` 或血管邻近本身不能定类。高置信 `Lymphatic endothelial` 是 Endothelial 的内部 fine identity，公开唯一 `final_cell_type` 可直接显示该名称；旧 `Vascular-associated` 不再允许发布。`Oocyte` 以完整 canonical cluster 判定；常规二级扫描为零但全对象多模块起始候选非零时，允许一次标签不可见的 query-only targeted cohort，并纳入通过簇全部成员，仅排除客观输入 QC 或直接多家族体细胞硬矛盾。颗粒细胞仅在完整、稳定且有文献支持的功能程序通过时使用浅层亚型，否则保留 `Granulosa` 大类。
 
 推荐把 `Granulosa`、`Stromal/mesenchymal`、`Endothelial`、`Pericyte/mural`、`Smooth muscle`、`Immune`、`Epithelial/mesothelial` 和严格门控的 `Oocyte` 作为候选审查骨架，但审查不止这些类型。Skill 内置机器可读的羊卵巢候选谱系目录，逐样本覆盖卵泡/生殖系、甾体生成、基质–间充质–收缩/壁细胞、血管/淋巴、免疫、上皮/间皮及神经胶质/神经内分泌边界；`Theca`、`Luteal` 和 `Glial/Schwann-like` 等只有在各自多通道身份程序通过后才作为大类发布，`Mesenchymal progenitor-like` 与 `Neuroendocrine-like` 默认保持 exploratory。目录不是答案表，也不穷尽当前样本：每个候选可以得到阴性结论，目录外的相干多基因程序则必须新增审查。不要使用 `Vascular-associated`、`Theca/follicular wall`、`Stromal/perivascular` 或 generic `steroidogenic` 作为方便的最终兜底大类。公开报告、空间图、census、DEG 与主 dotplot 仅使用单列 `final_cell_type`；broad/fine 只保留为内部审计 provenance。
 
@@ -228,7 +229,7 @@ Skill 内置一份[脱敏羊卵巢 R-first forward-test 参考](annotate-spatial
 
 - **第一轮只建 cohort。** 选择保留主要组织结构、不过度技术碎裂的全组织分辨率；仅记录 provisional broad/mixed/unknown 与 lineage watch，不产生正式 broad/fine/QC。
 - **第二轮负责注释。** 每个初始 cluster 独立运行完整 `0.1,0.2,0.3,0.4,0.6` 网格并扫描全部候选。能可靠定义亚型才写 fine；亚型证据不足时保留 supported broad，不能为了目录完整而强行命名。
-- **跨谱系与局部混合。** 一个清晰完整谱系直接 parent/cross-lineage return；多个候选可见或共享背景信号不等于 mixed。清晰 specific parent 只有在另一谱系也具备独立亚簇级多基因、DEG/pseudobulk、稳定性证据，且双方形成实质性互斥直接身份组件时才重开。通用 Stromal 背景中的少数 specific 组件可单独触发有界拆分。先检查相邻 Leiden 分区，仍不可分才进入 observation 组件；强信号完全共表达且无法消歧时保留 unresolved。未进入局部子集的成员重新评估 parent/remainder，不自动进入 QC。
+- **跨谱系与局部混合。** 一个清晰完整谱系直接 parent/cross-lineage return；多个候选可见或共享背景信号不等于 mixed。清晰 specific parent 只有在另一谱系也具备独立亚簇级多基因、DEG/pseudobulk、候选特异 direct discriminator，且双方形成实质性互斥身份组件时才重开。提议的拆分还必须在至少一个相邻高分辨率 Leiden 分区中复现为富集且可分离的组件；随后 observation 组件只负责界定 selected mixed subcluster 内的精确成员。通用 Stromal 背景中的少数 specific 组件也遵循同样证据链。共享 steroidogenesis/ECM/contractile 背景或高分辨率不复现的散在尾部只记 watch；强信号完全共表达且无法消歧时保留 unresolved。未进入局部子集的成员重新评估 parent/remainder，不自动进入 QC。
 - **语义修复不重跑稳定分区。** 输入、cohort membership、grid、seed 与聚类脚本哈希均未变化时，复用 controller 生成的 derived partition，只重算 scorer、边界和写回。任何修复 proposal 必须用 `apply_cell_id_membership_patch.py` 按唯一 `cell_id` 连接，禁止按行序赋值。
 - **全细胞 Atlas 与逐细胞类型复核。** broad 冻结后才运行全细胞 broad mapping；Atlas 只能直接救回 unlabeled、非 OOD 的中高置信成员，不能静默覆盖已有 broad 或生成 fine。随后以“一个 broad 细胞类型”为一级单位逐个复核：在同一次复核中检查现有成员的过召回、全组织其余细胞中的欠召回，以及整个切片上的空间分布。每个已注释 broad 必须分别给出成员纯度、全组织召回、分子身份和空间合理性结论，缺一项不能关闭。source subcluster、严格逐细胞空间组件和亚簇级信号缺口 watch 只作为内部证据与 patch 边界，不拆成大量用户任务；group watch 只能触发原始 counts 定位，不能整簇写回。
 - **上下文只控制能否评估。** 阶段、处理或解剖背景不能充当身份分数。`not_evaluable` 候选不得形成完整性阳性、Atlas 救回、fine 或最终标签，也不能因为其阳性程序计数而阻断一个合理的零 census；若最终 membership 已含该标签则必须失败并回到来源复核。

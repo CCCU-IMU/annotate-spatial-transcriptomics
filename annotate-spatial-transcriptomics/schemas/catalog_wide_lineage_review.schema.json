@@ -40,7 +40,7 @@
     "user_facing_stage_name": {"const": "逐大类全样本复核"},
     "artifact_role": {"const": "biological_quality_review"},
     "review_round": {"type": "integer", "minimum": 1},
-    "maximum_decision_rounds": {"type": "integer", "minimum": 1},
+    "maximum_decision_rounds": {"const": 1},
     "formal_membership_written": {"const": false},
     "catalog_wide_double_sided_review": {"const": true},
     "broad_lineage_is_primary_review_unit": {"const": true},

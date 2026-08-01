@@ -13,9 +13,11 @@ from controller_thresholds import load_controller_thresholds
 from lineage_controller_lib import (
     apply_candidate_context,
     canonical_cluster_challenger,
+    candidate_allows_dominant_whole_subcluster,
     candidate_can_release,
+    candidate_specific_group_release_pass,
+    candidate_whole_subcluster_margin_floor,
     catalog_candidates,
-    contextual_parent_override_labels,
     dominant_generic_remainder_group,
     effective_broad_writeback_strategy,
     group_candidate_detected,
@@ -229,10 +231,13 @@ def main() -> int:
             parent_worthy_specific = [
                 value for value in specific_independent
                 if canonical_cluster_challenger(value[1], value[2])
-                or group_release_supported_fraction(value[1], value[2])
-                >= writeback[
-                    "whole_subcluster_min_raw_two_family_supported_fraction"
-                ]
+                or (
+                    group_release_supported_fraction(value[1], value[2])
+                    >= writeback[
+                        "whole_subcluster_min_raw_two_family_supported_fraction"
+                    ]
+                    and candidate_specific_group_release_pass(value[1], value[2])
+                )
             ]
             specific_split_worthy = [
                 value for value in specific_positive
@@ -242,20 +247,9 @@ def main() -> int:
                 value for value in positive
                 if str(value[2].get("candidate_id", "")) == "stromal_mesenchymal"
             ]
-            contextual_parent_labels = {
-                label
-                for value in specific_positive
-                for label in contextual_parent_override_labels(value[2])
-            }
-            preferred_context_parents = [
-                value for value in parent_worthy_specific
-                if str(value[2].get("release_broad_label", ""))
-                in contextual_parent_labels
-            ]
             ranked = sorted(
                 (
-                    preferred_context_parents
-                    or parent_worthy_specific
+                    parent_worthy_specific
                     or generic_positive
                     or specific_independent
                     or specific_split_worthy
@@ -277,11 +271,6 @@ def main() -> int:
             independent_competitors = [
                 value for value in competitors
                 if independent_group_program(value[1], value[2])
-                and not (
-                    winner
-                    and str(winner[2].get("release_broad_label", ""))
-                    in contextual_parent_override_labels(value[2])
-                )
             ]
             runner_core = max(
                 (
@@ -303,13 +292,19 @@ def main() -> int:
                 and winner_margin >= writeback[
                     "whole_subcluster_min_raw_two_family_margin"
                 ]
+                and winner_margin >= candidate_whole_subcluster_margin_floor(
+                    winner[2],
+                    writeback["whole_subcluster_min_raw_two_family_margin"],
+                )
                 and number(winner[1].get("hard_contradiction_fraction"))
                 <= writeback["maximum_contradiction_fraction"]
+                and candidate_specific_group_release_pass(winner[1], winner[2])
                 and group_orthogonal_support_count(winner[1], winner[2]) >= 3
                 and not independent_competitors
             )
             dominant_whole_pass = (
                 whole_strategy_ok
+                and candidate_allows_dominant_whole_subcluster(winner[2])
                 and str(winner[2].get("candidate_id", ""))
                 != "stromal_mesenchymal"
                 and not canonical_cluster_challenger(winner[1], winner[2])

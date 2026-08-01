@@ -50,7 +50,19 @@ CATALOG = {
         {"candidate_id": "lymphatic", "candidate_role": "fine", "release_broad_label": "Endothelial", "release_fine_label": "Lymphatic endothelial", "parent_broad_label": "Endothelial"},
         {"candidate_id": "epithelial", "candidate_role": "broad", "release_broad_label": "Epithelial/mesothelial", "release_fine_label": ""},
         {"candidate_id": "oocyte", "candidate_role": "broad", "release_broad_label": "Oocyte", "release_fine_label": "", "writeback_strategy": "canonical_cluster_membership"},
-        {"candidate_id": "luteal", "candidate_role": "broad", "release_broad_label": "Luteal", "release_fine_label": ""},
+        {
+            "candidate_id": "luteal", "candidate_role": "broad",
+            "release_broad_label": "Luteal", "release_fine_label": "",
+            "whole_subcluster_support_metric": "required_joint_direct",
+            "whole_subcluster_release_policy": {
+                "minimum_supported_fraction": 0.40,
+                "minimum_discriminator_direct_fraction": 0.25,
+                "minimum_marker_deg_log2fc_mean": 0.50,
+                "minimum_purity_margin": 0.30,
+                "maximum_contradiction_fraction": 0.05,
+                "allow_dominant_identity_route": False,
+            },
+        },
         {"candidate_id": "theca", "candidate_role": "broad", "release_broad_label": "Theca", "release_fine_label": "", "contextual_parent_overrides": [{"context_broad_label": "Luteal", "writeback_broad_label": "Luteal"}]},
         {"candidate_id": "granulosa_hypoxia", "candidate_role": "state", "release_broad_label": "", "release_fine_label": "", "release_state_label": "Hypoxia", "parent_broad_label": "Granulosa"},
     ]
@@ -65,6 +77,8 @@ def evidence(candidate: str, coherent: float = 0.0, seed: float = 0.0, deg: floa
         "observation_seed_fraction": str(seed),
         "observation_identity_core_fraction": str(seed),
         "observation_identity_core_direct_fraction": str(seed),
+        "observation_split_discriminator_direct_fraction": str(seed),
+        "observation_required_positive_joint_direct_fraction": str(seed),
         "observation_coherent_fraction": str(coherent),
         "observation_release_family_coherent_fraction": str(coherent),
         "hard_contradiction_fraction": "0",
@@ -214,6 +228,15 @@ class V22StagedArchitectureTests(unittest.TestCase):
                     "release_broad_label": "Luteal",
                     "writeback_strategy": "context_gated_candidate_local",
                     "specificity_priority": 90,
+                    "whole_subcluster_support_metric": "required_joint_direct",
+                    "whole_subcluster_release_policy": {
+                        "minimum_supported_fraction": 0.40,
+                        "minimum_discriminator_direct_fraction": 0.25,
+                        "minimum_marker_deg_log2fc_mean": 0.50,
+                        "minimum_purity_margin": 0.30,
+                        "maximum_contradiction_fraction": 0.05,
+                        "allow_dominant_identity_route": False,
+                    },
                 },
                 {
                     "candidate_id": "stromal", "candidate_role": "broad",
@@ -969,6 +992,13 @@ class V22StagedArchitectureTests(unittest.TestCase):
         components = components or {}
         score_rows = []
         for cell in cells:
+            active_specific = sorted(
+                candidate for candidate, active_members in components.items()
+                if candidate != "stromal_mesenchymal" and cell in active_members
+            )
+            neighbor_cluster = (
+                active_specific[0] if active_specific else "parent_remainder"
+            )
             for candidate in [row["candidate_id"] for row in CATALOG["candidate_boundaries"]]:
                 active_members = components.get(
                     candidate,
@@ -984,12 +1014,17 @@ class V22StagedArchitectureTests(unittest.TestCase):
                     "positive_family_count": "2" if active else "0",
                     "positive_gene_count": "4" if active else "0",
                     "identity_core_direct": str(active).lower(),
+                    "split_discriminator_direct": str(active).lower(),
                     "release_family_coherent": str(active).lower(),
                     "hard_contradiction": "false",
                     "direct_anti_gene_count": "0",
                     "direct_anti_family_count": "0",
                     "candidate_seed": str(active).lower(),
                     "normalized_evidence": "0.8" if active else "0",
+                    "neighbor_1_boundary": "cohort_1__n1",
+                    "neighbor_1_cluster": neighbor_cluster,
+                    "neighbor_2_boundary": "cohort_1__n2",
+                    "neighbor_2_cluster": neighbor_cluster,
                 })
         write_tsv(scores, score_rows)
         out = root / "out"
@@ -1069,7 +1104,7 @@ class V22StagedArchitectureTests(unittest.TestCase):
             row["proposed_state"] == "unresolved_biological" for row in base
         ))
 
-    def test_shared_theca_and_stromal_programs_do_not_make_luteal_subcluster_mixed(self) -> None:
+    def test_coexpressed_theca_identity_cannot_be_silently_absorbed_by_luteal(self) -> None:
         manifest, base, pending, _, _ = self.adjudicate({
             "luteal": (0.90, 0.90, 1.5),
             "theca": (0.70, 0.70, 1.2),
@@ -1078,6 +1113,30 @@ class V22StagedArchitectureTests(unittest.TestCase):
             "luteal": {f"c{i:02d}" for i in range(20)},
             "theca": {f"c{i:02d}" for i in range(12)},
             "stromal_mesenchymal": {f"c{i:02d}" for i in range(20)},
+        })
+        self.assertEqual(manifest["status"], "PASS")
+        self.assertFalse(pending)
+        self.assertEqual(len(base), 20)
+        self.assertTrue(all(
+            row["proposed_state"] == "unresolved_biological" for row in base
+        ))
+
+    def test_global_steroidogenic_program_cannot_release_luteal_without_deg(self) -> None:
+        manifest, base, pending, _, _ = self.adjudicate({
+            # C05297F1-like failure signature: nearly universal coherent/core
+            # signal and stability, but no query-local Luteal enrichment.
+            "luteal": (0.99, 0.88, -0.02),
+        })
+        self.assertEqual(manifest["status"], "PASS")
+        self.assertFalse(pending)
+        self.assertEqual(len(base), 20)
+        self.assertTrue(all(
+            row["proposed_state"] == "unresolved_biological" for row in base
+        ))
+
+    def test_direct_joint_enriched_luteal_subcluster_can_release(self) -> None:
+        manifest, base, pending, _, _ = self.adjudicate({
+            "luteal": (0.85, 0.70, 1.20),
         })
         self.assertEqual(manifest["status"], "PASS")
         self.assertFalse(pending)

@@ -11,7 +11,9 @@ from pathlib import Path
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
     apply_candidate_context, candidate_can_release, canonical_cluster_challenger, catalog_candidates,
-    contextual_parent_override_labels,
+    candidate_allows_dominant_whole_subcluster,
+    candidate_specific_group_release_pass,
+    candidate_whole_subcluster_margin_floor,
     dominant_generic_remainder_group,
     effective_broad_writeback_strategy, group_candidate_detected,
     group_candidate_score, group_identity_core_fraction,
@@ -148,16 +150,31 @@ def main() -> int:
     for cluster in sorted(members, key=lambda value: (number(value, float("inf")), value)):
         rows = by_cluster.get(cluster, [])
         broad_by_label: dict[str, list[tuple[float, str, dict[str, str], dict]]] = defaultdict(list)
+        fine_parent_fallback: dict[str, list[tuple[float, str, dict[str, str], dict]]] = defaultdict(list)
         for row in rows:
             candidate = candidates.get(str(row.get("candidate_id", "")), {})
             role = str(candidate.get("candidate_role", ""))
             if role not in {"broad", "fine"} or not candidate_can_release(candidate):
                 continue
             label = str(candidate.get("release_broad_label", ""))
-            if label:
+            if label and role == "broad":
                 broad_by_label[label].append(
                     (candidate_score(row, candidate), label, row, candidate)
                 )
+            elif (
+                label
+                and role == "fine"
+                and bool(candidate.get("parent_broad_reconstruction_allowed", False))
+            ):
+                fine_parent_fallback[label].append(
+                    (candidate_score(row, candidate), label, row, candidate)
+                )
+        # Fine programs may reconstruct a parent only when the catalog has no
+        # broad representative for that parent.  They cannot outscore or stand
+        # in for an existing broad identity during mixedness adjudication.
+        for label, items in fine_parent_fallback.items():
+            if label not in broad_by_label:
+                broad_by_label[label].extend(items)
         broad_rows = [
             sorted(items, key=lambda item: (-item[0], str(item[2].get("candidate_id", ""))))[0]
             for _, items in sorted(broad_by_label.items())
@@ -177,7 +194,10 @@ def main() -> int:
         parent_worthy_specific = [
             item for item in specific_independent
             if canonical_cluster_challenger(item[2], item[3])
-            or group_release_supported_fraction(item[2], item[3]) >= support_floor
+            or (
+                group_release_supported_fraction(item[2], item[3]) >= support_floor
+                and candidate_specific_group_release_pass(item[2], item[3])
+            )
         ]
         specific_split_worthy = [
             item for item in specific_positive
@@ -192,19 +212,8 @@ def main() -> int:
             item for item in positive
             if str(item[3].get("candidate_id", "")) == "stromal_mesenchymal"
         ]
-        contextual_parent_labels = {
-            label
-            for item in specific_positive
-            for label in contextual_parent_override_labels(item[3])
-        }
-        preferred_context_parents = [
-            item for item in parent_worthy_specific
-            if item[1] in contextual_parent_labels
-        ]
         winner = (
-            preferred_context_parents[0]
-            if preferred_context_parents
-            else parent_worthy_specific[0]
+            parent_worthy_specific[0]
             if parent_worthy_specific
             else generic_positive[0]
             if generic_positive
@@ -246,7 +255,9 @@ def main() -> int:
                 pairwise_audit.append(
                     f"{winner_id}:{contender_id}:"
                     f"{pair['left_only_n']}:{pair['right_only_n']}:"
-                    f"{pair['both_n']}:{str(pair['separable']).lower()}"
+                    f"{pair['both_n']}:{str(pair['separable']).lower()}:"
+                    f"{str(pair.get('neighbor_partition_separable', False)).lower()}:"
+                    f"{pair.get('reason', '')}"
                 )
                 # A clear specific parent is not reopened by a weaker shared
                 # trace merely because a small exclusive tail exists.  The
@@ -260,10 +271,7 @@ def main() -> int:
                 ):
                     separable_competitors.append(item)
                     continue
-                contextual_trace = winner[1] in contextual_parent_override_labels(
-                    item[3]
-                )
-                if item in specific_independent and not contextual_trace:
+                if item in specific_independent:
                     coexpressed_independent_competitors.append(item)
                 else:
                     background_or_shared_programs.append(item)
@@ -277,7 +285,8 @@ def main() -> int:
                     f"stromal_mesenchymal:{contender_id}:"
                     f"{component['complement_n']}:"
                     f"{component['direct_identity_n']}:0:"
-                    f"{str(component['separable']).lower()}"
+                    f"{str(component['separable']).lower()}:"
+                    f"{str(component.get('neighbor_partition_separable', False)).lower()}"
                 )
                 if component["separable"]:
                     embedded_specific_components.append(item)
@@ -304,14 +313,17 @@ def main() -> int:
             winner
             and whole_strategy_ok
             and target_raw >= support_floor
-            and target_raw - runner_raw >= margin_floor
+            and target_raw - runner_raw
+            >= candidate_whole_subcluster_margin_floor(winner[3], margin_floor)
             and contradiction <= contradiction_ceiling
+            and candidate_specific_group_release_pass(winner[2], winner[3])
             and orthogonal_support_count(winner[2], winner[3]) >= 3
             and not blocking_competitors
         )
         dominant_whole_pass = bool(
             winner
             and whole_strategy_ok
+            and candidate_allows_dominant_whole_subcluster(winner[3])
             and str(winner[3].get("candidate_id", ""))
             not in {"stromal_mesenchymal"}
             and not canonical_cluster_challenger(winner[2], winner[3])

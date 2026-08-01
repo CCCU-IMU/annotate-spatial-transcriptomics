@@ -40,7 +40,7 @@
   "persistent_biological_pools": false,
   "membership_objects": {
     "initial_cluster_cohort": "one immutable cohort per whole-tissue initial cluster; restart from project-local non-SCT raw counts and scan the full catalog",
-    "local_mixed_subcluster": "exact second-round subcluster only after two or more separable competing identity cores trigger local splitting",
+    "local_mixed_subcluster": "exact second-round subcluster only after candidate-specific direct identity components are reproduced as enriched separable groups in a neighboring higher-resolution Leiden partition",
     "post_merge_unresolved": "biological unresolved membership after broad merge; eligible for broad-only Atlas rescue and final typed closure"
   },
   "open_world_lineage_discovery": {

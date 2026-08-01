@@ -73,17 +73,25 @@ FOLLICLE_LAYERS = {
         "minimum_angular_sectors": 6,
     },
 }
+FOLLICLE_LAYER_BROAD = {
+    layer_name: str(spec["target_labels"][0])
+    for layer_name, spec in FOLLICLE_LAYERS.items()
+}
 RESTRICTED_BROADS = {
     # Molecularly supported Theca can recur as many small follicular foci.
     # Compactness is therefore reviewed in follicle ROIs and must not act as
     # a whole-section admission/exclusion rule for the lineage.
-    "Granulosa", "Oocyte", "Smooth muscle",
+    "Granulosa", "Oocyte", "Smooth muscle", "Luteal",
     "Epithelial/mesothelial",
 }
 BOOLEAN_COLUMNS = {
     "family_coherent", "identity_core_coherent", "identity_core_direct",
     "release_family_coherent", "hard_contradiction", "candidate_seed",
     "technical_flag",
+}
+OPTIONAL_BOOLEAN_COLUMNS = {
+    "split_discriminator_direct",
+    "required_positive_families_joint_direct",
 }
 SCORE_COLUMNS = [
     "cell_id", "source_boundary", "source_cluster", "candidate_id",
@@ -273,7 +281,10 @@ def read_scores(paths: list[Path], allow_diagnostic_legacy: bool = False) -> pd.
         legacy = bool(missing and allow_diagnostic_legacy and legacy_columns <= set(header))
         if missing and not legacy:
             raise ValueError(f"{path} lacks score columns: {sorted(missing)}")
-        usecols = sorted(legacy_columns) if legacy else SCORE_COLUMNS
+        usecols = (
+            sorted(legacy_columns)
+            if legacy else SCORE_COLUMNS + sorted(OPTIONAL_BOOLEAN_COLUMNS.intersection(header))
+        )
         for chunk in pd.read_csv(
             path, sep="\t", usecols=usecols,
             dtype={"cell_id": str, "candidate_id": str}, chunksize=250_000,
@@ -292,6 +303,9 @@ def read_scores(paths: list[Path], allow_diagnostic_legacy: bool = False) -> pd.
                 chunk["candidate_seed"] = chunk["identity_core_coherent"]
                 chunk["technical_flag"] = False
                 chunk = chunk[SCORE_COLUMNS]
+            for column in OPTIONAL_BOOLEAN_COLUMNS:
+                if column not in chunk:
+                    chunk[column] = False
             chunk = chunk.loc[chunk.candidate_id.isin(TARGET_CANDIDATES)].copy()
             if not chunk.empty:
                 selected.append(chunk)
@@ -300,7 +314,7 @@ def read_scores(paths: list[Path], allow_diagnostic_legacy: bool = False) -> pd.
     scores = pd.concat(selected, ignore_index=True)
     if scores.duplicated(["cell_id", "candidate_id"]).any():
         raise ValueError("candidate scores duplicate cell_id x candidate_id")
-    for column in BOOLEAN_COLUMNS:
+    for column in BOOLEAN_COLUMNS | OPTIONAL_BOOLEAN_COLUMNS:
         scores[column] = as_bool(scores[column])
     for column in ("normalized_evidence", "program_score", "x", "y"):
         scores[column] = pd.to_numeric(scores[column], errors="coerce")
@@ -366,13 +380,20 @@ def candidate_view(scores: pd.DataFrame, candidate_id: str) -> pd.DataFrame:
 
 def candidate_hits(frame: pd.DataFrame) -> pd.Series:
     evidence = frame.normalized_evidence.fillna(-np.inf)
-    return (
+    ordinary = (
         ~frame.hard_contradiction
         & (
             frame.identity_core_coherent
             | (frame.family_coherent & (evidence >= 0.35))
         )
     )
+    luteal = frame.candidate_id.eq("luteal_steroidogenic")
+    luteal_direct_identity = (
+        ~frame.hard_contradiction
+        & frame.required_positive_families_joint_direct
+        & frame.split_discriminator_direct
+    )
+    return ordinary.where(~luteal, luteal_direct_identity)
 
 
 def layer_candidate_view(
@@ -479,6 +500,7 @@ def broad_spatial_review(
     issues: list[dict[str, str]] = []
     for broad, member_rows in membership.loc[membership[label_col] != ""].groupby(label_col):
         ids = set(member_rows.cell_id)
+        label_fraction = len(ids) / max(1, len(membership))
         candidate_ids = candidate_by_broad.get(str(broad), set())
         evidence = scores.loc[
             scores.cell_id.isin(ids) & scores.candidate_id.isin(candidate_ids)
@@ -512,6 +534,12 @@ def broad_spatial_review(
         if str(broad) in RESTRICTED_BROADS and len(ids) >= 20:
             if status == "NOT_EVALUABLE":
                 pass
+            elif str(broad) == "Luteal" and (
+                support_fraction < 0.20
+                or (label_fraction >= 0.50 and support_fraction < 0.50)
+            ):
+                status = "ITERATION_REQUIRED"
+                rationale = "luteal_membership_exceeds_direct_joint_identity_support"
             elif support_fraction < 0.05 or (
                 contradiction_fraction > 0.50 and support_fraction < 0.20
             ):
@@ -1408,6 +1436,9 @@ def main() -> int:
     layer_path = args.out / "follicle_roi_layer_hierarchy.tsv"
     issue_path = args.out / "biological_quality_next_actions.tsv"
     roi_membership_path = args.out / "follicle_roi_membership.tsv.gz"
+    bounded_member_questions_path = (
+        args.out / "bounded_quality_member_questions.tsv.gz"
+    )
     write_tsv(broad_path, broad_rows, [
         "broad_label", "n_observations", "candidate_ids",
         "identity_supported_fraction", "hard_contradiction_fraction",
@@ -1455,6 +1486,36 @@ def main() -> int:
     roi_membership.to_csv(
         roi_membership_path, sep="\t", index=False, compression="gzip",
     )
+    bounded_questions: list[dict[str, str]] = []
+    label_lookup = membership.set_index("cell_id")[label_col].fillna("").astype(str)
+    for issue in follicle_issues:
+        code = str(issue.get("issue_code", ""))
+        suffix = "_published_label_lacks_corresponding_program"
+        if not code.endswith(suffix):
+            continue
+        layer_name = code[:-len(suffix)]
+        broad_label = FOLLICLE_LAYER_BROAD.get(layer_name, "")
+        roi_id = str(issue.get("scope_id", ""))
+        if not broad_label or not roi_id:
+            continue
+        scoped_ids = set(roi_membership.loc[
+            roi_membership.follicle_roi_id.astype(str).eq(roi_id), "cell_id"
+        ].astype(str))
+        for cell_id in sorted(scoped_ids):
+            if str(label_lookup.get(cell_id, "")) == broad_label:
+                bounded_questions.append({
+                    "cell_id": cell_id,
+                    "broad_label": broad_label,
+                    "issue_code": code,
+                    "scope_id": roi_id,
+                    "allowed_action": "withdraw_or_reassign",
+                })
+    pd.DataFrame(bounded_questions, columns=[
+        "cell_id", "broad_label", "issue_code", "scope_id", "allowed_action",
+    ]).to_csv(
+        bounded_member_questions_path, sep="\t", index=False,
+        compression="gzip",
+    )
     manifest = {
         "schema_version": "2.2",
         "status": status,
@@ -1495,6 +1556,9 @@ def main() -> int:
                 "candidate_recall": artifact(recall_path),
                 "layer_hierarchy": artifact(layer_path),
                 "roi_membership": artifact(roi_membership_path),
+                "bounded_member_questions": artifact(
+                    bounded_member_questions_path
+                ),
             },
         },
         "required_next_action_n": len(issues),

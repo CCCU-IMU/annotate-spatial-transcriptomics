@@ -227,6 +227,7 @@ def main() -> int:
     quality = None
     quality_artifact = None
     quality_broad: dict[str, dict[str, str]] = {}
+    quality_questions_by_broad: dict[str, list[dict[str, str]]] = {}
     if args.biological_quality_review:
         quality = json.loads(
             args.biological_quality_review.read_text(encoding="utf-8")
@@ -256,6 +257,20 @@ def main() -> int:
             str(row.get("broad_label", "")): row
             for row in read_tsv(broad_review_path)
         }
+        quality_question_record = (
+            quality.get("quality_endpoints", {})
+            .get("follicle_roi_histology", {})
+            .get("bounded_member_questions", {})
+        )
+        quality_question_path = Path(str(quality_question_record.get("path", "")))
+        if (
+            quality_question_path.is_file()
+            and quality_question_record.get("sha256") == sha256(quality_question_path)
+        ):
+            for row in read_tsv(quality_question_path):
+                quality_questions_by_broad.setdefault(
+                    str(row.get("broad_label", "")), []
+                ).append(row)
         quality_artifact = artifact(args.biological_quality_review)
 
     errors: list[str] = []
@@ -341,7 +356,7 @@ def main() -> int:
         spatial = spatial_by_review.get(review_id, {})
         current_precision_question_n = len(
             current_questions_by_broad.get(broad_label, [])
-        )
+        ) + len(quality_questions_by_broad.get(broad_label, []))
         spatial_evaluable = bool(
             broad.get("membership_cell_id_semantic_sha256")
             and broad.get("reviewed_broad_n") == 1
@@ -369,11 +384,20 @@ def main() -> int:
                 canonical_path.is_file()
                 and canonical_record.get("sha256") == sha256(canonical_path)
             )
-            follicle_histology_status = str(
+            follicle_endpoint = (
                 quality.get("quality_endpoints", {})
                 .get("follicle_roi_histology", {})
-                .get("status", "not_evaluable")
             )
+            follicle_histology_status = str(
+                follicle_endpoint.get("status", "not_evaluable")
+            )
+            if (
+                broad_label != "Granulosa"
+                and follicle_histology_status == "NOT_EVALUABLE"
+                and str(follicle_endpoint.get("rationale", ""))
+                == "no_released_granulosa"
+            ):
+                follicle_histology_status = "not_applicable"
         if (
             broad_label == "Oocyte"
             and oocyte_review_status == "PASS"
@@ -407,11 +431,17 @@ def main() -> int:
             "precision_source_groups": precision_by_broad.get(broad_label, []),
             "current_member_questions": {
                 "raw_n": len(current_questions_by_broad.get(broad_label, [])),
+                "bounded_quality_n": len(
+                    quality_questions_by_broad.get(broad_label, [])
+                ),
                 "effective_unresolved_n": current_precision_question_n,
                 "semantic_sha256": rows_semantic_hash(
                     current_questions_by_broad.get(broad_label, []),
                     ("broad_label", "cell_id", "question_reason",
                      "challenger_broad_label"),
+                ),
+                "bounded_quality_questions": quality_questions_by_broad.get(
+                    broad_label, []
                 ),
             },
             "recall_components": components_by_broad.get(broad_label, []),

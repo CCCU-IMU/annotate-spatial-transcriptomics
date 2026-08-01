@@ -23,6 +23,33 @@ def artifact(path: Path) -> dict[str, object]:
     }
 
 
+def validate_active_broad_transition(
+    *, cell_id: str, current_label: str, target_label: str,
+    review_target: str, precision_question_ids: set[str],
+    recall_question_ids: set[str],
+) -> None:
+    """Bound one patch to the active broad without freezing other labels.
+
+    A doubtful current member of the active broad may be reassigned to any
+    evidenced competitor, including a broad whose specialist review already
+    closed.  Conversely, an outside member may only be recalled into the
+    active broad.  Closed-label status affects scheduling, never this exact
+    evidence-bounded transition.
+    """
+    if current_label != review_target and target_label != review_target:
+        raise ValueError("cell-type patch assigns an unrelated outside member")
+    if current_label == review_target and target_label != current_label:
+        if cell_id not in precision_question_ids:
+            raise ValueError(
+                "current-member patch is outside the bound precision questions"
+            )
+    elif current_label != review_target and target_label == review_target:
+        if cell_id not in recall_question_ids:
+            raise ValueError(
+                "recall patch is outside the bound whole-query questions"
+            )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--contract", required=True, type=Path)
@@ -98,6 +125,21 @@ def main() -> int:
         precision_question_ids.setdefault(
             str(row.get("broad_label", "")), set()
         ).add(str(row.get("cell_id", "")))
+    quality_record = packet_manifest.get("biological_quality_review") or {}
+    quality_path = Path(str(quality_record.get("path", "")))
+    if quality_path.is_file() and quality_record.get("sha256") == sha256(quality_path):
+        quality = json.loads(quality_path.read_text(encoding="utf-8"))
+        bounded_record = (
+            quality.get("quality_endpoints", {})
+            .get("follicle_roi_histology", {})
+            .get("bounded_member_questions", {})
+        )
+        bounded_path = Path(str(bounded_record.get("path", "")))
+        if bounded_path.is_file() and bounded_record.get("sha256") == sha256(bounded_path):
+            for row in read_tsv(bounded_path):
+                precision_question_ids.setdefault(
+                    str(row.get("broad_label", "")), set()
+                ).add(str(row.get("cell_id", "")))
     recall_question_ids: dict[str, set[str]] = {}
     for row in read_tsv(recall_path):
         recall_question_ids.setdefault(
@@ -224,20 +266,19 @@ def main() -> int:
                 # an evidenced competitor, or recall outside members only to
                 # the reviewed target.  It cannot use a whole-query scope to
                 # rewrite unrelated lineages.
-                if current_label != review_target and target != review_target:
-                    raise SystemExit(
-                        f"{review_id}: cell-type patch assigns an unrelated outside member"
+                try:
+                    validate_active_broad_transition(
+                        cell_id=cell, current_label=current_label,
+                        target_label=target, review_target=review_target,
+                        precision_question_ids=precision_question_ids.get(
+                            review_target, set()
+                        ),
+                        recall_question_ids=recall_question_ids.get(
+                            review_target, set()
+                        ),
                     )
-                if current_label == review_target and target != current_label:
-                    if cell not in precision_question_ids.get(review_target, set()):
-                        raise SystemExit(
-                            f"{review_id}: current-member patch is outside the bound precision questions"
-                        )
-                elif current_label != review_target and target == review_target:
-                    if cell not in recall_question_ids.get(review_target, set()):
-                        raise SystemExit(
-                            f"{review_id}: recall patch is outside the bound whole-query questions"
-                        )
+                except ValueError as exc:
+                    raise SystemExit(f"{review_id}: {exc}") from exc
             if review_mode == "outside_label_recall":
                 allowed = {
                     str(row.get("cell_id", ""))
@@ -318,12 +359,32 @@ def main() -> int:
 
     args.out.mkdir(parents=True, exist_ok=True)
     changes_path = args.out / "catalog_wide_review_changes.tsv"
+    closed_labels = {
+        str(label) for label in state.get("closed_cell_type_labels", [])
+        if str(label)
+    }
+    active_label = str(active.get("target_broad_label", ""))
+    post_closure_changes = [
+        row for row in changes
+        if any(
+            label in closed_labels and label != active_label
+            for label in (
+                str(row.get("old_broad_label", "")),
+                str(row.get("new_broad_label", "")),
+            )
+        )
+    ]
+    post_closure_path = args.out / "post_closure_membership_deltas.tsv"
     audit_path = args.out / "catalog_wide_review_decision_audit.tsv"
     write_tsv(changes_path, changes, fields=[
         "cell_id", "old_broad_label", "new_broad_label", "candidate_id",
         "review_id", "outcome",
     ])
     write_tsv(audit_path, decision_audit)
+    write_tsv(post_closure_path, post_closure_changes, fields=[
+        "cell_id", "old_broad_label", "new_broad_label", "candidate_id",
+        "review_id", "outcome",
+    ])
     membership_rewritten = bool(changes)
     if membership_rewritten:
         membership_path = args.out / "catalog_wide_reviewed_membership.tsv.gz"
@@ -357,6 +418,9 @@ def main() -> int:
         "context_evidence": artifact(args.context_evidence) if args.context_evidence else None,
         "context_release_eligibility": context_summary,
         "changes": artifact(changes_path),
+        "post_closure_membership_deltas": artifact(post_closure_path),
+        "post_closure_membership_delta_n": len(post_closure_changes),
+        "post_closure_delta_does_not_requeue_specialist_review": True,
         "decision_audit": artifact(audit_path),
         "n_changed_observations": len(changes),
         "membership_rewritten": membership_rewritten,
@@ -377,10 +441,8 @@ def main() -> int:
             "delta_physical_sha256": sha256(changes_path),
             "changed_observation_n": len(changes),
         },
-        "next_required_action": (
-            "rerun_affected_cell_types_after_membership_change"
-            if membership_rewritten else "activate_next_cell_type"
-        ),
+        "review_closure": "atomic_single_pass",
+        "next_required_action": "activate_next_cell_type",
     }
     manifest_path = args.out / "catalog_wide_lineage_review_apply_manifest.json"
     manifest_path.write_text(

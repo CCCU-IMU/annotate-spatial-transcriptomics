@@ -36,7 +36,7 @@ The first phase never writes biological labels to the cell ledger. `unresolved_b
 - `frozen_broad_membership.tsv.gz`: first formal biological membership, created only after all cohort outcomes merge.
 - `post_atlas_broad_membership.tsv.gz`: frozen broad plus permitted unlabeled Atlas rescue; existing labels remain unchanged.
 - `membership_transform_chain.json`: ordered, contiguous membership transforms after broad freeze. Every entry binds exact source/result semantic hashes, the unchanged cell universe, exact delta cell IDs and its canonical evidence manifest. Supported operations include Atlas rescue, unresolved return, ROI assignment/depublication/reconciliation, identity-neutral source synchronization, one-active-cell-type patches and final broad/fine/state/QC plus `final_cell_type` materialization.
-- `cell_type_review_state.json`: serial broad-review state. It contains at most one `active_cell_type_review`; every other type is queued, closed or explicitly blocked after its own two-decision budget. One state transition can validate and apply only the active type.
+- `cell_type_review_state.json`: serial broad-review state. It contains at most one `active_cell_type_review`; every other type is queued, atomically closed after its single full-query decision or explicitly blocked because that decision could not be validated. One state transition can validate and apply only the active type. Closed types remain legal exact transfer destinations/sources for later active reviews but are never requeued.
 - `current_stage.json` and `next_action_manifest.json`: scheduler-facing controller state. `REVIEW_REQUIRED` and `ITERATION_REQUIRED` are successful controlled pauses with a bound resume token; `DONE_PENDING_USER_REVIEW` is a completed frozen candidate; `FAILED_RUNTIME` is a genuine software/input/resource failure.
 - `final_membership.tsv.gz`: one final broad or typed retained state per analysis observation, optional parent-locked fine and independent state annotations.
 
@@ -79,7 +79,7 @@ An excluded-initial-QC observation stays outside the biological analysis set. A 
 - Atlas cannot overwrite an existing broad label.
 - The sheep-ovary Atlas identity, capability matrix and asset hashes are immutable contract inputs. Unsupported or `not_evaluable` classes cannot rescue or challenge query labels.
 - Formal per-broad review is serial. A multi-type decision file, multiple active packets or batch closure has no release authority.
-- A membership-changing review reopens only a cell type whose scope signature changed. An unrelated closed type remains closed.
+- Membership-count or scope-signature changes never reopen a closed cell-type specialist review. A later active review may write an exact evidence-bounded cell set into or out of a closed type and records the change as a post-closure delta.
 - A controlled review pause can resume from its bound membership transform chain without repeating either clustering round, Atlas routing, unresolved rescue or follicle-ROI repair.
 - Technical QC is assigned only to objective input failures or during final typed closure.
 - Same input, contract and seed reproduce identical membership and semantic hashes.

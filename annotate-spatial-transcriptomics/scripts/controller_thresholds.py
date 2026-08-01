@@ -124,7 +124,6 @@ def load_controller_thresholds(path: Path | None = None) -> dict:
         "minimum_present_label_competitor_fraction",
         "minimum_recall_direct_seed_fraction",
         "minimum_recall_seed_evidence_margin",
-        "maximum_monotonic_subtraction_fraction_without_full_reopen",
     ):
         value = float(catalog_review.get(key, -1))
         if not 0 <= value <= 1:

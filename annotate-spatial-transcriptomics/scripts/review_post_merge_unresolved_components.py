@@ -26,6 +26,7 @@ from lineage_controller_lib import (
     apply_candidate_context,
     candidate_can_release,
     catalog_candidates,
+    candidate_specific_group_release_pass,
     deterministic_membership_hash,
     group_candidate_detected,
     group_candidate_score,
@@ -349,7 +350,11 @@ def source_supported_parent_candidates(
         for row in frame.to_dict("records"):
             candidate_id = str(row.get("candidate_id", ""))
             candidate = candidates.get(candidate_id)
-            if not candidate or not group_candidate_detected(row, candidate):
+            if (
+                not candidate
+                or not group_candidate_detected(row, candidate)
+                or not candidate_specific_group_release_pass(row, candidate)
+            ):
                 continue
             boundary = str(row.get("source_boundary", ""))
             cluster = str(row.get("source_cluster", ""))

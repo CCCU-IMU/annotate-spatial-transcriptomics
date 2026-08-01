@@ -58,6 +58,13 @@ def main() -> int:
         help="validated catalog-wide review apply manifests in chronological order",
     )
     ap.add_argument(
+        "--catalog-wide-review-summary", type=Path,
+        help=(
+            "current canonical PASS one-pass catalog-wide review summary; "
+            "binds exact zero-census absence/refutation decisions"
+        ),
+    )
+    ap.add_argument(
         "--membership-transform-chain", type=Path,
         help=(
             "canonical ordered transform chain ending at --membership; preferred "
@@ -421,6 +428,96 @@ def main() -> int:
                 ))
     if previous_membership_path is not None and previous_membership_path.resolve() != args.membership.resolve():
         raise SystemExit("last catalog-wide review manifest does not bind audited membership")
+
+    exact_refuted_zero_census: set[str] = set()
+    catalog_wide_review_summary_record = None
+    if args.catalog_wide_review_summary:
+        summary_path = args.catalog_wide_review_summary.resolve()
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if (
+            summary.get("status") != "PASS"
+            or summary.get("stage") != "post_atlas_catalog_wide_lineage_review"
+            or int(summary.get("review_queue_n", -1)) != 0
+        ):
+            raise SystemExit(
+                "catalog-wide review summary is not a closed canonical PASS"
+            )
+        summary_membership = summary.get("membership", {})
+        summary_membership_path = Path(str(summary_membership.get("path", "")))
+        if (
+            not summary_membership_path.is_file()
+            or summary_membership.get("sha256") != sha256(summary_membership_path)
+            or summary_membership_path.resolve() != args.membership.resolve()
+        ):
+            raise SystemExit(
+                "catalog-wide review summary does not bind audited membership"
+            )
+        matrix_record = summary.get("artifacts", {}).get(
+            "lineage_review_matrix", {}
+        )
+        matrix_path = Path(str(matrix_record.get("path", "")))
+        if (
+            not matrix_path.is_file()
+            or matrix_record.get("sha256") != sha256(matrix_path)
+        ):
+            raise SystemExit("catalog-wide lineage review matrix is missing or stale")
+        current_exact_absence = {
+            str(row.get("broad_label", ""))
+            for row in read_tsv(matrix_path)
+            if str(row.get("status", "")) in {
+                "closed_after_single_cell_type_review",
+                "supported_after_exact_cell_type_review",
+            }
+            and int(row.get("final_n_observations", "0") or 0) == 0
+            and int(row.get("precision_review_source_group_n", "0") or 0) == 0
+            and int(row.get("recall_challenger_component_n", "0") or 0) == 0
+            and int(row.get("recall_challenger_observation_n", "0") or 0) == 0
+            and int(row.get("recall_group_watch_n", "0") or 0) == 0
+        }
+        validated_exact_absence: set[str] = set()
+        for record in summary.get("prior_decision_validations", []):
+            validation_path = Path(str(record.get("path", "")))
+            if (
+                not validation_path.is_file()
+                or record.get("sha256") != sha256(validation_path)
+            ):
+                raise SystemExit(
+                    "catalog-wide prior decision validation is missing or stale"
+                )
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            if (
+                validation.get("status") != "PASS"
+                or validation.get("stage")
+                != "catalog_wide_lineage_review_decision_validation"
+            ):
+                raise SystemExit(
+                    "catalog-wide prior decision validation is not canonical PASS"
+                )
+            cell_type = str(validation.get("active_cell_type", ""))
+            decisions_record = validation.get("validated_decisions", {})
+            decisions_path = Path(str(decisions_record.get("path", "")))
+            if (
+                not decisions_path.is_file()
+                or decisions_record.get("sha256") != sha256(decisions_path)
+            ):
+                raise SystemExit(
+                    "catalog-wide validated decisions are missing or stale"
+                )
+            if any(
+                str(row.get("outcome", ""))
+                == "confirm_absent_or_not_evaluable"
+                and str(row.get("whole_query_recall", ""))
+                == "confirmed_absent"
+                and str(row.get("outside_recall_challenger_resolution", ""))
+                == "refuted_by_multichannel_evidence"
+                for row in read_tsv(decisions_path)
+            ):
+                validated_exact_absence.add(cell_type)
+        exact_refuted_zero_census = current_exact_absence & validated_exact_absence
+        catalog_wide_review_summary_record = {
+            "path": str(summary_path),
+            "sha256": sha256(summary_path),
+        }
     unsupported_release_members: Counter[str] = Counter()
     unsupported_release_groups: dict[str, set[tuple[str, str]]] = defaultdict(set)
     for row in membership:
@@ -544,6 +641,11 @@ def main() -> int:
         elif not eligible_broad_release_ids and context_ineligible_ids:
             status = "not_evaluable"
             rationale = "bound_context_does_not_permit_this_stage_dependent_lineage_evaluation"
+        elif positive_program_n and broad in exact_refuted_zero_census:
+            status = "refuted"
+            rationale = (
+                "positive_group_program_refuted_by_current_exact_cell_type_review"
+            )
         elif positive_program_n:
             canonical_zero = any(
                 str(candidates[candidate_id].get("writeback_strategy", ""))
@@ -747,6 +849,10 @@ def main() -> int:
             {"path": str(path.resolve()), "sha256": sha256(path)}
             for path in args.catalog_wide_review_manifest
         ],
+        "catalog_wide_review_summary": catalog_wide_review_summary_record,
+        "exact_refuted_zero_census_broad_labels": sorted(
+            exact_refuted_zero_census
+        ),
         "follicle_roi_repair_manifest": (
             {
                 "path": str(args.follicle_roi_repair_manifest.resolve()),

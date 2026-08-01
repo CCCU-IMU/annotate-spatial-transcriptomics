@@ -2288,7 +2288,7 @@ def run_catalog_wide_review_iterations(
                 "review_state": review_state_path,
                 "active_cell_type": "",
                 "required_progress_message": (
-                    "该细胞类型两轮专项修订后仍未关闭，需要人工生物学裁决。"
+                    "该细胞类型的一次专项复核没有形成可验证结论，需要人工生物学裁决。"
                 ),
             }
         if review_state.get("status") != "REVIEW_REQUIRED" or not active_review_id:
@@ -2639,9 +2639,9 @@ def resume_sequential_cell_type_review(
         if static_record else None
     )
     if resume.get("pause_reason") == "manual_biological_adjudication_required":
-        # A rejected decision file is diagnostic, not a completed biological
-        # decision.  Permit a corrected, packet-bound retry without consuming
-        # one of the two formal decision rounds for the active cell type.
+        # A rejected or still-pending decision file is diagnostic, not a
+        # completed biological decision. Permit a corrected, packet-bound
+        # submission without consuming the type's single formal conclusion.
         retained_validations: list[Path] = []
         for path in prior_validations:
             document = json.loads(path.read_text(encoding="utf-8"))
@@ -2952,6 +2952,9 @@ def resume_sequential_cell_type_review(
         command.extend(["--local-remainder-audit", str(path)])
     if "context_evidence" in paths:
         command.extend(["--context-evidence", str(paths["context_evidence"])])
+    command.extend([
+        "--catalog-wide-review-summary", str(review["review_manifest"])
+    ])
     if quality_required:
         command.append("--defer-canonical-zero-to-biological-review")
     run(
@@ -3478,6 +3481,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             command.extend(["--local-remainder-audit", str(path.resolve())])
         if "context_evidence" in paths:
             command.extend(["--context-evidence", str(paths["context_evidence"])])
+        command.extend([
+            "--catalog-wide-review-summary",
+            str(catalog_review["review_manifest"]),
+        ])
         if quality_required:
             command.append("--defer-canonical-zero-to-biological-review")
         run(
@@ -3880,8 +3887,8 @@ def parse_args() -> argparse.Namespace:
         "--lineage-review-manual-adjudication", type=Path,
         action="append", default=[],
         help=(
-            "user-authorized, non-mutating closure for one exact scope that "
-            "reached the automatic two-decision ceiling"
+            "legacy/user-authorized non-mutating closure for one exact "
+            "blocked review scope"
         ),
     )
     atlas.add_argument("--lineage-review-previous-review", type=Path)

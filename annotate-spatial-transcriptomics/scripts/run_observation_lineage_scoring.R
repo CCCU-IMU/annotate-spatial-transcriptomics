@@ -497,6 +497,8 @@ candidate_family_coherent <- matrix(
 )
 candidate_identity_core_coherent <- candidate_family_coherent
 candidate_identity_core_direct <- candidate_family_coherent
+candidate_split_discriminator_direct <- candidate_family_coherent
+candidate_required_joint_direct <- candidate_family_coherent
 candidate_release_family_coherent <- matrix(
   TRUE, nrow = n_obs, ncol = n_candidates,
   dimnames = list(colnames(obj), candidate_ids)
@@ -567,11 +569,45 @@ for (candidate_index in seq_along(candidate_ids)) {
     missing_required <- setdiff(required_columns, family_columns)
     if (length(missing_required)) {
       candidate_release_family_coherent[, candidate_index] <- FALSE
+      candidate_required_joint_direct[, candidate_index] <- FALSE
     } else {
       candidate_release_family_coherent[, candidate_index] <- rowSums(
         coherent[, required_columns, drop = FALSE]
       ) == length(required_columns)
+      minimum_required_direct_genes <- max(1L, as.integer(or_value(
+        catalog_by_id[[candidate_id]]$required_family_minimum_direct_genes,
+        1L
+      )))
+      candidate_required_joint_direct[, candidate_index] <- rowSums(
+        family_detected[, required_columns, drop = FALSE] >=
+          minimum_required_direct_genes
+      ) == length(required_columns)
     }
+  } else {
+    candidate_required_joint_direct[, candidate_index] <-
+      candidate_identity_core_direct[, candidate_index]
+  }
+  split_families <- as.character(unlist(
+    catalog_by_id[[candidate_id]]$split_discriminator_families
+  ))
+  if (!length(split_families)) split_families <- seed_families
+  if (length(split_families)) {
+    split_columns <- paste(candidate_id, split_families, sep = "::")
+    if (length(setdiff(split_columns, family_columns))) {
+      candidate_split_discriminator_direct[, candidate_index] <- FALSE
+    } else {
+      minimum_split_direct_genes <- max(1L, as.integer(or_value(
+        catalog_by_id[[candidate_id]]$split_discriminator_minimum_direct_genes,
+        1L
+      )))
+      candidate_split_discriminator_direct[, candidate_index] <- rowSums(
+        family_detected[, split_columns, drop = FALSE] >=
+          minimum_split_direct_genes
+      ) == length(split_columns)
+    }
+  } else {
+    candidate_split_discriminator_direct[, candidate_index] <-
+      candidate_identity_core_direct[, candidate_index]
   }
   candidate_direct[, candidate_index] <- top_two_mean(direct_matrix)
   candidate_local[, candidate_index] <- top_two_mean(local_matrix)
@@ -748,6 +784,10 @@ if (!grid_evidence_only) {
     identity_core_coherent =
       candidate_identity_core_coherent[, candidate_index],
     identity_core_direct = candidate_identity_core_direct[, candidate_index],
+    split_discriminator_direct =
+      candidate_split_discriminator_direct[, candidate_index],
+    required_positive_families_joint_direct =
+      candidate_required_joint_direct[, candidate_index],
     release_family_coherent =
       candidate_release_family_coherent[, candidate_index],
     soft_anti_score = candidate_soft_anti[, candidate_index],
@@ -808,6 +848,12 @@ for (resolution in sort(names(partition_list))) {
   identity_core_direct_fraction <- group_mean_matrix(
     candidate_identity_core_direct * 1
   )
+  split_discriminator_direct_fraction <- group_mean_matrix(
+    candidate_split_discriminator_direct * 1
+  )
+  required_joint_direct_fraction <- group_mean_matrix(
+    candidate_required_joint_direct * 1
+  )
   coherent_fraction <- group_mean_matrix(candidate_family_coherent * 1)
   release_coherent_fraction <- group_mean_matrix(
     (candidate_family_coherent & candidate_release_family_coherent) * 1
@@ -864,13 +910,13 @@ for (resolution in sort(names(partition_list))) {
     family_prevalence <- group_mean_matrix(
       family_active[, positive_family_keys, drop = FALSE] * 1
     )
-    identity_floor <- max(
-      0.03,
+    identity_floor <- max(0.03, as.numeric(or_value(
+      candidate_meta[[candidate_id]]$minimum_required_family_fraction,
       as.numeric(or_value(
         candidate_meta[[candidate_id]]$minimum_identity_core_fraction,
         0.03
       )) / 2
-    )
+    )))
     group_positive_family_supported_count <- rowSums(
       family_prevalence >= identity_floor
     )
@@ -909,6 +955,10 @@ for (resolution in sort(names(partition_list))) {
         identity_core_fraction[, candidate_index],
       observation_identity_core_direct_fraction =
         identity_core_direct_fraction[, candidate_index],
+      observation_split_discriminator_direct_fraction =
+        split_discriminator_direct_fraction[, candidate_index],
+      observation_required_positive_joint_direct_fraction =
+        required_joint_direct_fraction[, candidate_index],
       observation_coherent_fraction = coherent_fraction[, candidate_index],
       observation_release_family_coherent_fraction =
         release_coherent_fraction[, candidate_index],
