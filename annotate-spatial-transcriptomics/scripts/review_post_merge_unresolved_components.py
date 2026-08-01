@@ -25,6 +25,7 @@ from evidence_schema_lib import sha256
 from lineage_controller_lib import (
     apply_candidate_context,
     candidate_can_release,
+    candidate_can_support_broad_review,
     catalog_candidates,
     candidate_specific_group_release_pass,
     deterministic_membership_hash,
@@ -110,6 +111,7 @@ def candidate_catalog(
             row.get("candidate_role") not in {"broad", "fine"}
             or not row.get("release_broad_label")
             or not candidate_can_release(row)
+            or not candidate_can_support_broad_review(row)
             or strategy.startswith("watch_only")
             or strategy == "canonical_cluster_membership"
         ):

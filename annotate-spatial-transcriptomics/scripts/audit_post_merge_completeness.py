@@ -10,7 +10,8 @@ from pathlib import Path
 
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
-    apply_candidate_context, candidate_can_release, catalog_candidates,
+    apply_candidate_context, candidate_can_release,
+    candidate_can_support_broad_review, catalog_candidates,
     deterministic_cell_id_set_hash, deterministic_membership_hash,
     group_candidate_detected, independent_group_program, read_tsv, write_tsv,
 )
@@ -561,6 +562,7 @@ def main() -> int:
         supported = bool(
             candidate
             and candidate_can_release(candidate)
+            and candidate_can_support_broad_review(candidate)
             and str(candidate.get("release_broad_label", "")) == broad
             and source_supported
         )

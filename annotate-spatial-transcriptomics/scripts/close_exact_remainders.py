@@ -19,6 +19,7 @@ from lineage_controller_lib import (
     assignment_row,
     candidate_anchor,
     candidate_can_release,
+    candidate_can_support_broad_review,
     catalog_candidates,
     choose_group_parent,
     deterministic_candidate_membership_hash,
@@ -46,6 +47,20 @@ CANONICAL_CHAIN = (
     "close_exact_remainders.py",
     "run_lineage_controller.py",
 )
+
+
+def candidate_can_write_broad_proposal(candidate: dict) -> bool:
+    """Return whether one validated candidate may materialize a broad proposal.
+
+    Ordinary fine/state programs remain useful audit evidence, but they cannot
+    reconstruct their broad parent during broad closure.  Only a broad
+    candidate, or a fine candidate with an explicit catalog-authorized parent
+    reconstruction route, may write a broad proposal.
+    """
+    return (
+        candidate_can_release(candidate)
+        and candidate_can_support_broad_review(candidate)
+    )
 
 
 def artifact_ok(record: dict, path: Path) -> bool:
@@ -542,8 +557,15 @@ def main() -> int:
                 "status": "FAIL",
                 "reason": "preliminary_subset_validation_failed",
             }
-        elif candidate not in catalog or not candidate_can_release(catalog[candidate]):
+        elif candidate not in catalog:
+            validation = {"status": "FAIL", "reason": "candidate_not_in_catalog"}
+        elif not candidate_can_release(catalog[candidate]):
             validation = {"status": "FAIL", "reason": "candidate_not_release_eligible"}
+        elif not candidate_can_write_broad_proposal(catalog[candidate]):
+            validation = {
+                "status": "FAIL",
+                "reason": "fine_candidate_cannot_reconstruct_broad_parent",
+            }
         elif not set(members).issubset(source_members):
             validation = {"status": "FAIL", "reason": "membership_outside_source"}
         else:
@@ -681,7 +703,10 @@ def main() -> int:
                 )
             )
             for subset_id, candidate, residual_members in residual_components:
-                if candidate not in catalog or not candidate_can_release(catalog[candidate]):
+                if (
+                    candidate not in catalog
+                    or not candidate_can_write_broad_proposal(catalog[candidate])
+                ):
                     continue
                 validation = validate_subset(
                     residual_members, candidate, score_index, candidate_ids,

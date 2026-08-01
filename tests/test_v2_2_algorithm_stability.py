@@ -40,6 +40,7 @@ from lineage_controller_lib import (  # noqa: E402
 )
 from build_resolution_grid_evidence import candidate_detected  # noqa: E402
 from close_exact_remainders import (  # noqa: E402
+    candidate_can_write_broad_proposal,
     provenance_subset,
     remainder_candidate_programs,
     validated_residual_component_candidates,
@@ -319,7 +320,7 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
             evidence["parent_lineage_supported_fraction"], 1.0
         )
 
-    def test_fine_identity_can_reconstruct_sparse_parent_without_declared_required_families(self) -> None:
+    def test_fine_identity_cannot_reconstruct_broad_without_explicit_route(self) -> None:
         parent = {
             "candidate_id": "luteal_steroidogenic",
             "candidate_role": "broad",
@@ -369,6 +370,9 @@ class V22AlgorithmStabilityTests(unittest.TestCase):
         self.assertEqual(
             evidence["parent_lineage_supported_fraction"], 0.4
         )
+        self.assertFalse(candidate_can_write_broad_proposal(fine))
+        fine["parent_broad_reconstruction_allowed"] = True
+        self.assertTrue(candidate_can_write_broad_proposal(fine))
 
     def test_generic_stromal_remainder_is_not_an_independent_competitor(self) -> None:
         aggregate = {

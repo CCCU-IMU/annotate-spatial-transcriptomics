@@ -452,6 +452,26 @@ class V22StagedArchitectureTests(unittest.TestCase):
         self.assertIn("candidate_local_spatial_component", source)
         self.assertIn("It cannot invent a whole-object per-cell", source)
 
+    def test_every_formal_broad_writer_blocks_ordinary_fine_reconstruction(self) -> None:
+        guarded = (
+            "close_exact_remainders.py",
+            "merge_and_freeze_broad_membership.py",
+            "review_post_merge_unresolved_components.py",
+            "apply_catalog_wide_lineage_review.py",
+            "audit_post_merge_completeness.py",
+            "apply_sheep_ovary_follicle_roi_repair.py",
+        )
+        for name in guarded:
+            source = (SCRIPTS / name).read_text(encoding="utf-8")
+            with self.subTest(script=name):
+                self.assertIn("candidate_can_support_broad_review", source)
+        closer = (SCRIPTS / "close_exact_remainders.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "fine_candidate_cannot_reconstruct_broad_parent", closer
+        )
+
     def test_r_local_split_has_candidate_specific_canonical_component_route(self) -> None:
         source = (SCRIPTS / "derive_candidate_local_subsets.R").read_text(encoding="utf-8")
         self.assertIn("canonical_cluster_challenger_supported", source)

@@ -18,7 +18,8 @@ import pandas as pd
 
 from evidence_schema_lib import sha256
 from lineage_controller_lib import (
-    apply_candidate_context, candidate_can_release, catalog_candidates,
+    apply_candidate_context, candidate_can_release,
+    candidate_can_support_broad_review, catalog_candidates,
     deterministic_membership_hash, read_tsv as read_record_tsv,
 )
 
@@ -171,6 +172,7 @@ def main() -> int:
         for candidate_id, broad in CANDIDATE_TO_BROAD.items()
         if candidate_id in candidates
         and candidate_can_release(candidates[candidate_id])
+        and candidate_can_support_broad_review(candidates[candidate_id])
         and str(candidates[candidate_id].get("release_broad_label", "")) == broad
     }
     if not eligible_candidate_to_broad:

@@ -2,7 +2,7 @@
 
 [![Validate](https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/actions/workflows/validate.yml/badge.svg)](https://github.com/CCCU-IMU/annotate-spatial-transcriptomics/actions/workflows/validate.yml)
 
-面向 Codex Agent 的空间转录组/单细胞转录组迭代式注释 Skill。v2.5 采用“第一轮只划分 cohort、第二轮重聚类负责正式注释”的哈希绑定控制器：每个初始 cluster 都从项目自身 raw counts 独立执行 SCT/PCA/SNN/Leiden，完整扫描开放候选目录；只有二级 mixed subcluster 才进行局部 observation 拆分。全部 cohort 合并后才冻结 broad，再执行一次固定 GSE233801 Atlas、羊卵巢三终点组织学复核，最后严格串行地对每个可评估 broad 执行独立的过召回、欠召回、分子、空间与文献边界复核。同一时刻只有一个 active cell type；一个类型闭环后才进入下一个。稳定分区默认复用，只有原 source subcluster 确实不可评估时才重聚类。项目自编 scorer 或 subset writer 只能产生 experimental 结果，不能写正式标签。
+面向 Codex Agent 的空间转录组/单细胞转录组迭代式注释 Skill。v2.5 采用“第一轮只划分 cohort、第二轮重聚类负责正式注释”的哈希绑定控制器：每个初始 cluster 都从项目自身 raw counts 独立执行 SCT/PCA/SNN/Leiden，完整扫描开放候选目录；只有二级 mixed subcluster 才进行局部 observation 拆分。全部 cohort 合并后才冻结 broad，再执行一次固定 GSE233801 Atlas、羊卵巢三终点组织学复核，最后严格串行地对每个可评估 broad 执行独立的过召回、欠召回、分子、空间与文献边界复核。同一时刻只有一个 active cell type；一个类型闭环后才进入下一个。稳定分区默认复用，只有原 source subcluster 确实不可评估时才重聚类。普通 fine/state 候选不能反向重建 broad；只有候选目录显式授权的 parent reconstruction 路线才可在完整父类证据同时通过时提出 broad proposal。项目自编 scorer 或 subset writer 只能产生 experimental 结果，不能写正式标签。
 
 适配 Seurat RDS、AnnData/H5AD、SingleCellExperiment、BANKSY、Scanpy/Leiden、Seurat 聚类和外部 cluster table。空间数据以可靠的大类为主要终点，亚群只在证据充分时定义。
 
