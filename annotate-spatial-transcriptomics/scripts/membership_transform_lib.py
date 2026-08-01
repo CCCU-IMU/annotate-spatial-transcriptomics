@@ -225,7 +225,9 @@ def validate_evidence_manifest(
         document = json.loads(evidence_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError("membership transform evidence is not a JSON manifest") from exc
-    stage = str(document.get("stage", ""))
+    # Phase controller manifests use ``phase`` while stage-local writer
+    # manifests use ``stage``.  They carry the same canonical authority here.
+    stage = str(document.get("stage", document.get("phase", "")))
     status = str(document.get("status", ""))
     expected: dict[str, tuple[set[str], set[str]]] = {
         "atlas_unlabeled_broad_rescue": (

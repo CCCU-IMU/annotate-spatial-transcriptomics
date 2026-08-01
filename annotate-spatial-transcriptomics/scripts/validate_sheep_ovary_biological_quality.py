@@ -110,6 +110,64 @@ def artifact(path: Path) -> dict[str, object]:
     }
 
 
+def validate_manual_granulosa_adjudication(
+    path: Path, membership: pd.DataFrame, label_col: str,
+) -> dict[str, object]:
+    """Validate a user-authorized, non-mutating exact Granulosa closure."""
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        document.get("status") != "PASS"
+        or document.get("artifact_role")
+        != "user_authorized_manual_biological_adjudication"
+        or document.get("review_mode") != "broad_lineage_review"
+        or document.get("target_broad_label") != "Granulosa"
+        or document.get("outcome") not in {
+            "retain_current_cell_type", "retain_current_label",
+        }
+        or document.get("membership_changed") is not False
+        or document.get("user_authorization", {}).get(
+            "explicitly_confirmed"
+        ) is not True
+    ):
+        raise ValueError("manual Granulosa adjudication has invalid authority")
+    record = document.get("membership", {})
+    reviewed_path = Path(str(record.get("path", "")))
+    if (
+        not reviewed_path.is_file()
+        or record.get("sha256") != sha256(reviewed_path)
+    ):
+        raise ValueError("manual Granulosa adjudication membership is stale")
+    reviewed, reviewed_label = read_membership(reviewed_path)
+    reviewed_ids = sorted(reviewed.loc[
+        reviewed[reviewed_label].eq("Granulosa"), "cell_id"
+    ].astype(str))
+    current_ids = sorted(membership.loc[
+        membership[label_col].eq("Granulosa"), "cell_id"
+    ].astype(str))
+    if reviewed_ids != current_ids:
+        raise ValueError(
+            "manual Granulosa adjudication does not bind the exact current scope"
+        )
+    signature_payload = "\n".join([
+        "broad_lineage_review", "Granulosa",
+        *sorted(f"current:{cell_id}" for cell_id in current_ids),
+    ]).encode("utf-8")
+    if document.get("unit_signature") != hashlib.sha256(
+        signature_payload
+    ).hexdigest():
+        raise ValueError("manual Granulosa adjudication signature is invalid")
+    for supporting in document.get("supporting_artifacts", []):
+        supporting_path = Path(str(supporting.get("path", "")))
+        if (
+            not supporting_path.is_file()
+            or supporting.get("sha256") != sha256(supporting_path)
+        ):
+            raise ValueError(
+                "manual Granulosa adjudication has stale supporting evidence"
+            )
+    return document
+
+
 def as_bool(values: pd.Series) -> pd.Series:
     return values.astype(str).str.lower().isin({"true", "1", "yes", "t"})
 
@@ -1166,6 +1224,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--manual-biological-adjudication", action="append", type=Path,
+        default=[],
+        help=(
+            "User-authorized exact-scope non-mutating adjudication. It may "
+            "close only matching Granulosa-boundary diagnostics and never "
+            "write membership."
+        ),
+    )
+    parser.add_argument(
         "--diagnostic-legacy-scores", action="store_true",
         help=(
             "Read the pre-controller recovery score schema for a diagnostic-only "
@@ -1296,6 +1363,40 @@ def main() -> int:
                 ),
             })
             follicle_summary["status"] = "ITERATION_REQUIRED"
+    manual_closures: list[dict[str, object]] = []
+    for path in args.manual_biological_adjudication:
+        try:
+            document = validate_manual_granulosa_adjudication(
+                path, membership, label_col,
+            )
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+        closable_codes = {
+            "granulosa_boundary_published_label_lacks_corresponding_program",
+        }
+        closed = [
+            issue for issue in follicle_issues
+            if str(issue.get("issue_code", "")) in closable_codes
+        ]
+        follicle_issues = [
+            issue for issue in follicle_issues
+            if str(issue.get("issue_code", "")) not in closable_codes
+        ]
+        manual_closures.append({
+            "adjudication": artifact(path),
+            "target_broad_label": document["target_broad_label"],
+            "closed_issue_n": len(closed),
+            "closed_issue_codes": sorted({
+                str(issue.get("issue_code", "")) for issue in closed
+            }),
+            "membership_changed": False,
+        })
+    if manual_closures and not follicle_issues:
+        follicle_summary["status"] = "PASS"
+        follicle_summary["rationale"] = (
+            "exact_current_granulosa_scope_retained_by_user_authorized_"
+            "manual_biological_adjudication"
+        )
     issues = broad_issues + oocyte_issues + follicle_issues
     broad_status = "ITERATION_REQUIRED" if broad_issues else "PASS"
     status = "ITERATION_REQUIRED" if issues else "PASS"
@@ -1375,6 +1476,7 @@ def main() -> int:
             artifact(args.canonical_oocyte_review)
             if args.canonical_oocyte_review else None
         ),
+        "manual_biological_adjudication_closures": manual_closures,
         "spatial_scale": eps,
         "quality_endpoints": {
             "spatial_celltype_localization": {

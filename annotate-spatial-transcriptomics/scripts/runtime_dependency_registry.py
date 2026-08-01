@@ -10,7 +10,7 @@ run a helper that was never frozen into its contract.
 from __future__ import annotations
 
 
-REGISTRY_VERSION = "2.5.2"
+REGISTRY_VERSION = "2.5.3"
 
 PHASE_ORDER = (
     "whole_tissue_partition",
@@ -47,6 +47,7 @@ CANONICAL_SCRIPTS = (
     "audit_catalog_wide_lineage_challengers.py",
     "build_cell_type_review_marker_manifest.py",
     "export_cell_type_review_counts.R",
+    "build_zero_census_direct_challengers.py",
     "build_broad_cell_type_review_evidence.py",
     "export_broad_cell_type_review_pseudobulk.R",
     "summarize_broad_cell_type_review_pseudobulk.py",

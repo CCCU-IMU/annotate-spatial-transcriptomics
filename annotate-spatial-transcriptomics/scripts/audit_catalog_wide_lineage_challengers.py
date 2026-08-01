@@ -29,6 +29,7 @@ from lineage_controller_lib import (
     candidate_can_release,
     candidate_can_support_broad_review,
     catalog_candidates,
+    deterministic_cell_id_set_hash,
     deterministic_membership_hash,
     group_candidate_detected,
     group_identity_core_direct_fraction,
@@ -126,6 +127,152 @@ def prior_closed_units(paths: list[Path]) -> set[tuple[str, str, str]]:
     return closed
 
 
+def prior_broad_scopes(paths: list[Path]) -> dict[str, dict[str, object]]:
+    """Recover the exact member/recall/watch scope of a closed broad review."""
+    result: dict[str, dict[str, object]] = {}
+    for path in paths:
+        validation = json.loads(path.read_text(encoding="utf-8"))
+        if validation.get("status") != "PASS":
+            continue
+        review_path = Path(str(validation.get("review_manifest", {}).get("path", "")))
+        decisions_path = Path(str(validation.get("validated_decisions", {}).get("path", "")))
+        if not review_path.is_file() or not decisions_path.is_file():
+            continue
+        review = json.loads(review_path.read_text(encoding="utf-8"))
+        queue_record = review.get("artifacts", {}).get("review_queue", {})
+        scope_record = review.get("artifacts", {}).get(
+            "broad_lineage_review_scope_membership", {}
+        )
+        queue_path = Path(str(queue_record.get("path", "")))
+        scope_path = Path(str(scope_record.get("path", "")))
+        if (
+            not queue_path.is_file()
+            or queue_record.get("sha256") != sha256(queue_path)
+            or not scope_path.is_file()
+            or scope_record.get("sha256") != sha256(scope_path)
+        ):
+            continue
+        queue = {str(row.get("review_id", "")): row for row in read_tsv(queue_path)}
+        scope_by_review: dict[str, list[dict[str, str]]] = defaultdict(list)
+        for row in read_tsv(scope_path):
+            scope_by_review[str(row.get("review_id", ""))].append(row)
+        for decision in read_tsv(decisions_path):
+            if str(decision.get("outcome", "")) not in {
+                "retain_current_label", "reject_shared_or_ambient",
+                "retain_current_parent", "retain_current_cell_type",
+                "confirm_absent_or_not_evaluable",
+            }:
+                continue
+            queued = queue.get(str(decision.get("review_id", "")), {})
+            broad = str(queued.get("target_broad_label", ""))
+            if str(queued.get("review_mode", "")) != "broad_lineage_review" or not broad:
+                continue
+            rows = scope_by_review.get(str(decision.get("review_id", "")), [])
+            role_ids: dict[str, set[str]] = defaultdict(set)
+            for row in rows:
+                cell = str(row.get("cell_id", ""))
+                for role in str(row.get("scope_roles", "")).split(";"):
+                    if role and cell:
+                        role_ids[role].add(cell)
+            result[broad] = {
+                "unit_signature": str(queued.get("unit_signature", "")),
+                "current_ids": role_ids["current_label"],
+                "component_ids": role_ids["direct_recall_component"],
+                "watch_ids": role_ids["group_watch_source"],
+                "zero_direct_ids": role_ids[
+                    "zero_census_direct_multifamily_challenger"
+                ],
+            }
+    return result
+
+
+def manual_closed_units(
+    paths: list[Path], membership: pd.DataFrame,
+) -> tuple[set[tuple[str, str, str]], list[dict[str, object]]]:
+    """Bind non-mutating user adjudication to the exact current target set."""
+    closed: set[tuple[str, str, str]] = set()
+    records: list[dict[str, object]] = []
+    current_rows = membership.to_dict("records")
+    for path in paths:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            document.get("status") != "PASS"
+            or document.get("artifact_role")
+            != "user_authorized_manual_biological_adjudication"
+            or document.get("membership_changed") is not False
+            or document.get("counts_as_automatic_decision_round") is not False
+            or document.get("outcome") not in {
+                "retain_current_cell_type", "confirm_absent_or_not_evaluable"
+            }
+        ):
+            raise SystemExit("manual adjudication is not a canonical closure")
+        broad = str(document.get("target_broad_label", ""))
+        key = (
+            str(document.get("review_mode", "")), broad,
+            str(document.get("unit_signature", "")),
+        )
+        adjudicated_path = Path(str(document.get("membership", {}).get("path", "")))
+        if (
+            not all(key)
+            or not adjudicated_path.is_file()
+            or document.get("membership", {}).get("sha256") != sha256(adjudicated_path)
+        ):
+            raise SystemExit("manual adjudication membership or exact scope is stale")
+        current_target = [
+            row for row in current_rows
+            if str(row.get("final_broad_label", row.get("broad_label", ""))) == broad
+        ]
+        adjudicated_target = [
+            row for row in read_tsv(adjudicated_path)
+            if str(row.get("final_broad_label", row.get("broad_label", ""))) == broad
+        ]
+        if deterministic_membership_hash(current_target) != deterministic_membership_hash(
+            adjudicated_target
+        ):
+            raise SystemExit("manual adjudication target membership differs from current review")
+        if key in closed:
+            raise SystemExit("duplicate manual adjudication for one exact scope")
+        closed.add(key)
+        records.append(artifact(path))
+    return closed, records
+
+
+def load_zero_census_challengers(
+    path: Path | None, membership: pd.DataFrame,
+) -> tuple[dict[str, set[str]], dict[str, dict[str, str]], dict | None]:
+    if path is None:
+        return {}, {}, None
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        document.get("status") != "PASS"
+        or document.get("artifact_role")
+        != "query_derived_zero_census_challenger"
+        or document.get("formal_membership_written") is not False
+        or document.get("membership_cell_id_set_sha256")
+        != deterministic_cell_id_set_hash(membership.to_dict("records"))
+    ):
+        raise SystemExit("zero-census direct challenger manifest is incompatible")
+    artifacts = document.get("artifacts", {})
+    summary_path = Path(str(artifacts.get("summary", {}).get("path", "")))
+    members_path = Path(str(artifacts.get("membership", {}).get("path", "")))
+    for label, source in (("summary", summary_path), ("membership", members_path)):
+        if not source.is_file() or artifacts.get(label, {}).get("sha256") != sha256(source):
+            raise SystemExit(f"zero-census challenger {label} is missing or stale")
+    summary = {
+        str(row.get("broad_label", "")): row for row in read_tsv(summary_path)
+    }
+    direct: dict[str, set[str]] = defaultdict(set)
+    eligible = {
+        broad for broad, row in summary.items()
+        if str(row.get("status", "")) == "review_required"
+    }
+    for row in read_tsv(members_path):
+        broad = str(row.get("broad_label", ""))
+        if broad in eligible:
+            direct[broad].add(str(row.get("cell_id", "")))
+    return dict(direct), summary, artifact(path)
+
+
 def validate_authority(args: argparse.Namespace) -> dict:
     authority = json.loads(args.stage_authority.read_text(encoding="utf-8"))
     if (
@@ -141,6 +288,10 @@ def validate_authority(args: argparse.Namespace) -> dict:
     }
     if args.context_evidence:
         records["context_evidence"] = args.context_evidence
+    if args.zero_census_direct_challenger_manifest:
+        records["zero_census_direct_challenger"] = (
+            args.zero_census_direct_challenger_manifest
+        )
     for key, path in records.items():
         record = authority.get(key, {})
         if (
@@ -297,6 +448,11 @@ def main() -> int:
     ap.add_argument(
         "--prior-decision-validation", action="append", type=Path, default=[]
     )
+    ap.add_argument("--zero-census-direct-challenger-manifest", type=Path)
+    ap.add_argument(
+        "--manual-biological-adjudication", action="append", type=Path,
+        default=[],
+    )
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out", required=True, type=Path)
     args = ap.parse_args()
@@ -306,6 +462,7 @@ def main() -> int:
     if args.round_index < 1:
         raise SystemExit("catalog-wide review round index must be >=1")
     prior_closed = prior_closed_units(args.prior_decision_validation)
+    prior_scopes = prior_broad_scopes(args.prior_decision_validation)
 
     membership = pd.read_csv(
         args.membership, sep="\t", dtype=str, low_memory=False
@@ -316,6 +473,15 @@ def main() -> int:
         if column not in membership:
             raise SystemExit(f"review membership lacks {column}")
         membership[column] = membership[column].astype(str)
+    manual_closed, manual_records = manual_closed_units(
+        args.manual_biological_adjudication, membership
+    )
+    prior_closed.update(manual_closed)
+    zero_direct_by_broad, zero_direct_summary, zero_direct_record = (
+        load_zero_census_challengers(
+            args.zero_census_direct_challenger_manifest, membership
+        )
+    )
 
     candidates = catalog_candidates(json.loads(args.catalog.read_text(encoding="utf-8")))
     context_summary = apply_candidate_context(
@@ -741,6 +907,9 @@ def main() -> int:
             membership.final_broad_label.eq(broad), "cell_id"
         ].astype(str))
         component_ids = set(component_members_by_broad.get(broad, set()))
+        zero_direct_ids = (
+            set(zero_direct_by_broad.get(broad, set())) if not current_ids else set()
+        )
         watch_ids: set[str] = set()
         for boundary, cluster in watch_groups_by_broad.get(broad, set()):
             watch_ids.update(membership.loc[
@@ -751,7 +920,7 @@ def main() -> int:
             precision_review_by_broad[broad] + recall_by_broad[broad]
             + group_watch_by_broad[broad]
         )
-        if not current_ids and not component_ids and not watch_ids:
+        if not current_ids and not component_ids and not watch_ids and not zero_direct_ids:
             type_status_by_broad[broad] = "supported_zero_census_no_query_challenger"
             continue
         review_mode = (
@@ -760,19 +929,46 @@ def main() -> int:
         signature_tokens = (
             [f"current:{cell}" for cell in sorted(current_ids)]
             + [f"component:{cell}" for cell in sorted(component_ids)]
+            + [f"zero_direct:{cell}" for cell in sorted(zero_direct_ids)]
             + [
                 f"watch_group:{boundary}:{cluster}"
                 for boundary, cluster in sorted(watch_groups_by_broad.get(broad, set()))
             ]
         )
         signature = unit_signature(review_mode, broad, signature_tokens)
-        closed = (review_mode, broad, signature) in prior_closed
+        exact_key = (review_mode, broad, signature)
+        closed = exact_key in prior_closed
+        manual_closed_scope = exact_key in manual_closed
+        monotonic_subtraction = False
+        monotonic_removed_n = 0
+        monotonic_removed_fraction = 0.0
+        previous_scope = prior_scopes.get(broad, {})
+        previous_current = set(previous_scope.get("current_ids", set()))
+        if (
+            not closed
+            and review_mode == "broad_lineage_review"
+            and current_ids
+            and previous_current
+            and current_ids < previous_current
+            and component_ids.issubset(set(previous_scope.get("component_ids", set())))
+            and watch_ids.issubset(set(previous_scope.get("watch_ids", set())))
+            and zero_direct_ids.issubset(
+                set(previous_scope.get("zero_direct_ids", set()))
+            )
+        ):
+            monotonic_removed_n = len(previous_current - current_ids)
+            monotonic_removed_fraction = monotonic_removed_n / len(previous_current)
+            monotonic_subtraction = monotonic_removed_fraction <= float(
+                policy[
+                    "maximum_monotonic_subtraction_fraction_without_full_reopen"
+                ]
+            )
         # The review still scans the whole query, but closure is invalidated by
         # a change to this target's current members, recall components or source
         # watches.  An unrelated lineage patch must not reopen every already
         # closed type.  Patches that move cells into or out of this target alter
         # these tokens and therefore reopen it deterministically.
-        open_review = not closed
+        open_review = not closed and not monotonic_subtraction
         review_id = ""
         if open_review:
             review_index += 1
@@ -789,7 +985,8 @@ def main() -> int:
                 "reason": (
                     f"complete_cell_type_review:precision_groups={precision_review_by_broad[broad]};"
                     f"recall_components={recall_by_broad[broad]};"
-                    f"group_watches={group_watch_by_broad[broad]}"
+                    f"group_watches={group_watch_by_broad[broad]};"
+                    f"zero_census_direct={len(zero_direct_ids)}"
                 ),
                 "unit_signature": signature,
                 "required_review": "query_raw_count_marker_families;target_vs_outside_DEG_pseudobulk;pairwise_competitors;whole_section_spatial_distribution;over_recall;under_recall;targeted_membership_if_supported",
@@ -804,6 +1001,8 @@ def main() -> int:
                     roles.append("direct_recall_component")
                 if cell in watch_ids:
                     roles.append("group_watch_source")
+                if cell in zero_direct_ids:
+                    roles.append("zero_census_direct_multifamily_challenger")
                 review_scope_rows.append({
                     "review_id": review_id,
                     "cell_id": cell,
@@ -813,7 +1012,9 @@ def main() -> int:
                 })
         status = (
             "review_required" if open_review
+            else "closed_by_manual_adjudication" if manual_closed_scope
             else "supported_after_exact_cell_type_review" if closed
+            else "closed_after_monotonic_subtraction" if monotonic_subtraction
             else "supported_after_membership_change_reaudit"
         )
         type_status_by_broad[broad] = status
@@ -824,6 +1025,9 @@ def main() -> int:
             "precision_child_source_group_n": precision_review_by_broad[broad],
             "recall_child_component_n": recall_by_broad[broad],
             "recall_child_group_watch_n": group_watch_by_broad[broad],
+            "zero_census_direct_challenger_n": len(zero_direct_ids),
+            "monotonic_removed_n": monotonic_removed_n,
+            "monotonic_removed_fraction": monotonic_removed_fraction,
             "review_scope_n": len(all_query_ids),
             "status": status,
             "review_id": review_id,
@@ -854,6 +1058,9 @@ def main() -> int:
             "recall_challenger_component_n": recall_by_broad[broad],
             "recall_challenger_observation_n": recall_n_by_broad[broad],
             "recall_group_watch_n": group_watch_by_broad[broad],
+            "zero_census_direct_challenger_n": len(
+                zero_direct_by_broad.get(broad, set())
+            ),
             "primary_review_unit": "broad_lineage",
             "status": type_status_by_broad.get(
                 broad, "not_evaluable" if not evaluable else "supported"
@@ -928,6 +1135,8 @@ def main() -> int:
         "prior_decision_validations": [
             artifact(path) for path in args.prior_decision_validation
         ],
+        "manual_biological_adjudications": manual_records,
+        "zero_census_direct_challenger": zero_direct_record,
         "eligible_broad_n": len(eligible_broad_labels),
         "context_not_evaluable_broad_n": len(set(broad_release_labels) - eligible_broad_labels),
         "precision_review_source_group_n": len(precision_queue),
@@ -936,6 +1145,10 @@ def main() -> int:
         ),
         "recall_group_watch_n": sum(
             row["status"] == "review_required" for row in group_watch_rows
+        ),
+        "zero_census_direct_challenger_broad_n": sum(
+            str(row.get("status", "")) == "review_required"
+            for row in zero_direct_summary.values()
         ),
         "cell_type_review_n": len(type_review_rows),
         "review_queue_n": len(queue_rows),

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import hashlib
 import json
 import shutil
@@ -47,7 +48,12 @@ def validate_semantic_input(specification: str) -> dict[str, object]:
     if media_type == "json":
         json.loads(path.read_text(encoding="utf-8"))
     elif media_type == "tsv":
-        with path.open("r", encoding="utf-8", newline="") as handle:
+        handle_context = (
+            gzip.open(path, "rt", encoding="utf-8", newline="")
+            if path.suffix.lower() == ".gz"
+            else path.open("r", encoding="utf-8", newline="")
+        )
+        with handle_context as handle:
             reader = csv.reader(handle, delimiter="\t")
             header = next(reader, [])
         if not header or any(not value for value in header):

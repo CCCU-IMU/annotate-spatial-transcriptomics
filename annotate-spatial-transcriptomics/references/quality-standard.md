@@ -31,7 +31,8 @@ A fine label additionally requires a matching frozen broad parent and an indepen
 - Freeze broad membership only after all cohorts merge into an exact disjoint analysis-set cover.
 - Run Atlas and missing-lineage review only after broad freeze. For sheep ovary, new mappings use only the immutable contract-bound GSE233801 split-wall v2 bundle reconstructed from original reference clusters. Supported Granulosa, Immune, Stromal/mesenchymal, Endothelial, Pericyte/mural and Smooth-muscle pairs may rescue an unlabeled broad identity only after current-query classwise calibration; challenge-only Epithelial/mesothelial and Theca can raise review questions but cannot write labels. Atlas cannot overwrite a defined label, create a fine label or substitute another reference. The deprecated merged v1 bundle is resume-only.
 - Audit every present broad, every zero-census catalog lineage, every stable unmodeled program and every parent-by-fine candidate.
-- After tissue-specific review, audit broad identities strictly one at a time. One invocation exposes one active cell type, one multichannel packet and one decision. The decision must separately close current-member precision, whole-query recall, molecular identity, whole-section spatial consistency and the literature boundary. A patch reopens only types whose own membership/recall/watch signature changed.
+- After tissue-specific review, audit broad identities strictly one at a time. One invocation exposes one active cell type, one multichannel packet and one decision. The decision must separately close current-member precision, whole-query recall, molecular identity, whole-section spatial consistency and the literature boundary. A patch reopens only types whose own membership/recall/watch signature changed. A small exact monotonic subtraction may close without repeating the full packet only when no new challenger is created; any gain, non-subset change or new challenger reopens the type.
+- A zero-census broad cannot close merely because its direct multigene observations are spatially fragmented. A direct two-family/three-gene identity-core challenger triggers bounded source-subcluster review, then requires DEG/pseudobulk and competitor adjudication before any label is written.
 - Convert unresolved biological cells to typed QC only at final materialization.
 
 ## Failure patterns that block release
@@ -71,6 +72,8 @@ For sheep ovary, reduce final biological approval to three required questions:
 Run the deterministic sheep-ovary biological-quality review after broad freeze and Atlas. A sample without follicles or without antral follicles may close the corresponding structure as `NOT_EVALUABLE`; absence is not a failure. A coherent multisector lineage program hidden inside generic Stromal/unresolved is an iteration trigger. Reopen only the exact source subcluster or bounded follicle ROI. Spatial shape alone never writes a label.
 
 Only after those three endpoints are reviewed may the controller enter **逐大类全样本复核**. The Agent announces `现在开始对 <cell type> 进行专项复核。`, completes that type and freezes its closure before opening the next type. Shared raw-count and coordinate caches are allowed; batch generation or batch closure of formal cell-type decisions is not.
+
+Runtime efficiency must preserve this biology: reuse one immutable project-local raw-count/coordinate cache, compute full-transcriptome pseudobulk only for the active type and its evidenced competitors, do not rewrite membership for zero-change decisions, and do not append such decisions to the semantic transform chain. Use 1–4 CPUs for state/preflight work, 8–16 for active-type evidence and 64 only for heavy reclustering or large-RDS materialization.
 
 ## Main-Agent approval
 

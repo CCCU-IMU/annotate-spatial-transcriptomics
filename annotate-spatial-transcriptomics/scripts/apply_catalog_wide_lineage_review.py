@@ -317,15 +317,22 @@ def main() -> int:
         output.append(row)
 
     args.out.mkdir(parents=True, exist_ok=True)
-    membership_path = args.out / "catalog_wide_reviewed_membership.tsv.gz"
     changes_path = args.out / "catalog_wide_review_changes.tsv"
     audit_path = args.out / "catalog_wide_review_decision_audit.tsv"
-    write_tsv(membership_path, output)
     write_tsv(changes_path, changes, fields=[
         "cell_id", "old_broad_label", "new_broad_label", "candidate_id",
         "review_id", "outcome",
     ])
     write_tsv(audit_path, decision_audit)
+    membership_rewritten = bool(changes)
+    if membership_rewritten:
+        membership_path = args.out / "catalog_wide_reviewed_membership.tsv.gz"
+        write_tsv(membership_path, output)
+    else:
+        # A retain/absence decision closes biology but is not a membership
+        # transform.  Reuse the exact source artifact to avoid gzip hash churn,
+        # duplicate 468k-row writes and spurious downstream invalidation.
+        membership_path = args.membership.resolve()
     transitions = Counter(
         (str(row["old_broad_label"]), str(row["new_broad_label"]))
         for row in changes
@@ -352,6 +359,7 @@ def main() -> int:
         "changes": artifact(changes_path),
         "decision_audit": artifact(audit_path),
         "n_changed_observations": len(changes),
+        "membership_rewritten": membership_rewritten,
         "changed_transitions": {
             f"{old} -> {new}": count
             for (old, new), count in sorted(transitions.items())
@@ -370,7 +378,8 @@ def main() -> int:
             "changed_observation_n": len(changes),
         },
         "next_required_action": (
-            "rerun_same_cell_type_if_membership_changed_otherwise_activate_next_cell_type"
+            "rerun_affected_cell_types_after_membership_change"
+            if membership_rewritten else "activate_next_cell_type"
         ),
     }
     manifest_path = args.out / "catalog_wide_lineage_review_apply_manifest.json"

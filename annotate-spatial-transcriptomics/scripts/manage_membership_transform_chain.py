@@ -19,6 +19,8 @@ from membership_transform_lib import (
     rows_by_cell,
     rows_hash,
     validate_chain_document,
+    validate_evidence_manifest,
+    validate_operation,
 )
 
 
@@ -114,7 +116,24 @@ def main() -> int:
         updated["transforms"] = [*document["transforms"], entry]
         updated["transform_n"] = len(updated["transforms"])
         updated["current_membership"] = entry["result_membership"]
-        validate_chain_document(updated, args.result.resolve())
+        # load_and_validate_chain() above has already validated every existing
+        # entry.  Revalidating the full chain after appending duplicates all
+        # 468k-row membership reads and can exhaust a scheduler process during
+        # final materialization.  Validate the one new contiguous entry here;
+        # the resulting chain remains subject to full validation on its next
+        # load and at release audit.
+        # Reuse the source/result dictionaries already loaded above.  Calling
+        # validate_entry() here would allocate a second pair of 468k-row
+        # dictionaries while the first pair is still live.
+        validate_operation(
+            args.operation, source, result, changes,
+            args.operation in IDENTITY_NEUTRAL_OPERATIONS,
+            args.target_cell_type,
+        )
+        validate_evidence_manifest(
+            args.operation, args.evidence_manifest.resolve(),
+            args.result.resolve(), args.target_cell_type,
+        )
         path = write_chain(updated, args.out)
         print(json.dumps({"status": "PASS", "chain": artifact(path), "transform": entry}, indent=2))
         return 0

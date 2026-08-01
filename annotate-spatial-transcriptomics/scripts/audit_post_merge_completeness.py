@@ -12,7 +12,7 @@ from evidence_schema_lib import sha256
 from lineage_controller_lib import (
     apply_candidate_context, candidate_can_release, catalog_candidates,
     deterministic_cell_id_set_hash, deterministic_membership_hash,
-    group_candidate_detected, read_tsv, write_tsv,
+    group_candidate_detected, independent_group_program, read_tsv, write_tsv,
 )
 from membership_transform_lib import load_and_validate_chain
 
@@ -486,9 +486,15 @@ def main() -> int:
             row for candidate_id in eligible_candidate_ids
             for row in evidence_by_candidate.get(candidate_id, [])
         ]
+        # A visible shared program is sufficient to keep a candidate in the
+        # descriptive audit, but a zero census conflicts only with an
+        # independent identity program.  Use the same separability rule as the
+        # exact catalog-wide reviewer.
         positive = [
             row for row in evidence
-            if detected(row, candidates[str(row.get("candidate_id", ""))])
+            if independent_group_program(
+                row, candidates[str(row.get("candidate_id", ""))]
+            )
         ]
         local_positive_n = sum(
             candidate_id in eligible_candidate_ids

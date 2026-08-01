@@ -71,8 +71,18 @@
     "minimum_raw_review_recall_margin": 0.08,
     "minimum_raw_review_direct_families": 2,
     "minimum_raw_review_direct_genes": 3,
+    "minimum_zero_census_direct_seed_observations": 3,
+    "minimum_zero_census_direct_source_group_observations": 3,
+    "maximum_monotonic_subtraction_fraction_without_full_reopen": 0.10,
     "spatial_knn_k": 12,
     "generic_remainder_recall_components_enabled": false
+  },
+  "runtime_resource_policy": {
+    "state_manifest_and_preflight_cpus": 4,
+    "review_evidence_default_cpus": 8,
+    "review_evidence_max_cpus": 16,
+    "heavy_clustering_default_cpus": 64,
+    "large_rds_materialization_max_cpus": 64
   },
   "resolution_selection": {
     "composite_equivalence_tolerance": 0.01,

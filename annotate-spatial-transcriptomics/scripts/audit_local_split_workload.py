@@ -27,7 +27,8 @@ def main() -> int:
     for manifest_path in args.cohort_manifest:
         document = json.loads(manifest_path.read_text(encoding="utf-8"))
         if (
-            document.get("stage") != "cluster_cohort_recluster"
+            document.get("stage", document.get("phase"))
+            != "cluster_cohort_recluster"
             or document.get("status") not in {"PASS", "LOCAL_SPLIT_REQUIRED"}
         ):
             raise SystemExit("local-split workload received a nonterminal cohort")

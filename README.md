@@ -166,9 +166,11 @@ runtime=可用的 R/Python 环境与调度资源
         -> molecular：检查多基因、DEG/pseudobulk、竞争谱系与替代解释
         -> spatial/literature：检查全切片空间一致性和文献边界
         -> source subcluster / 空间组件 / group watch 仅作内部证据与 patch 边界
-     -> 每个类型最多两轮精确证据决策；修订只重开 membership/召回/watch signature 被影响的类型
+     -> 每个类型最多两轮精确证据决策；新增成员或新 challenger 才强制重开，≤10% 精确成员减法且无新 challenger 可增量关闭
+     -> 零 census 的直接两家族/三基因 identity-core 信号即使空间碎片化，也必须进入 bounded source-subcluster 复核
      -> 当前类型关闭后才进入下一个，禁止一次产生或决策多个大类的正式复核包
-     -> 默认复用稳定分区，不把复核变成全组织逐 cellbin 分类器
+     -> 默认复用稳定分区和一次性 raw-count/坐标/稀疏 count 缓存；每轮只为 active broad 及其证据竞争者算 pseudobulk
+     -> retain/absence 的零变化决策不重写 membership、不追加 transform chain
   -> 缺失谱系、未建模程序、空间合理性与 residual QC 最终闭环
   -> 构建单一最终注释（中等及以上大类；仅高置信亚群）
   -> 完成门审计
@@ -367,7 +369,7 @@ membership 至少需要唯一 `cell_id`。锚点模式还需要 `query_or_anchor
 
 如果 `glmGamPoi` 或 SHA256 依赖不可用，SCT 路线会直接失败并要求修复环境，不会静默切换模型或写出不可验证 manifest。固定技术参数的任何覆盖都必须显式传入 batch exception 和理由。只有 preprocessing manifest 与当前输入/分析集哈希匹配时，已有 SCT 计算才允许复用。
 
-调度资源必须与真实并行度一致：`leidenbase` 的单个 Leiden 优化本身是单线程，Seurat 5.5 通过 `future` 并行的是不同 resolution；因此五档网格通常申请/使用 5 个 worker，而不是占用 64 核串行运行。当前 Seurat 的直接 `FindAllMarkers` 也是逐簇串行；未实现显式并行的作业只申请 1 核，或拆成每个 resolution/cluster 的独立作业后并行。Skill 会记录实际 worker/backend/parallel unit，并用 CPU time / wall time 审计资源是否被浪费。
+调度资源必须与真实并行度一致。固定资源档为：状态/preflight/hash 1–4 CPU，逐大类 marker/DEG/pseudobulk 8 CPU（最多 16），SCT/PCA/SNN/Leiden 或大型 RDS 物化 64 CPU。`leidenbase` 的单个 Leiden 优化本身是单线程，因此 64 CPU 重任务仍保持单对象 `resolution-workers=1`；额外核心用于矩阵内核或并行独立 cohort，不能把同一大型 Seurat 对象复制 64 份。当前 Seurat 的直接 `FindAllMarkers` 也是逐簇串行；Skill 会记录实际 worker/backend/parallel unit，并用 CPU time / wall time 审计资源是否被浪费。
 
 ## 仓库结构
 

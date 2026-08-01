@@ -98,6 +98,7 @@ def main() -> int:
     ap.add_argument("--coordinates", type=Path)
     ap.add_argument("--catalog", required=True, type=Path)
     ap.add_argument("--threshold-registry", required=True, type=Path)
+    ap.add_argument("--zero-census-direct-challenger-manifest", type=Path)
     ap.add_argument("--context-evidence", type=Path)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out", required=True, type=Path)
@@ -162,6 +163,42 @@ def main() -> int:
     required_membership = {"cell_id", "final_broad_label", "source_boundary", "source_cluster"}
     if not required_membership.issubset(membership):
         raise SystemExit("cell-type review membership lacks broad/source columns")
+    zero_direct_by_broad: dict[str, set[str]] = defaultdict(set)
+    zero_direct_record = None
+    if args.zero_census_direct_challenger_manifest:
+        zero_document = json.loads(
+            args.zero_census_direct_challenger_manifest.read_text(encoding="utf-8")
+        )
+        review_zero = review.get("zero_census_direct_challenger", {})
+        if (
+            zero_document.get("status") != "PASS"
+            or zero_document.get("artifact_role")
+            != "query_derived_zero_census_challenger"
+            or zero_document.get("formal_membership_written") is not False
+            or zero_document.get("membership_cell_id_set_sha256")
+            != deterministic_cell_id_set_hash(membership.to_dict("records"))
+            or Path(str(review_zero.get("path", ""))).resolve()
+            != args.zero_census_direct_challenger_manifest.resolve()
+            or review_zero.get("sha256")
+            != sha256(args.zero_census_direct_challenger_manifest)
+        ):
+            raise SystemExit("zero-census challenger differs from the open review")
+        zero_artifacts = zero_document.get("artifacts", {})
+        zero_summary_path = Path(str(zero_artifacts.get("summary", {}).get("path", "")))
+        zero_members_path = Path(str(zero_artifacts.get("membership", {}).get("path", "")))
+        for key, path in (("summary", zero_summary_path), ("membership", zero_members_path)):
+            if not path.is_file() or zero_artifacts.get(key, {}).get("sha256") != sha256(path):
+                raise SystemExit("zero-census challenger artifact is missing or stale")
+        eligible_zero = {
+            str(row.get("broad_label", ""))
+            for row in read_tsv(zero_summary_path)
+            if str(row.get("status", "")) == "review_required"
+        }
+        for row in read_tsv(zero_members_path):
+            broad = str(row.get("broad_label", ""))
+            if broad in eligible_zero:
+                zero_direct_by_broad[broad].add(str(row.get("cell_id", "")))
+        zero_direct_record = artifact(args.zero_census_direct_challenger_manifest)
     data = (
         cells[["cell_id"]]
         .merge(library, on="cell_id", validate="one_to_one")
@@ -444,6 +481,7 @@ def main() -> int:
                 component_id = f"{broad.replace('/', '_').replace(' ', '_')}__{len(accepted_components):05d}"
                 component_rows.append({
                     "broad_label": broad, "component_id": component_id,
+                    "component_kind": "spatial_raw_count_challenger",
                     "n_observations": len(component), "n_direct_seeds": seed_n,
                     "direct_seed_fraction": seed_n / len(component),
                     "median_target_score": float(np.median(target["score"][component])),
@@ -457,6 +495,53 @@ def main() -> int:
                 for index in component:
                     component_member_rows.append({
                         "broad_label": broad, "component_id": component_id,
+                        "cell_id": data.cell_id.iloc[index],
+                        "current_broad_label": data.final_broad_label.iloc[index],
+                    })
+        # A zero-census lineage may be sparse along a vascular branch or other
+        # anatomical structure and fail the generic spatial component size.
+        # Direct multi-family observations are therefore retained as bounded
+        # source-subcluster questions.  They remain review evidence only and
+        # can never write a label without pseudobulk/DEG adjudication.
+        if not current.any() and not accepted_components:
+            zero_ids = zero_direct_by_broad.get(broad, set())
+            zero_frame = data.loc[data.cell_id.isin(zero_ids)]
+            minimum_group = int(
+                review_policy[
+                    "minimum_zero_census_direct_source_group_observations"
+                ]
+            )
+            for (boundary, cluster), frame in zero_frame.groupby(
+                ["source_boundary", "source_cluster"], sort=True
+            ):
+                if len(frame) < minimum_group:
+                    continue
+                component = frame.index.to_numpy(dtype=np.int64)
+                accepted_components.append(component)
+                component_id = (
+                    f"{broad.replace('/', '_').replace(' ', '_')}"
+                    f"__direct_source__{len(accepted_components):05d}"
+                )
+                component_rows.append({
+                    "broad_label": broad,
+                    "component_id": component_id,
+                    "component_kind": "fragmented_direct_multifamily_source_group",
+                    "n_observations": len(component),
+                    "n_direct_seeds": len(component),
+                    "direct_seed_fraction": 1.0,
+                    "median_target_score": float(np.median(target["score"][component])),
+                    "median_specific_competitor_margin": float(np.median(margin[component])),
+                    "current_broad_census": ";".join(
+                        f"{key or 'unresolved'}:{value}"
+                        for key, value in sorted(
+                            Counter(data.final_broad_label.iloc[component]).items()
+                        )
+                    ),
+                })
+                for index in component:
+                    component_member_rows.append({
+                        "broad_label": broad,
+                        "component_id": component_id,
                         "cell_id": data.cell_id.iloc[index],
                         "current_broad_label": data.final_broad_label.iloc[index],
                     })
@@ -649,6 +734,7 @@ def main() -> int:
         "coordinates": artifact(coordinate_path),
         "catalog": artifact(args.catalog),
         "threshold_registry": artifact(args.threshold_registry),
+        "zero_census_direct_challenger": zero_direct_record,
         "context_release_eligibility": context,
         "review_queue_n": len(full_queue),
         "reviewed_broad_n": len(summary_rows),

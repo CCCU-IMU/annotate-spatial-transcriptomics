@@ -84,6 +84,10 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=1)
     ap.add_argument("--biological-context", default="")
     ap.add_argument(
+        "--project-root", type=Path,
+        help="write small canonical latest/final pointers without copying the RDS",
+    )
+    ap.add_argument(
         "--release-status",
         choices=["pending_user_review", "approved_final"],
         default="pending_user_review",
@@ -259,6 +263,30 @@ def main() -> int:
     checkpoint["report"] = record(report)
     checkpoint["completed_at_utc"] = datetime.now(timezone.utc).isoformat()
     write_checkpoint(checkpoint_path, checkpoint)
+    if args.project_root:
+        project_root = args.project_root.resolve()
+        pointer = {
+            "schema_version": "1.0",
+            "status": "PASS",
+            "artifact_role": "canonical_final_release_pointer",
+            "sample_id": str(contract["sample_id"]),
+            "release_status": args.release_status,
+            "public_annotation_column": "final_cell_type",
+            "membership_semantic_sha256": sem_hash,
+            "annotation_contract": record(args.contract),
+            "final_release_manifest": record(args.release_manifest),
+            "final_membership": record(args.membership),
+            "final_deliverables_checkpoint": record(checkpoint_path),
+            "annotated_rds": checkpoint["annotated_rds"],
+            "report": checkpoint["report"],
+            "completed_at_utc": checkpoint["completed_at_utc"],
+        }
+        for destination in (
+            project_root / "deliverables/latest.json",
+            project_root / "state/final_release_pointer.json",
+        ):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            write_checkpoint(destination, pointer)
     print(json.dumps(checkpoint, ensure_ascii=False, indent=2))
     return 0
 

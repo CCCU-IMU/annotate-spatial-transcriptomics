@@ -110,6 +110,8 @@ def load_controller_thresholds(path: Path | None = None) -> dict:
         "minimum_current_label_observations_per_source_group": 1,
         "minimum_recall_component_members": 2,
         "minimum_recall_direct_seed_members": 1,
+        "minimum_zero_census_direct_seed_observations": 1,
+        "minimum_zero_census_direct_source_group_observations": 1,
         "spatial_knn_k": 2,
     }
     if any(
@@ -122,6 +124,7 @@ def load_controller_thresholds(path: Path | None = None) -> dict:
         "minimum_present_label_competitor_fraction",
         "minimum_recall_direct_seed_fraction",
         "minimum_recall_seed_evidence_margin",
+        "maximum_monotonic_subtraction_fraction_without_full_reopen",
     ):
         value = float(catalog_review.get(key, -1))
         if not 0 <= value <= 1:
@@ -135,6 +138,26 @@ def load_controller_thresholds(path: Path | None = None) -> dict:
         catalog_review.get("generic_remainder_recall_components_enabled"), bool
     ):
         raise ValueError("invalid generic-remainder catalog-review policy")
+
+    resources = document.get("runtime_resource_policy", {})
+    resource_keys = {
+        "state_manifest_and_preflight_cpus",
+        "review_evidence_default_cpus",
+        "review_evidence_max_cpus",
+        "heavy_clustering_default_cpus",
+        "large_rds_materialization_max_cpus",
+    }
+    if set(resources) != resource_keys or any(
+        int(resources.get(key, 0)) < 1 for key in resource_keys
+    ):
+        raise ValueError("invalid runtime resource policy")
+    if not (
+        int(resources["state_manifest_and_preflight_cpus"])
+        <= int(resources["review_evidence_default_cpus"])
+        <= int(resources["review_evidence_max_cpus"])
+        <= int(resources["heavy_clustering_default_cpus"])
+    ):
+        raise ValueError("runtime resource classes are not monotonic")
 
     resolution = document.get("resolution_selection", {})
     for purpose in (

@@ -1700,12 +1700,27 @@ def validate_prerequisite(args, required_stage: str) -> dict:
 
 
 def controller_manifest_bound(manifest: dict, contract_path: Path, phase: str) -> bool:
+    contract_sha = sha256(contract_path)
+    manifest_contract = manifest.get("annotation_contract", {})
+    compatible = False
+    if manifest_contract.get("sha256") != contract_sha:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        for record in contract.get("resume_compatible_contracts", []):
+            path = Path(str((record or {}).get("path", "")))
+            if (
+                path.is_file()
+                and (record or {}).get("sha256") == sha256(path)
+                and manifest_contract.get("sha256") == sha256(path)
+                and Path(str(manifest_contract.get("path", ""))).resolve()
+                == path.resolve()
+            ):
+                compatible = True
+                break
     return (
         manifest.get("status") == "PASS"
         and manifest.get("controller_version") == "2.2.0"
         and manifest.get("phase") == phase
-        and manifest.get("annotation_contract", {}).get("sha256")
-        == sha256(contract_path)
+        and (manifest_contract.get("sha256") == contract_sha or compatible)
     )
 
 
@@ -1726,12 +1741,31 @@ def run_targeted_follicle_roi_iteration(
     ):
         raise RuntimeError("biological-quality next actions are missing or stale")
     actions = read_tsv(action_path)
-    target_rows = [
+    all_roi_rows = [
         row for row in actions
         if row.get("endpoint") == "follicle_roi_histology"
         and re.fullmatch(r"F\d+", str(row.get("scope_id", "")))
     ]
-    if not target_rows or len(target_rows) != len(actions):
+    if not all_roi_rows or len(all_roi_rows) != len(actions):
+        return None
+    # The bounded ROI repair writer is deliberately restricted to follicle-wall
+    # identities.  A Granulosa boundary whose released label lacks a matching
+    # program must proceed to the formal Granulosa whole-query review; it cannot
+    # be silently treated as a wall-layer repair target.
+    repairable_tokens = (
+        "theca", "endothelial", "vascular", "pericyte", "mural",
+        "lymphatic", "smooth", "contractile", "stromal",
+        "order_inverted", "not_interleaved", "background_not_resolved",
+        "identity_boundary_blurred", "complete_follicle_wall",
+    )
+    target_rows = [
+        row for row in all_roi_rows
+        if any(
+            token in str(row.get("issue_code", ""))
+            for token in repairable_tokens
+        )
+    ]
+    if not target_rows:
         return None
     target_rois = sorted({str(row["scope_id"]) for row in target_rows})
     follicle = quality.get("quality_endpoints", {}).get(
@@ -1925,6 +1959,113 @@ def run_targeted_follicle_roi_iteration(
     }
 
 
+def prepare_catalog_review_static_evidence(
+    args, paths: dict[str, Path], output: Path, membership: Path,
+) -> tuple[Path, Path, Path]:
+    """Build or reuse immutable marker/count evidence for serial review."""
+    static_out = output / "07_catalog_wide_review_evidence_static"
+    manifest_path = static_out / "catalog_review_static_evidence_manifest.json"
+    supplied = getattr(args, "lineage_review_static_evidence_manifest", None)
+    candidate = supplied.resolve() if supplied else manifest_path
+    cell_set_sha = deterministic_cell_id_set_hash(read_tsv(membership))
+
+    if candidate.is_file():
+        document = json.loads(candidate.read_text(encoding="utf-8"))
+        expected = {
+            "selected_input": paths["selected_input"],
+            "profile": paths["profile"],
+            "candidate_catalog": paths["catalog"],
+            "threshold_registry": paths["threshold_registry"],
+        }
+        compatible = (
+            document.get("status") == "PASS"
+            and document.get("artifact_role")
+            == "catalog_review_static_raw_count_evidence"
+            and document.get("analysis_cell_id_set_sha256") == cell_set_sha
+        )
+        for key, expected_path in expected.items():
+            record = document.get(key, {})
+            compatible = compatible and (
+                Path(str(record.get("path", ""))).resolve()
+                == expected_path.resolve()
+                and record.get("sha256") == sha256(expected_path)
+            )
+        artifacts = document.get("artifacts", {})
+        marker_path = Path(str(artifacts.get("marker_manifest", {}).get("path", "")))
+        count_manifest = Path(str(artifacts.get("count_export_manifest", {}).get("path", "")))
+        for key, path in (
+            ("marker_manifest", marker_path),
+            ("count_export_manifest", count_manifest),
+        ):
+            record = artifacts.get(key, {})
+            compatible = compatible and path.is_file() and record.get("sha256") == sha256(path)
+        count_document = (
+            json.loads(count_manifest.read_text(encoding="utf-8"))
+            if compatible else {}
+        )
+        for key in (
+            "marker_matrix", "full_count_matrix", "gene_map", "cells",
+            "library_size", "coordinates",
+        ):
+            path = Path(str(count_document.get(key, "")))
+            record = artifacts.get(f"count_export_{key}", {})
+            compatible = compatible and path.is_file() and record.get("sha256") == sha256(path)
+        if compatible:
+            return candidate, marker_path, count_manifest.parent
+        if supplied:
+            raise RuntimeError("supplied catalog review static evidence is stale or incompatible")
+
+    marker_out = static_out / "00_marker_manifest"
+    run([
+        sys.executable,
+        str(paths["build_cell_type_review_marker_manifest.py"]),
+        "--profile", str(paths["profile"]),
+        "--catalog", str(paths["catalog"]),
+        "--out", str(marker_out),
+    ], output / "logs/07_catalog_wide_marker_manifest.log")
+    marker_path = marker_out / "cell_type_review_marker_manifest.tsv"
+    count_root = static_out / "01_raw_count_export"
+    run([
+        args.rscript, str(paths["export_cell_type_review_counts.R"]),
+        "--rds", str(paths["selected_input"]),
+        "--analysis-membership", str(membership.resolve()),
+        "--marker-manifest", str(marker_path),
+        "--out", str(count_root),
+    ], output / "logs/07_catalog_wide_raw_count_export.log")
+    count_manifest = count_root / "cell_type_review_count_export_manifest.json"
+    count_document = json.loads(count_manifest.read_text(encoding="utf-8"))
+    document = {
+        "schema_version": "2.5",
+        "status": "PASS",
+        "artifact_role": "catalog_review_static_raw_count_evidence",
+        "analysis_cell_id_set_sha256": cell_set_sha,
+        "selected_input": artifact(paths["selected_input"]),
+        "profile": artifact(paths["profile"]),
+        "candidate_catalog": artifact(paths["catalog"]),
+        "threshold_registry": artifact(paths["threshold_registry"]),
+        "artifacts": {
+            "marker_manifest": artifact(marker_path),
+            "marker_manifest_summary": artifact(
+                marker_out / "cell_type_review_marker_manifest.json"
+            ),
+            "count_export_manifest": artifact(count_manifest),
+            **{
+                f"count_export_{key}": artifact(Path(str(count_document[key])))
+                for key in (
+                    "marker_matrix", "full_count_matrix", "gene_map", "cells",
+                    "library_size", "coordinates",
+                )
+            },
+        },
+    }
+    static_out.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return manifest_path, marker_path, count_root
+
+
 def run_catalog_wide_review_iterations(
     args, paths: dict[str, Path], output: Path, membership: Path,
     observation_score_paths: list[Path], cluster_evidence_paths: list[Path],
@@ -1950,6 +2091,9 @@ def run_catalog_wide_review_iterations(
     )
     evidence_packet_manifests: list[Path] = list(
         args.lineage_review_prior_packet or []
+    )
+    manual_adjudications: list[Path] = list(
+        args.lineage_review_manual_adjudication or []
     )
     previous_review: Path | None = args.lineage_review_previous_review
     last_review: Path | None = None
@@ -1997,26 +2141,34 @@ def run_catalog_wide_review_iterations(
                 "resume membership differs from the last prior cell-type review apply"
             )
 
-    static_out = output / "07_catalog_wide_review_evidence_static"
-    marker_out = static_out / "00_marker_manifest"
-    run([
-        sys.executable,
-        str(paths["build_cell_type_review_marker_manifest.py"]),
-        "--profile", str(paths["profile"]),
-        "--catalog", str(paths["catalog"]),
-        "--out", str(marker_out),
-    ], output / "logs/07_catalog_wide_marker_manifest.log")
-    marker_manifest = marker_out / "cell_type_review_marker_manifest.tsv"
-    count_out = static_out / "01_raw_count_export"
-    run([
-        args.rscript, str(paths["export_cell_type_review_counts.R"]),
-        "--rds", str(paths["selected_input"]),
-        "--analysis-membership", str(membership.resolve()),
-        "--marker-manifest", str(marker_manifest),
-        "--out", str(count_out),
-    ], output / "logs/07_catalog_wide_raw_count_export.log")
+    static_evidence_manifest, marker_manifest, count_out = (
+        prepare_catalog_review_static_evidence(args, paths, output, membership)
+    )
     for review_round in range(len(prior_validations) + 1, len(prior_validations) + 2):
         review_out = output / f"07_catalog_wide_review_round_{review_round:02d}"
+        zero_out = review_out / "00_zero_census_direct_challengers"
+        zero_command = [
+            sys.executable,
+            str(paths["build_zero_census_direct_challengers.py"]),
+            "--count-export", str(count_out),
+            "--marker-manifest", str(marker_manifest),
+            "--membership", str(current_membership.resolve()),
+            "--catalog", str(paths["catalog"]),
+            "--threshold-registry", str(paths["threshold_registry"]),
+            "--out", str(zero_out),
+        ]
+        if "context_evidence" in paths:
+            zero_command.extend([
+                "--context-evidence", str(paths["context_evidence"])
+            ])
+        run(
+            zero_command,
+            output
+            / f"logs/07_zero_census_challengers_round_{review_round:02d}.log",
+        )
+        zero_challenger_manifest = (
+            zero_out / "zero_census_direct_challenger_manifest.json"
+        )
         review_authority = stage_authority(
             "atlas_and_completeness_review", args.contract, paths, review_out,
             post_atlas_membership=current_membership,
@@ -2025,6 +2177,7 @@ def run_catalog_wide_review_iterations(
             context_evidence=paths.get("context_evidence"),
             observation_scores=observation_score_paths,
             cluster_evidence=cluster_evidence_paths,
+            zero_census_direct_challenger=zero_challenger_manifest,
         )
         command = [
             sys.executable,
@@ -2035,6 +2188,8 @@ def run_catalog_wide_review_iterations(
             "--catalog", str(paths["catalog"]),
             "--threshold-registry", str(paths["threshold_registry"]),
             "--round-index", str(review_round),
+            "--zero-census-direct-challenger-manifest",
+            str(zero_challenger_manifest),
             "--workers", str(max(1, int(args.resolution_workers))),
             "--out", str(review_out),
         ]
@@ -2050,6 +2205,10 @@ def run_catalog_wide_review_iterations(
             command.extend([
                 "--prior-decision-validation", str(path.resolve())
             ])
+        for path in manual_adjudications:
+            command.extend([
+                "--manual-biological-adjudication", str(path.resolve())
+            ])
         for path in observation_score_paths:
             command.extend(["--scores", str(path.resolve())])
         for path in cluster_evidence_paths:
@@ -2061,17 +2220,6 @@ def run_catalog_wide_review_iterations(
         )
         last_review = review_out / "catalog_wide_lineage_review_manifest.json"
         review = json.loads(last_review.read_text(encoding="utf-8"))
-        if review.get("status") == "PASS":
-            if supplied_decisions:
-                raise RuntimeError("unused catalog-wide review decision file remains")
-            return {
-                "status": "PASS", "membership": current_membership,
-                "review_manifest": last_review,
-                "decision_validations": prior_validations,
-                "apply_manifests": apply_manifests,
-                "evidence_packet_manifests": evidence_packet_manifests,
-                "review_state": None,
-            }
         state_out = review_out / "00_sequential_cell_type_state"
         state_command = [
             sys.executable,
@@ -2089,6 +2237,10 @@ def run_catalog_wide_review_iterations(
             state_command.extend([
                 "--prior-decision-validation", str(path.resolve())
             ])
+        for path in manual_adjudications:
+            state_command.extend([
+                "--manual-biological-adjudication", str(path.resolve())
+            ])
         run(
             state_command,
             output / f"logs/07_cell_type_state_round_{review_round:02d}.log",
@@ -2098,8 +2250,31 @@ def run_catalog_wide_review_iterations(
         review_state = json.loads(
             review_state_path.read_text(encoding="utf-8")
         )
+        if review.get("status") == "PASS" and review_state.get("status") != "COMPLETE":
+            raise RuntimeError(
+                "PASS catalog review did not materialize a COMPLETE serial state"
+            )
         active = review_state.get("active_cell_type_review") or {}
         active_review_id = str(active.get("review_id", ""))
+        if (
+            review_state.get("status") == "COMPLETE"
+            and review_state.get("next_action") == "all_cell_types_closed"
+            and int(review_state.get("active_review_n", -1)) == 0
+            and int(review_state.get("queued_review_n", -1)) == 0
+            and int(review_state.get("blocked_review_n", -1)) == 0
+        ):
+            if supplied_decisions:
+                raise RuntimeError("unused catalog-wide review decision file remains")
+            return {
+                "status": "PASS", "membership": current_membership,
+                "review_manifest": last_review,
+                "decision_validations": prior_validations,
+                "apply_manifests": apply_manifests,
+                "evidence_packet_manifests": evidence_packet_manifests,
+                "manual_adjudications": manual_adjudications,
+                "static_evidence_manifest": static_evidence_manifest,
+                "review_state": review_state_path,
+            }
         if review_state.get("status") == "BLOCKED":
             return {
                 "status": "ITERATION_REQUIRED",
@@ -2108,6 +2283,8 @@ def run_catalog_wide_review_iterations(
                 "decision_validations": prior_validations,
                 "apply_manifests": apply_manifests,
                 "evidence_packet_manifests": evidence_packet_manifests,
+                "manual_adjudications": manual_adjudications,
+                "static_evidence_manifest": static_evidence_manifest,
                 "review_state": review_state_path,
                 "active_cell_type": "",
                 "required_progress_message": (
@@ -2134,6 +2311,10 @@ def run_catalog_wide_review_iterations(
                     "--canonical-oocyte-review",
                     str(args.canonical_oocyte_review.resolve()),
                 ])
+            for path in args.lineage_review_manual_adjudication:
+                quality_command.extend([
+                    "--manual-biological-adjudication", str(path.resolve())
+                ])
             run(
                 quality_command,
                 output / f"logs/07_catalog_wide_quality_round_{review_round:02d}.log",
@@ -2154,6 +2335,8 @@ def run_catalog_wide_review_iterations(
             "--active-review-id", active_review_id,
             "--catalog", str(paths["catalog"]),
             "--threshold-registry", str(paths["threshold_registry"]),
+            "--zero-census-direct-challenger-manifest",
+            str(zero_challenger_manifest),
             "--workers", str(max(1, int(args.resolution_workers))),
             "--out", str(broad_evidence_out),
         ]
@@ -2169,17 +2352,48 @@ def run_catalog_wide_review_iterations(
             broad_evidence_out / "broad_cell_type_review_evidence_manifest.json"
         )
         pseudobulk_out = evidence_root / "01_full_transcriptome_pseudobulk"
-        run([
+        count_export_document = json.loads(
+            (count_out / "cell_type_review_count_export_manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        active_broad = str(active.get("target_broad_label", ""))
+        comparison_broads = {active_broad}
+        for row in read_tsv(
+            broad_evidence_out / "broad_cell_type_current_member_questions.tsv.gz"
+        ):
+            challenger = str(row.get("challenger_broad_label", ""))
+            if challenger:
+                comparison_broads.add(challenger)
+        for row in read_tsv(
+            broad_evidence_out
+            / "broad_cell_type_outside_recall_membership.tsv.gz"
+        ):
+            origin = str(row.get("current_broad_label", ""))
+            if origin:
+                comparison_broads.add(origin)
+        pseudobulk_command = [
             args.rscript,
             str(paths["export_broad_cell_type_review_pseudobulk.R"]),
             "--rds", str(paths["selected_input"]),
+            "--count-cache", str(count_export_document["full_count_matrix"]),
+            "--raw-count-assay", str(count_export_document["raw_count_assay"]),
             "--membership", str(current_membership.resolve()),
             "--recall-membership", str(
                 broad_evidence_out
                 / "broad_cell_type_outside_recall_membership.tsv.gz"
             ),
+            "--active-broad-label", active_broad,
             "--out", str(pseudobulk_out),
-        ], output / f"logs/07_catalog_wide_pseudobulk_round_{review_round:02d}.log")
+        ]
+        for broad in sorted(comparison_broads):
+            if broad:
+                pseudobulk_command.extend(["--comparison-broad-label", broad])
+        run(
+            pseudobulk_command,
+            output
+            / f"logs/07_catalog_wide_pseudobulk_round_{review_round:02d}.log",
+        )
         pseudobulk_summary_out = evidence_root / "02_pseudobulk_summary"
         run([
             sys.executable,
@@ -2230,6 +2444,8 @@ def run_catalog_wide_review_iterations(
                 "decision_validations": prior_validations,
                 "apply_manifests": apply_manifests,
                 "evidence_packet_manifests": evidence_packet_manifests,
+                "manual_adjudications": manual_adjudications,
+                "static_evidence_manifest": static_evidence_manifest,
                 "review_state": review_state_path,
                 "active_cell_type": active.get("target_broad_label", ""),
                 "required_progress_message": active.get(
@@ -2257,6 +2473,8 @@ def run_catalog_wide_review_iterations(
                 "decision_validations": prior_validations + [validation_path],
                 "apply_manifests": apply_manifests,
                 "evidence_packet_manifests": evidence_packet_manifests,
+                "manual_adjudications": manual_adjudications,
+                "static_evidence_manifest": static_evidence_manifest,
                 "review_state": review_state_path,
                 "active_cell_type": active.get("target_broad_label", ""),
             }
@@ -2301,6 +2519,8 @@ def run_catalog_wide_review_iterations(
             "decision_validations": prior_validations,
             "apply_manifests": apply_manifests,
             "evidence_packet_manifests": evidence_packet_manifests,
+            "manual_adjudications": manual_adjudications,
+            "static_evidence_manifest": static_evidence_manifest,
             "review_state": review_state_path,
             "active_cell_type": active.get("target_broad_label", ""),
             "required_progress_message": (
@@ -2321,15 +2541,60 @@ def resume_sequential_cell_type_review(
     """Resume only the final serial biological review; never rerun Atlas or clustering."""
     resume_path = args.resume_review_manifest.resolve()
     resume = json.loads(resume_path.read_text(encoding="utf-8"))
-    if (
-        resume.get("phase") != "atlas_and_completeness_review"
-        or resume.get("status") != "REVIEW_REQUIRED"
-        or resume.get("pause_reason") not in {
+    resume_contract_record = resume.get("annotation_contract", {})
+    same_contract = resume_contract_record.get("sha256") == sha256(args.contract)
+    compatible_contract = False
+    compatible_scope = ""
+    if not same_contract:
+        for record in contract.get("resume_compatible_contracts", []):
+            path = Path(str((record or {}).get("path", "")))
+            if (
+                path.is_file()
+                and (record or {}).get("sha256") == sha256(path)
+                and resume_contract_record.get("sha256") == sha256(path)
+                and Path(str(resume_contract_record.get("path", ""))).resolve()
+                == path.resolve()
+            ):
+                compatible_contract = True
+                compatible_scope = str(
+                    (record or {}).get("compatibility_scope", "")
+                )
+                break
+    serial_pause = (
+        resume.get("status") == "REVIEW_REQUIRED"
+        and resume.get("pause_reason") in {
             "single_active_cell_type_review",
             "single_cell_type_review_step_applied",
+            "manual_biological_adjudication_required",
         }
-        or resume.get("annotation_contract", {}).get("sha256")
-        != sha256(args.contract)
+    )
+    post_completeness_iteration = (
+        resume.get("status") == "ITERATION_REQUIRED"
+        and resume.get("catalog_wide_lineage_review_status") == "PASS"
+        and isinstance(resume.get("completeness"), dict)
+        and isinstance(resume.get("membership"), dict)
+        and isinstance(resume.get("membership_transform_chain"), dict)
+    )
+    if (
+        resume.get("phase") != "atlas_and_completeness_review"
+        or not (serial_pause or post_completeness_iteration)
+        or not (same_contract or compatible_contract)
+        or (
+            compatible_contract
+            and not (
+                post_completeness_iteration
+                or resume.get("pause_reason")
+                == "manual_biological_adjudication_required"
+                or (
+                    compatible_scope
+                    == "manual_biological_adjudication_provenance_resume"
+                    and resume.get("pause_reason") in {
+                        "single_active_cell_type_review",
+                        "single_cell_type_review_step_applied",
+                    }
+                )
+            )
+        )
         or resume.get("prerequisite", {}).get("sha256")
         != sha256(args.prerequisite_manifest)
     ):
@@ -2364,6 +2629,37 @@ def resume_sequential_cell_type_review(
         resume.get("catalog_wide_evidence_packet_manifests", []),
         "resume cell-type evidence packet",
     )
+    recovered_manual_adjudications = bound_artifact_paths(
+        resume.get("catalog_wide_manual_biological_adjudications", []),
+        "resume manual biological adjudication",
+    )
+    static_record = resume.get("catalog_wide_static_evidence")
+    recovered_static_evidence = (
+        one(static_record, "catalog review static evidence")
+        if static_record else None
+    )
+    if resume.get("pause_reason") == "manual_biological_adjudication_required":
+        # A rejected decision file is diagnostic, not a completed biological
+        # decision.  Permit a corrected, packet-bound retry without consuming
+        # one of the two formal decision rounds for the active cell type.
+        retained_validations: list[Path] = []
+        for path in prior_validations:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            if document.get("status") == "PASS":
+                retained_validations.append(path)
+            elif document.get("status") not in {"BLOCKED", "ITERATION_REQUIRED"}:
+                raise RuntimeError("manual retry contains an invalid prior validation")
+        prior_validations = retained_validations
+        # Failed retries can append the same frozen packet more than once.
+        # Retain one occurrence per canonical path, preferring the newest.
+        deduplicated_packets: list[Path] = []
+        seen_packet_paths: set[Path] = set()
+        for path in reversed(prior_packets):
+            resolved = path.resolve()
+            if resolved not in seen_packet_paths:
+                deduplicated_packets.append(path)
+                seen_packet_paths.add(resolved)
+        prior_packets = list(reversed(deduplicated_packets))
     previous_review = one(
         resume.get("catalog_wide_lineage_review", {}),
         "previous cell-type review",
@@ -2385,6 +2681,45 @@ def resume_sequential_cell_type_review(
     args.lineage_review_prior_validation = prior_validations
     args.lineage_review_prior_apply = prior_applies
     args.lineage_review_prior_packet = prior_packets
+    if recovered_static_evidence is not None:
+        supplied_static = getattr(
+            args, "lineage_review_static_evidence_manifest", None
+        )
+        if supplied_static and supplied_static.resolve() != recovered_static_evidence.resolve():
+            raise RuntimeError(
+                "resume static catalog evidence differs from the pause manifest"
+            )
+        args.lineage_review_static_evidence_manifest = recovered_static_evidence
+    supplied_manual_adjudications = list(
+        args.lineage_review_manual_adjudication or []
+    )
+    if recovered_manual_adjudications:
+        if supplied_manual_adjudications and [
+            path.resolve() for path in supplied_manual_adjudications
+        ] != [path.resolve() for path in recovered_manual_adjudications]:
+            raise RuntimeError(
+                "resume manual adjudication list differs from the pause manifest"
+            )
+        args.lineage_review_manual_adjudication = recovered_manual_adjudications
+    else:
+        if supplied_manual_adjudications and resume.get("pause_reason") \
+                != "manual_biological_adjudication_required":
+            state_manual = []
+            if previous_state is not None:
+                state_document = json.loads(
+                    previous_state.read_text(encoding="utf-8")
+                )
+                state_manual = bound_artifact_paths(
+                    state_document.get("manual_biological_adjudications", []),
+                    "resume state manual biological adjudication",
+                )
+            if [path.resolve() for path in supplied_manual_adjudications] != [
+                path.resolve() for path in state_manual
+            ]:
+                raise RuntimeError(
+                    "a new manual adjudication requires the canonical manual pause"
+                )
+        args.lineage_review_manual_adjudication = supplied_manual_adjudications
     args.lineage_review_previous_review = previous_review
     args.lineage_review_previous_state = previous_state
 
@@ -2393,11 +2728,123 @@ def resume_sequential_cell_type_review(
         profile.get("biological_quality_endpoints", {}).get("required", False)
     )
     prior_apply_n = len(prior_applies)
-    review = run_catalog_wide_review_iterations(
-        args, paths, args.out.resolve(), current_membership,
-        observation_score_paths, cluster_evidence_paths, quality_required,
-        membership_already_includes_prior_applies=True,
-    )
+    supplied_decisions = list(args.lineage_review_decisions or [])
+    if supplied_decisions:
+        if len(supplied_decisions) != 1:
+            raise RuntimeError(
+                "one controller invocation may decide only one active cell type"
+            )
+        if previous_state is None or not prior_packets:
+            raise RuntimeError(
+                "a resumed decision requires the frozen active state and evidence packet"
+            )
+        state_document = json.loads(previous_state.read_text(encoding="utf-8"))
+        active = state_document.get("active_cell_type_review") or {}
+        active_review_id = str(active.get("review_id", ""))
+        active_cell_type = str(active.get("target_broad_label", ""))
+        if (
+            state_document.get("status") != "REVIEW_REQUIRED"
+            or not active_review_id
+            or not active_cell_type
+        ):
+            raise RuntimeError("resumed decision lacks one active cell type")
+        review_round = len(prior_validations) + 1
+        decision_out = (
+            args.out.resolve()
+            / f"07_catalog_wide_decision_round_{review_round:02d}"
+        )
+        run([
+            sys.executable,
+            str(paths["validate_catalog_wide_lineage_review_decisions.py"]),
+            "--review-manifest", str(previous_review),
+            "--review-state", str(previous_state),
+            "--evidence-packet-manifest", str(prior_packets[-1]),
+            "--decisions", str(supplied_decisions[0].resolve()),
+            "--out", str(decision_out),
+        ], args.out.resolve() / f"logs/07_catalog_wide_decision_round_{review_round:02d}.log",
+            allowed_codes=(0, 2))
+        validation_path = (
+            decision_out / "catalog_wide_lineage_decision_validation.json"
+        )
+        validation = json.loads(validation_path.read_text(encoding="utf-8"))
+        if validation.get("status") != "PASS":
+            review = {
+                "status": "ITERATION_REQUIRED",
+                "membership": current_membership,
+                "review_manifest": previous_review,
+                "decision_validations": prior_validations + [validation_path],
+                "apply_manifests": prior_applies,
+                "evidence_packet_manifests": prior_packets,
+                "manual_adjudications": list(
+                    args.lineage_review_manual_adjudication or []
+                ),
+                "review_state": previous_state,
+                "active_cell_type": active_cell_type,
+                "required_progress_message": "",
+            }
+        else:
+            apply_out = (
+                args.out.resolve()
+                / f"07_catalog_wide_apply_round_{review_round:02d}"
+            )
+            apply_authority = stage_authority(
+                "atlas_and_completeness_review", args.contract, paths, apply_out,
+                post_atlas_membership=current_membership,
+                catalog_review_manifest=previous_review,
+                cell_type_review_state=previous_state,
+                catalog_decision_validation=validation_path,
+                candidate_catalog=paths["catalog"],
+                context_evidence=paths.get("context_evidence"),
+            )
+            apply_command = [
+                sys.executable,
+                str(paths["apply_catalog_wide_lineage_review.py"]),
+                "--contract", str(args.contract),
+                "--stage-authority", str(apply_authority),
+                "--membership", str(current_membership.resolve()),
+                "--review-manifest", str(previous_review),
+                "--review-state", str(previous_state),
+                "--decision-validation", str(validation_path),
+                "--catalog", str(paths["catalog"]),
+                "--out", str(apply_out),
+            ]
+            if "context_evidence" in paths:
+                apply_command.extend([
+                    "--context-evidence", str(paths["context_evidence"])
+                ])
+            run(
+                apply_command,
+                args.out.resolve()
+                / f"logs/07_catalog_wide_apply_round_{review_round:02d}.log",
+            )
+            apply_manifest = (
+                apply_out / "catalog_wide_lineage_review_apply_manifest.json"
+            )
+            apply_document = json.loads(
+                apply_manifest.read_text(encoding="utf-8")
+            )
+            review = {
+                "status": "REVIEW_STEP_APPLIED",
+                "membership": Path(str(apply_document["membership"]["path"])),
+                "review_manifest": previous_review,
+                "decision_validations": prior_validations + [validation_path],
+                "apply_manifests": prior_applies + [apply_manifest],
+                "evidence_packet_manifests": prior_packets,
+                "manual_adjudications": list(
+                    args.lineage_review_manual_adjudication or []
+                ),
+                "review_state": previous_state,
+                "active_cell_type": active_cell_type,
+                "required_progress_message": (
+                    "当前类型已关闭或修订；重新运行本阶段以激活下一个细胞类型。"
+                ),
+            }
+    else:
+        review = run_catalog_wide_review_iterations(
+            args, paths, args.out.resolve(), current_membership,
+            observation_score_paths, cluster_evidence_paths, quality_required,
+            membership_already_includes_prior_applies=True,
+        )
     review_status = str(review["status"])
     current_membership = Path(review["membership"])
     apply_manifests = list(review["apply_manifests"])
@@ -2406,6 +2853,8 @@ def resume_sequential_cell_type_review(
         apply_doc = json.loads(
             apply_manifest_path.read_text(encoding="utf-8")
         )
+        if int(apply_doc.get("n_changed_observations", 0)) == 0:
+            continue
         transform_chain_path = append_membership_transform(
             paths, transform_chain_path, "cell_type_review_patch",
             Path(str(apply_doc["source_membership"]["path"])),
@@ -2438,6 +2887,12 @@ def resume_sequential_cell_type_review(
         ),
         "catalog_wide_lineage_review_status": review_status,
         "catalog_wide_lineage_review": artifact(review["review_manifest"]),
+        "catalog_wide_static_evidence": (
+            artifact(Path(review["static_evidence_manifest"]))
+            if review.get("static_evidence_manifest")
+            else artifact(recovered_static_evidence)
+            if recovered_static_evidence else None
+        ),
         "cell_type_review_state": (
             artifact(Path(review["review_state"]))
             if review.get("review_state") else None
@@ -2451,6 +2906,9 @@ def resume_sequential_cell_type_review(
         ],
         "catalog_wide_evidence_packet_manifests": [
             artifact(path) for path in review["evidence_packet_manifests"]
+        ],
+        "catalog_wide_manual_biological_adjudications": [
+            artifact(path) for path in review.get("manual_adjudications", [])
         ],
         "catalog_wide_apply_manifests": [
             artifact(path) for path in apply_manifests
@@ -2521,6 +2979,10 @@ def resume_sequential_cell_type_review(
         if args.canonical_oocyte_review:
             quality_command.extend([
                 "--canonical-oocyte-review", str(args.canonical_oocyte_review)
+            ])
+        for path in args.lineage_review_manual_adjudication:
+            quality_command.extend([
+                "--manual-biological-adjudication", str(path.resolve())
             ])
         run(
             quality_command,
@@ -2810,6 +3272,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
                 "--canonical-oocyte-review",
                 str(args.canonical_oocyte_review.resolve()),
             ])
+        for path in args.lineage_review_manual_adjudication:
+            quality_command.extend([
+                "--manual-biological-adjudication", str(path.resolve())
+            ])
         run(
             quality_command,
             output / "logs/05_sheep_ovary_biological_quality.log",
@@ -2905,6 +3371,8 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         )
         source_path = Path(str(apply_doc["source_membership"]["path"]))
         result_path = Path(str(apply_doc["membership"]["path"]))
+        if int(apply_doc.get("n_changed_observations", 0)) == 0:
+            continue
         transform_chain_path = append_membership_transform(
             paths, transform_chain_path, "cell_type_review_patch",
             source_path, result_path, apply_manifest_path, transform_root,
@@ -2939,6 +3407,9 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             "catalog_wide_lineage_review": artifact(
                 catalog_review["review_manifest"]
             ),
+            "catalog_wide_static_evidence": artifact(
+                Path(catalog_review["static_evidence_manifest"])
+            ),
             "cell_type_review_state": (
                 artifact(Path(review_state_path)) if review_state_path else None
             ),
@@ -2957,6 +3428,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
             ],
             "catalog_wide_apply_manifests": [
                 artifact(path) for path in catalog_apply_manifests
+            ],
+            "catalog_wide_manual_biological_adjudications": [
+                artifact(path)
+                for path in catalog_review.get("manual_adjudications", [])
             ],
             "observation_scores": [
                 artifact(path) for path in observation_score_paths
@@ -3028,6 +3503,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
                     "--canonical-oocyte-review",
                     str(args.canonical_oocyte_review.resolve()),
                 ])
+            for path in args.lineage_review_manual_adjudication:
+                quality_command.extend([
+                    "--manual-biological-adjudication", str(path.resolve())
+                ])
             run(
                 quality_command,
                 output / "logs/09_post_catalog_biological_quality.log",
@@ -3072,6 +3551,9 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         "catalog_wide_lineage_review": artifact(
             catalog_review["review_manifest"]
         ),
+        "catalog_wide_static_evidence": artifact(
+            Path(catalog_review["static_evidence_manifest"])
+        ),
         "catalog_wide_decision_validations": [
             artifact(path) for path in catalog_review["decision_validations"]
         ],
@@ -3081,6 +3563,10 @@ def phase_atlas(args, contract: dict, paths: dict[str, Path]) -> dict:
         ],
         "catalog_wide_apply_manifests": [
             artifact(path) for path in catalog_apply_manifests
+        ],
+        "catalog_wide_manual_biological_adjudications": [
+            artifact(path)
+            for path in catalog_review.get("manual_adjudications", [])
         ],
         "unlabeled_broad_rescue_n": applied["unlabeled_broad_rescue_n"],
         "n_unresolved_biological": n_unresolved_biological,
@@ -3183,6 +3669,7 @@ def phase_final(args, contract: dict, paths: dict[str, Path]) -> dict:
         "--threads", str(max(1, int(args.writer_threads))),
         "--release-status", str(args.release_status),
         "--biological-context", str(args.biological_context),
+        "--project-root", str(args.contract.resolve().parent.parent),
         "--out", str(deliverables_out),
     ]
     run(deliverables_command, output / "logs/03_final_deliverables.log")
@@ -3389,8 +3876,23 @@ def parse_args() -> argparse.Namespace:
         action="append", default=[],
         help="earlier single-active-type evidence packet manifests",
     )
+    atlas.add_argument(
+        "--lineage-review-manual-adjudication", type=Path,
+        action="append", default=[],
+        help=(
+            "user-authorized, non-mutating closure for one exact scope that "
+            "reached the automatic two-decision ceiling"
+        ),
+    )
     atlas.add_argument("--lineage-review-previous-review", type=Path)
     atlas.add_argument("--lineage-review-previous-state", type=Path)
+    atlas.add_argument(
+        "--lineage-review-static-evidence-manifest", type=Path,
+        help=(
+            "optional canonical raw-count/coordinate evidence cache; resume "
+            "manifests recover it automatically so the large RDS is not reopened"
+        ),
+    )
     atlas.add_argument(
         "--resume-review-manifest", type=Path,
         help=(

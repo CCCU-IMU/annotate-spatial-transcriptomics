@@ -10,6 +10,7 @@ from pathlib import Path
 
 from evidence_schema_lib import sha256
 from lineage_controller_lib import read_tsv, write_tsv
+from membership_transform_lib import deterministic_membership_hash
 
 
 ALLOWED = {
@@ -65,6 +66,93 @@ FORBIDDEN_TARGETED_REVIEW_ROUTES = {
     "qc_anchor_recluster", "qc_holdout_recluster",
     "whole_unresolved_recluster",
 }
+
+
+def follicle_issues_closed_by_manual_adjudication(
+    state: dict, packet_manifest: dict,
+) -> bool:
+    """Allow unrelated follicle lineages to close when every open issue is
+    explicitly covered by an exact, non-mutating user adjudication.
+    """
+    quality_record = packet_manifest.get("biological_quality_review", {})
+    quality_path = Path(str(quality_record.get("path", "")))
+    if (
+        not quality_path.is_file()
+        or quality_record.get("sha256") != sha256(quality_path)
+    ):
+        return False
+    quality = json.loads(quality_path.read_text(encoding="utf-8"))
+    actions_record = quality.get("required_next_actions", {})
+    actions_path = Path(str(actions_record.get("path", "")))
+    if (
+        not actions_path.is_file()
+        or actions_record.get("sha256") != sha256(actions_path)
+    ):
+        return False
+    issue_prefixes = {
+        "granulosa_": "Granulosa",
+        "theca_": "Theca",
+        "endothelial_": "Endothelial",
+        "pericyte_": "Pericyte/mural",
+        "smooth_muscle_": "Smooth muscle",
+        "stromal_": "Stromal/mesenchymal",
+    }
+    issue_targets: set[str] = set()
+    for row in read_tsv(actions_path):
+        code = str(row.get("issue_code", ""))
+        matches = [label for prefix, label in issue_prefixes.items() if code.startswith(prefix)]
+        if len(matches) != 1:
+            return False
+        issue_targets.add(matches[0])
+    if not issue_targets:
+        return False
+    quality_membership = quality.get("membership", {})
+    manually_closed: set[str] = set()
+    for record in state.get("manual_biological_adjudications", []):
+        path = Path(str((record or {}).get("path", "")))
+        if not path.is_file() or (record or {}).get("sha256") != sha256(path):
+            return False
+        document = json.loads(path.read_text(encoding="utf-8"))
+        membership = document.get("membership", {})
+        if (
+            document.get("status") != "PASS"
+            or document.get("artifact_role")
+            != "user_authorized_manual_biological_adjudication"
+            or document.get("outcome") != "retain_current_cell_type"
+            or document.get("membership_changed") is not False
+            or document.get("counts_as_automatic_decision_round") is not False
+        ):
+            return False
+        membership_path = Path(str(membership.get("path", "")))
+        quality_membership_path = Path(str(quality_membership.get("path", "")))
+        if (
+            not membership_path.is_file()
+            or membership.get("sha256") != sha256(membership_path)
+            or not quality_membership_path.is_file()
+            or quality_membership.get("sha256") != sha256(quality_membership_path)
+        ):
+            return False
+        same_physical_membership = (
+            membership.get("sha256") == quality_membership.get("sha256")
+            and membership_path.resolve() == quality_membership_path.resolve()
+        )
+        target_label = str(document.get("target_broad_label", ""))
+        if not same_physical_membership:
+            adjudicated_target = [
+                row for row in read_tsv(membership_path)
+                if str(row.get("broad_label", "")) == target_label
+            ]
+            quality_target = [
+                row for row in read_tsv(quality_membership_path)
+                if str(row.get("broad_label", "")) == target_label
+            ]
+            if (
+                deterministic_membership_hash(adjudicated_target)
+                != deterministic_membership_hash(quality_target)
+            ):
+                return False
+        manually_closed.add(target_label)
+    return issue_targets.issubset(manually_closed)
 
 
 def validate_targeted_review_manifest(
@@ -203,6 +291,9 @@ def main() -> int:
     ):
         raise SystemExit("active cell-type evidence packet is missing or stale")
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    follicle_issues_manually_closed = (
+        follicle_issues_closed_by_manual_adjudication(state, packet_manifest)
+    )
     payload_hash = hashlib.sha256(
         json.dumps(
             payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -397,6 +488,7 @@ def main() -> int:
                     in follicle_related
                     and outcome == "retain_current_cell_type"
                     and follicle_status not in {"PASS", "not_applicable"}
+                    and not follicle_issues_manually_closed
                 ):
                     errors.append(
                         f"{review_id}: follicle ROI histology remains open for this lineage"

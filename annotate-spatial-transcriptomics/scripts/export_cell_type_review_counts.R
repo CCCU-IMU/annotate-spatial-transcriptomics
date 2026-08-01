@@ -107,6 +107,12 @@ if (nrow(present) == 0) stop("none of the catalog review markers occur in the ra
 marker_counts <- counts[present$matched_feature, , drop = FALSE]
 rownames(marker_counts) <- present$requested_gene
 
+# The full sparse raw-count matrix is immutable across the serial per-broad
+# review.  Persist it once so later DEG/pseudobulk steps do not deserialize the
+# complete Seurat object (assays, reductions and graphs) for every cell type.
+full_count_path <- file.path(out_dir, "cell_type_review_full_raw_counts.rds")
+saveRDS(counts, full_count_path, compress = FALSE)
+
 matrix_path <- file.path(out_dir, "cell_type_review_marker_counts.mtx")
 writeMM(marker_counts, matrix_path)
 system2("gzip", c("-f", matrix_path))
@@ -132,6 +138,7 @@ manifest <- list(
   matched_marker_n = nrow(present),
   missing_marker_n = sum(!nzchar(matched)),
   marker_matrix = normalizePath(paste0(matrix_path, ".gz")),
+  full_count_matrix = normalizePath(full_count_path),
   gene_map = normalizePath(file.path(out_dir, "cell_type_review_gene_map.tsv")),
   cells = normalizePath(file.path(out_dir, "cell_type_review_cells.tsv")),
   library_size = normalizePath(file.path(out_dir, "cell_type_review_library_size.tsv.gz")),

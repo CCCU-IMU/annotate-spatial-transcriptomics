@@ -194,12 +194,19 @@ def main() -> int:
             raise SystemExit(f"biological review {key} is stale")
     issues = read_tsv(issue_path).fillna("")
     issues = issues.loc[(issues.endpoint == "follicle_roi_histology") & issues.scope_id.astype(str).str.match(r"^F\d+$")]
-    repair_rois = sorted(set(issues.scope_id.astype(str)))
-    if not repair_rois:
+    all_issue_rois = sorted(set(issues.scope_id.astype(str)))
+    if not all_issue_rois:
         raise SystemExit("no bounded follicle ROI is authorized for repair")
     roi_membership = read_tsv(review_paths["roi_membership"]).fillna("")
     layer_rows = read_tsv(review_paths["layer_hierarchy"]).fillna("")
     roi_review = read_tsv(review_paths["roi_review"]).fillna("")
+    repair_rois = [
+        roi for roi in all_issue_rois
+        if authorized_broads(issues, layer_rows, roi)
+    ]
+    skipped_non_wall_rois = sorted(set(all_issue_rois) - set(repair_rois))
+    if not repair_rois:
+        raise SystemExit("no bounded follicle ROI has typed wall-layer repair authority")
     repair_scores = parse_bound(args.repair_score, "repair-score")
     repair_ancestry = parse_bound(args.repair_ancestry, "repair-ancestry")
     if set(repair_scores) != set(repair_rois) or set(repair_ancestry) != set(repair_rois):
@@ -388,6 +395,7 @@ def main() -> int:
         "context_evidence": artifact(args.context_evidence) if args.context_evidence else None,
         "context_release_eligibility": context_summary,
         "repair_rois": repair_rois,
+        "skipped_non_wall_review_rois": skipped_non_wall_rois,
         "typed_layer_writeback_authority": typed_authority,
         "n_changed_observations": len(changes),
         "before_broad_census": dict(sorted(before.items())),

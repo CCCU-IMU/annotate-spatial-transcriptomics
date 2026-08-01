@@ -14,6 +14,12 @@ value <- function(flag, default = NULL) {
   if (hit[length(hit)] == length(args)) stop("missing value for ", flag)
   args[hit[length(hit)] + 1]
 }
+values <- function(flag) {
+  hit <- which(args == flag)
+  if (length(hit) == 0) return(character())
+  if (any(hit == length(args))) stop("missing value for ", flag)
+  unique(args[hit + 1])
+}
 read_character_table <- function(path) {
   if (grepl("\\.gz$", path, ignore.case = TRUE)) {
     connection <- gzfile(path, open = "rt")
@@ -27,29 +33,44 @@ read_character_table <- function(path) {
 }
 
 rds_path <- value("--rds")
+count_cache_path <- value("--count-cache", "")
+raw_count_assay <- value("--raw-count-assay", "")
 membership_path <- value("--membership")
 recall_path <- value("--recall-membership")
 out_dir <- value("--out")
 requested_assay <- value("--assay", "")
-if (any(vapply(list(rds_path, membership_path, recall_path, out_dir), is.null, logical(1)))) {
-  stop("required: --rds --membership --recall-membership --out")
+active_broad <- value("--active-broad-label", "")
+comparison_broads <- values("--comparison-broad-label")
+if (any(vapply(list(membership_path, recall_path, out_dir), is.null, logical(1))) ||
+    (!nzchar(count_cache_path) && is.null(rds_path))) {
+  stop("required: (--count-cache or --rds) --membership --recall-membership --out")
 }
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-obj <- readRDS(rds_path)
-available <- Assays(obj)
-if (nzchar(requested_assay)) {
-  if (!requested_assay %in% available) stop("requested assay is absent")
-  assay <- requested_assay
-} else if ("RNA" %in% available) {
-  assay <- "RNA"
-} else if ("Spatial" %in% available) {
-  assay <- "Spatial"
-} else stop("no RNA/Spatial raw-count assay")
-if (assay == "SCT") stop("SCT corrected counts cannot be pseudobulk input")
-counts <- tryCatch(
-  GetAssayData(obj, assay = assay, layer = "counts"),
-  error = function(e) GetAssayData(obj, assay = assay, slot = "counts")
-)
+if (nzchar(count_cache_path)) {
+  if (!file.exists(count_cache_path)) stop("raw-count cache is absent")
+  counts <- readRDS(count_cache_path)
+  if (!inherits(counts, "sparseMatrix")) stop("raw-count cache is not sparse")
+  assay <- raw_count_assay
+  if (!nzchar(assay) || toupper(assay) == "SCT") {
+    stop("raw-count cache lacks a non-SCT assay identity")
+  }
+} else {
+  obj <- readRDS(rds_path)
+  available <- Assays(obj)
+  if (nzchar(requested_assay)) {
+    if (!requested_assay %in% available) stop("requested assay is absent")
+    assay <- requested_assay
+  } else if ("RNA" %in% available) {
+    assay <- "RNA"
+  } else if ("Spatial" %in% available) {
+    assay <- "Spatial"
+  } else stop("no RNA/Spatial raw-count assay")
+  if (assay == "SCT") stop("SCT corrected counts cannot be pseudobulk input")
+  counts <- tryCatch(
+    GetAssayData(obj, assay = assay, layer = "counts"),
+    error = function(e) GetAssayData(obj, assay = assay, slot = "counts")
+  )
+}
 membership <- read_character_table(membership_path)
 recall <- read_character_table(recall_path)
 if (!all(c("cell_id", "final_broad_label") %in% names(membership))) stop("membership lacks broad label")
@@ -58,11 +79,20 @@ if (anyDuplicated(membership$cell_id)) stop("membership duplicates cell_id")
 if (length(setdiff(membership$cell_id, colnames(counts))) > 0) stop("membership has foreign cells")
 
 groups <- list()
-for (broad in sort(unique(membership$final_broad_label[nzchar(membership$final_broad_label)]))) {
+present_broads <- sort(unique(
+  membership$final_broad_label[nzchar(membership$final_broad_label)]
+))
+if (nzchar(active_broad)) {
+  present_broads <- intersect(
+    present_broads, unique(c(active_broad, comparison_broads))
+  )
+}
+for (broad in present_broads) {
   groups[[paste0("current::", broad)]] <- unique(membership[final_broad_label == broad, cell_id])
   groups[[paste0("outside_current::", broad)]] <- unique(membership[final_broad_label != broad, cell_id])
 }
 for (broad in sort(unique(recall$broad_label[nzchar(recall$broad_label)]))) {
+  if (nzchar(active_broad) && broad != active_broad) next
   target_ids <- unique(recall[broad_label == broad, cell_id])
   groups[[paste0("recall_question::", broad)]] <- target_ids
   origins <- membership[cell_id %in% target_ids, .(cell_id, final_broad_label)]
@@ -115,7 +145,8 @@ manifest <- list(
   status = "PASS_EVIDENCE_ONLY",
   artifact_role = "broad_cell_type_full_transcriptome_pseudobulk",
   formal_membership_written = FALSE,
-  source_rds = normalizePath(rds_path),
+  source_rds = if (!is.null(rds_path)) normalizePath(rds_path) else "",
+  source_count_cache = if (nzchar(count_cache_path)) normalizePath(count_cache_path) else "",
   source_membership = normalizePath(membership_path),
   recall_membership = normalizePath(recall_path),
   raw_count_assay = assay,
@@ -123,6 +154,9 @@ manifest <- list(
   feature_n = nrow(counts),
   analysis_observation_n = nrow(membership),
   group_n = length(rows),
+  active_broad_label = active_broad,
+  comparison_broad_labels = comparison_broads,
+  active_broad_only = nzchar(active_broad),
   pseudobulk = normalizePath(pseudobulk_path),
   census = normalizePath(census_path)
 )

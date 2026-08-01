@@ -78,7 +78,12 @@ def main() -> int:
         gene for gene in current_matrix.index
         if not TECHNICAL.match(str(gene)) and current_matrix.loc[gene].max() > np.log1p(1)
     ], dtype=object)
-    variance = current_matrix.loc[eligible_genes].var(axis=1).sort_values(ascending=False)
+    variance = (
+        current_matrix.loc[eligible_genes]
+        .var(axis=1)
+        .fillna(0.0)
+        .sort_values(ascending=False)
+    )
     informative = variance.head(min(2000, len(variance))).index
     summary_rows: list[dict[str, object]] = []
     similarity_rows: list[dict[str, object]] = []
@@ -141,8 +146,6 @@ def main() -> int:
         target = pieces[1]
         origin = pieces[3] if len(pieces) >= 4 and pieces[2] == "from" else ""
         current_target = f"current::{target}"
-        if current_target not in logcpm:
-            continue
         recall_vector = logcpm.loc[informative, group]
         similarities: list[tuple[str, float]] = []
         for current_group in current_groups:
@@ -171,8 +174,8 @@ def main() -> int:
         summary_rows.append({
             "recall_group": group, "target_broad_label": target,
             "origin_broad_label": origin, "n_observations": n_observations,
-            "nearest_current_broad": similarities[0][0],
-            "nearest_current_spearman": similarities[0][1],
+            "nearest_current_broad": similarities[0][0] if similarities else "",
+            "nearest_current_spearman": similarities[0][1] if similarities else 0.0,
             "target_current_spearman": dict(similarities).get(target, 0.0),
             "target_positive_marker_n_available": len(target_marker_genes),
             "target_positive_marker_n_detected": int((target_marker_cpm.cpm > 0).sum()),
@@ -181,14 +184,26 @@ def main() -> int:
         })
         genes = logcpm.index
         recall_raw = table_index.loc[group].reindex(genes).fillna(0)
-        target_raw = table_index.loc[current_target].reindex(genes).fillna(0)
-        log2fc_target = np.log2((recall_raw.cpm.to_numpy() + 0.1) / (target_raw.cpm.to_numpy() + 0.1))
+        if current_target in logcpm:
+            target_raw = table_index.loc[current_target].reindex(genes).fillna(0)
+            log2fc_target = np.log2(
+                (recall_raw.cpm.to_numpy() + 0.1)
+                / (target_raw.cpm.to_numpy() + 0.1)
+            )
+        else:
+            log2fc_target = np.full(len(genes), np.nan)
         if origin and f"current::{origin}" in logcpm:
             origin_raw = table_index.loc[f"current::{origin}"].reindex(genes).fillna(0)
             log2fc_origin = np.log2((recall_raw.cpm.to_numpy() + 0.1) / (origin_raw.cpm.to_numpy() + 0.1))
         else:
             log2fc_origin = np.full(len(genes), np.nan)
-        order = np.argsort(-np.abs(log2fc_target))[:100]
+        if np.isfinite(log2fc_target).any():
+            ranking = np.nan_to_num(np.abs(log2fc_target), nan=-1.0)
+        elif np.isfinite(log2fc_origin).any():
+            ranking = np.nan_to_num(np.abs(log2fc_origin), nan=-1.0)
+        else:
+            ranking = recall_raw.cpm.to_numpy()
+        order = np.argsort(-ranking)[:100]
         for index in order:
             gene = str(genes[index])
             differential_rows.append({
