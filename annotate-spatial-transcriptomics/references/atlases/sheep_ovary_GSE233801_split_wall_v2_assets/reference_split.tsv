@@ -1,0 +1,9 @@
+framework_broad_label	available	train	heldout
+Endothelial	20955	5000	500
+Epithelial/mesothelial	605	454	151
+Granulosa	3001	2501	500
+Immune	4670	4170	500
+Pericyte/mural	1684	1263	421
+Smooth muscle	2209	1709	500
+Stromal/mesenchymal	6233	5000	500
+Theca	139	105	34

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 修复固定 GSE233801 split-wall v2 Atlas 的发布包缺件：此前仓库只包含 descriptor/crosswalk，而投影所需的固定特征、query-independent 变换、独立 broad 原型、held-out 预测和 reference split 仅存在于开发机资源目录。现在六项约 1.4 MB 的不可变资产全部随 Skill 分发，并逐项由原 descriptor SHA256 验证；无需联网下载或在样本项目中重建。该修复不改变 descriptor、投影算法或 canonical controller，因此已有 broad freeze、两轮聚类和合法 membership 可在补齐资产后从 Atlas 阶段续跑。
 - 修复 fine→broad 反向重建漏洞：Broad closure 现在只接受 broad candidate 或目录显式声明 `parent_broad_reconstruction_allowed=true` 的 fine candidate。普通 Early/Late/Transitional luteal、Granulosa、Epithelial 等 fine/state 程序不再通过移除 fine 名称绕过失败的父类判定；显式重建路线仍必须满足完整父类 release policy。新增回归断言，父级 Luteal 的 direct-joint/DEG 门失败时，所有 luteal fine proposal 的 Broad Luteal 写回数必须为零。
 - 修复 `Luteal` 整簇过度召回：共享 `STAR/CYP11A1/HSD3B1` 类固醇程序不再作为黄体 identity seed。正式 whole-subcluster、局部 subset 和 Theca→Luteal 上下文回归统一要求同一群体内 steroidogenic 与 corpus-luteum 两个家族的直接多基因联合覆盖、直接黄体 discriminator、当前 query 的正向 DEG 对比和阶段/结构证据；Luteal 禁用 dominant-identity 整簇捷径。二级 adjudication 与分辨率选择不再用上下文 parent 名称抢占分子 winner，空间父类回归只保留在 post-merge 有界组件复核中。
 - 将逐大类全样本复核改为严格单遍串行：每个可评估 broad 只允许一个全 query 证据包和一个 retain/absence/exact-patch 决策，任一结果均原子关闭该专项复核；后续其他 broad 的精确证据边界仍可把 cell ID 写入或移出已关闭类型，但只登记 post-closure membership delta，不因成员数量、signature 或新 challenger 反复重开。

@@ -1,0 +1,23 @@
+reference_cluster	n_cells	reconstructed_identity	framework_broad_label	atlas_capability	include_in_prototype	component_note
+1	7015	Blood endothelial	Endothelial	supported	TRUE	High-confidence blood-endothelial backbone and angiovascular support
+2	6233	Fibroblast stroma	Stromal/mesenchymal	supported	TRUE	High-confidence fibroblast/ECM stromal program
+3	5302	Microvascular endothelial	Endothelial	supported	TRUE	High-confidence microvascular endothelial program
+4	4909	Structural theca-stromal follicular wall	Stromal/mesenchymal	challenge_only	FALSE	Mixed structural follicular-wall program; excluded from direct rescue prototypes
+5	4693	Low-information reference component		unsupported	FALSE	LOC/noncanonical and RNA-processing dominated
+6	3529	Endothelial low-information state	Endothelial	supported	TRUE	Moderate endothelial state retained only within the multi-cluster Endothelial prototype
+7	3001	Granulosa	Granulosa	supported	TRUE	High-confidence granulosa program
+8	2209	Mature smooth muscle	Smooth muscle	supported	TRUE	MYH11/PDE3A/ACTA2/TAGLN mature contractile program
+9	2041	T lymphoid	Immune	supported	TRUE	High-confidence T-cell program
+10	1891	CA4/LYVE1 endothelial state	Endothelial	supported	TRUE	Sample-skewed endothelial state retained only within the multi-cluster Endothelial prototype
+11	1856	Myeloid/APC	Immune	supported	TRUE	High-confidence myeloid/APC program
+12	1684	Pericyte	Pericyte/mural	supported	TRUE	RGS5/PDGFRB/NOTCH3 mural identity backbone
+13	1406	Cycling ovarian somatic cells		unsupported	FALSE	Cell-cycle program obscures lineage
+14	1393	Cycling endothelial-like cells		unsupported	FALSE	Cell-cycle program would distort Endothelial prototype
+15	1113	Lymphatic endothelial	Endothelial	supported	TRUE	High-confidence lymphatic component contributes to broad Endothelial; Atlas cannot write a fine label
+16	1111	Capillary endothelial	Endothelial	supported	TRUE	High-confidence capillary endothelial program
+17	994	Arterial endothelial	Endothelial	supported	TRUE	High-confidence arterial endothelial program
+18	605	Ovarian epithelial	Epithelial/mesothelial	challenge_only	TRUE	Clear but small reconstructed epithelial cluster; challenge only until query-class calibration supports direct return
+19	605	Inflammatory myeloid	Immune	supported	TRUE	High-confidence inflammatory myeloid program
+20	191	Peripheral glial-like	Glial/Schwann-like	not_evaluable	FALSE	Biologically coherent but excluded from the frozen reference object; no prototype authority
+21	168	Immune/APC	Immune	supported	TRUE	Rare sample-skewed immune component retained only within the multi-cluster Immune prototype
+22	139	Steroidogenic theca-like	Theca	challenge_only	TRUE	Rare sample-skewed steroidogenic component; challenge only and never direct rescue

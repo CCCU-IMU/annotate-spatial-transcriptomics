@@ -290,6 +290,48 @@ write(out/'partition_grid.tsv.gz',['cell_id','boundary_id','resolution','cluster
         self.assertEqual(by_cluster["1"]["framework_broad_label"], "Endothelial")
         self.assertEqual(by_cluster["4"]["include_in_prototype"], "FALSE")
 
+    def test_fixed_atlas_runtime_assets_are_distributed_with_skill(self) -> None:
+        descriptor = (
+            PACKAGE
+            / "references/atlases/sheep_ovary_GSE233801_split_wall_v2.json"
+        )
+        document = json.loads(descriptor.read_text())
+        asset_root = (
+            PACKAGE
+            / "references/atlases/sheep_ovary_GSE233801_split_wall_v2_assets"
+        )
+        self.assertEqual(
+            set(document["asset_hashes"]),
+            {
+                "fixed_features.tsv",
+                "feature_transform.joblib",
+                "reference_prototypes.npz",
+                "reference_heldout_predictions.tsv.gz",
+                "reference_cluster_crosswalk.tsv",
+                "reference_split.tsv",
+            },
+        )
+        for name, expected in document["asset_hashes"].items():
+            path = asset_root / name
+            self.assertTrue(path.is_file(), name)
+            self.assertEqual(sha(path), expected, name)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "atlas_validation.json"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "validate_fixed_atlas_bundle.py"),
+                    "--bundle-manifest", str(descriptor),
+                    "--asset-root", str(asset_root),
+                    "--out", str(output),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(output.read_text())["status"], "PASS")
+
     def test_merged_atlas_is_resume_only(self) -> None:
         descriptor = PACKAGE / "references/atlases/sheep_ovary_GSE233801_v1.json"
         document = json.loads(descriptor.read_text())
